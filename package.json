@@ -1,6 +1,7 @@
 {
   "name": "figma-make-app",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
