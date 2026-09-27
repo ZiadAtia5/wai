@@ -1,0 +1,12 @@
+{
+  "title": "وَعي",
+  "description": "منصة وَعي التعليمية للدورات ومتابعة التقدم وإدارة المحتوى التعليمي.",
+  "language": "ar",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
