@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = "http://manhaghub.runasp.net/api"
+const DEFAULT_API_BASE_URL = "https://manhaghub.runasp.net/api"
 
 const REQUEST_TIMEOUT_MS = 15_000
 
