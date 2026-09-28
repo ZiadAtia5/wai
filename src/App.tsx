@@ -1,25 +1,27 @@
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useState } from "react";
 
-import type { NavigateFn, View } from "./types"
+import type { NavigateFn, View } from "./types";
 
-import PublicNavbar from "./components/layout/PublicNavbar"
+import PublicNavbar from "./components/layout/PublicNavbar";
 
-const LandingPage = lazy(() => import("./pages/LandingPage"))
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 
-const AuthPage = lazy(() => import("./pages/AuthPage"))
+const AuthPage = lazy(() => import("./pages/AuthPage"));
 
-const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"))
+const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"));
 
-const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
+const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"));
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 
 export default function App() {
-  const [view, setView] = useState<View>("landing")
+  const [view, setView] = useState<View>("landing");
 
   const navigate: NavigateFn = (nextView) => {
-    setView(nextView)
+    setView(nextView);
 
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div
@@ -41,8 +43,9 @@ export default function App() {
           )}
           {view === "public:courses" && <PublicCoursesPage />}
           {view === "public:teachers" && <PublicTeachersPage />}
+          {view === "dashboard" && <DashboardPage navigate={navigate} />}
         </Suspense>
       </main>
     </div>
-  )
+  );
 }

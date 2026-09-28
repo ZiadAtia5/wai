@@ -1,6 +1,7 @@
-import { getPublicTeachers } from "../api/catalog"
+import { getPublicTeachers } from "../api/catalog";
+import { teachersApi } from "../api/endpoints";
 
-import PublicCatalogPage from "./PublicCatalogPage"
+import PublicCatalogPage from "./PublicCatalogPage";
 
 export default function PublicTeachersPage() {
   return (
@@ -9,6 +10,8 @@ export default function PublicTeachersPage() {
       description="المعلمون المسجلون في منصة وَعي"
       emptyMessage="لا توجد ملفات معلمين متاحة حالياً."
       load={getPublicTeachers}
+      loadDetail={teachersApi.byId}
+      loadRelated={(id) => teachersApi.courses(id)}
     />
-  )
+  );
 }

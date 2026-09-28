@@ -1,20 +1,20 @@
-import { Menu, X } from "lucide-react"
+import { Menu, X } from "lucide-react";
 
-import { useState } from "react"
+import { useState } from "react";
 
-import type { NavigateFn, View } from "../../types"
+import type { NavigateFn, View } from "../../types";
 
-import NuwaLogo from "../NuwaLogo"
+import NuwaLogo from "../NuwaLogo";
 
 interface PublicNavbarProps {
-  currentView: View
+  currentView: View;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }
 
 interface PublicNavigationItem {
-  label: string
-  view: View
+  label: string;
+  view: View;
 }
 
 const publicNavigation: PublicNavigationItem[] = [
@@ -23,14 +23,14 @@ const publicNavigation: PublicNavigationItem[] = [
   { label: "الدورات", view: "public:courses" },
 
   { label: "المعلمون", view: "public:teachers" },
-]
+];
 
 export default function PublicNavbar({
   currentView,
 
   navigate,
 }: PublicNavbarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 border-b border-stroke bg-surface">
@@ -64,10 +64,18 @@ export default function PublicNavbar({
 
         <button
           type="button"
-          onClick={() => navigate("login")}
+          onClick={() =>
+            navigate(
+              window.sessionStorage.getItem("eduhub.auth.token")
+                ? "dashboard"
+                : "login",
+            )
+          }
           className="ms-auto h-9 rounded-lg bg-nuwa-base px-4 text-sm font-medium text-white hover:bg-nuwa-deep"
         >
-          تسجيل الدخول
+          {window.sessionStorage.getItem("eduhub.auth.token")
+            ? "مساحة العمل"
+            : "تسجيل الدخول"}
         </button>
 
         <button
@@ -88,9 +96,9 @@ export default function PublicNavbar({
               type="button"
               key={item.view}
               onClick={() => {
-                navigate(item.view)
+                navigate(item.view);
 
-                setMobileOpen(false)
+                setMobileOpen(false);
               }}
               className="rounded-lg px-3 py-2.5 text-start text-sm font-medium text-ink-muted hover:bg-canvas hover:text-ink"
             >
@@ -100,5 +108,5 @@ export default function PublicNavbar({
         </nav>
       )}
     </header>
-  )
+  );
 }
