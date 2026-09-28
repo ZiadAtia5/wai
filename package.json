@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 5173",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
@@ -13,6 +13,7 @@
     "format:check": "oxfmt --check src vite.config.ts index.html package.json tsconfig.json"
   },
   "dependencies": {
+    "framer-motion": "^13.4.4",
     "lucide-react": "^1.48.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

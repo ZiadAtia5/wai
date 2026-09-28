@@ -4,6 +4,7 @@ export type View =
   | "register"
   | "public:courses"
   | "public:teachers"
+  | `public:course:${string}`
   | "dashboard";
 
 export interface NavigateFn {

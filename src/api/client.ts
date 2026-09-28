@@ -45,6 +45,15 @@ function getApiBaseUrl(): string {
   }
 }
 
+export function resolveApiAssetUrl(path: string): string {
+  try {
+    return new URL(path).toString();
+  } catch {
+    const apiOrigin = new URL(getApiBaseUrl()).origin;
+    return new URL(path, apiOrigin).toString();
+  }
+}
+
 export function isSecureApiConfigured(): boolean {
   try {
     return new URL(getApiBaseUrl()).protocol === "https:";

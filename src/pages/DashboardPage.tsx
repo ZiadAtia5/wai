@@ -189,7 +189,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         };
 
   return (
-    <div className="min-h-screen bg-canvas pb-16 dir-rtl">
+    <div className="page-ambient min-h-[calc(100dvh-10rem)] bg-canvas pb-12 dir-rtl">
       {/* Top Header Navigation */}
       <header className="sticky top-0 z-10 border-b border-stroke bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">

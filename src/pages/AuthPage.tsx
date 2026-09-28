@@ -107,7 +107,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12 dir-rtl">
+    <div className="page-ambient flex min-h-[calc(100dvh-10rem)] flex-1 items-center justify-center bg-canvas px-4 py-12 dir-rtl">
       <div className="w-full max-w-xl rounded-2xl border border-stroke bg-surface p-6 shadow-xl backdrop-blur-sm sm:p-10">
         {/* Header Section */}
         <div className="text-center">
