@@ -36,7 +36,9 @@ export function useApiQuery<T>(load: () => Promise<T>, reloadKey = 0) {
         const message =
           error instanceof ApiError
             ? error.message
-            : "تعذر تحميل البيانات من الخادم."
+            : error instanceof Error && error.message
+              ? error.message
+              : "تعذر تحميل البيانات من الخادم."
 
         setState({ data: null, error: message, loading: false })
       })

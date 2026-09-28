@@ -62,6 +62,15 @@ body {
   min-height: 100vh;
 }
 
+/* A quiet, shared ambient glow for page surfaces. */
+.page-ambient {
+  background-image:
+    radial-gradient(ellipse at 13% 18%, rgba(35, 136, 217, 0.075), transparent 37%),
+    radial-gradient(ellipse at 92% 83%, rgba(18, 59, 102, 0.035), transparent 32%);
+  background-repeat: no-repeat;
+  background-position: center, center;
+}
+
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;

@@ -106,7 +106,7 @@ export default function PublicCatalogPage({
       : [];
 
   return (
-    <div className="min-h-screen bg-canvas pb-16">
+    <div className="page-ambient min-h-[calc(100dvh-10rem)] bg-canvas pb-12">
       <header className="border-b border-stroke bg-surface">
         <div className="mx-auto max-w-360 px-6 py-8 md:px-10">
           <h1 className="mb-1 text-2xl font-bold text-ink">{title}</h1>
