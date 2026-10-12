@@ -1,9 +1,15 @@
-import { getPublicCourses } from "../api/catalog";
-import { coursesApi } from "../api/endpoints";
+import { getPublicCourses } from "../api/catalog"
+import { coursesApi } from "../api/endpoints"
 
-import PublicCatalogPage from "./PublicCatalogPage";
+import PublicCatalogPage from "./PublicCatalogPage"
 
-export default function PublicCoursesPage() {
+import type { NavigateFn } from "../types"
+
+export default function PublicCoursesPage({
+  navigate,
+}: {
+  navigate: NavigateFn
+}) {
   return (
     <PublicCatalogPage
       title="الدورات التعليمية"
@@ -13,6 +19,7 @@ export default function PublicCoursesPage() {
       loadDetail={coursesApi.detail}
       action={coursesApi.enroll}
       actionLabel="طلب الالتحاق بالدورة"
+      navigate={navigate}
     />
-  );
+  )
 }

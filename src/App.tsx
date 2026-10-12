@@ -1,27 +1,35 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react"
 
-import type { NavigateFn, View } from "./types";
+import { getAuthToken } from "./api/client"
+import type { NavigateFn, View } from "./types"
 
-import PublicNavbar from "./components/layout/PublicNavbar";
+import PublicNavbar from "./components/layout/PublicNavbar"
 
-const LandingPage = lazy(() => import("./pages/LandingPage"));
+const LandingPage = lazy(() => import("./pages/LandingPage"))
 
-const AuthPage = lazy(() => import("./pages/AuthPage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"))
 
-const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"));
+const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"))
 
-const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"));
+const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
 
-const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"))
 
 export default function App() {
-  const [view, setView] = useState<View>("landing");
+  const [view, setView] = useState<View>("landing")
+
+  useEffect(() => {
+    const handleExpiredSession = () => setView("login")
+    window.addEventListener("eduhub:auth-expired", handleExpiredSession)
+    return () =>
+      window.removeEventListener("eduhub:auth-expired", handleExpiredSession)
+  }, [])
 
   const navigate: NavigateFn = (nextView) => {
-    setView(nextView);
+    setView(nextView === "dashboard" && !getAuthToken() ? "login" : nextView)
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   return (
     <div
@@ -41,11 +49,18 @@ export default function App() {
           {view === "register" && (
             <AuthPage mode="register" navigate={navigate} />
           )}
-          {view === "public:courses" && <PublicCoursesPage />}
+          {view === "public:courses" && (
+            <PublicCoursesPage navigate={navigate} />
+          )}
           {view === "public:teachers" && <PublicTeachersPage />}
-          {view === "dashboard" && <DashboardPage navigate={navigate} />}
+          {view === "dashboard" &&
+            (getAuthToken() ? (
+              <DashboardPage navigate={navigate} />
+            ) : (
+              <AuthPage mode="login" navigate={navigate} />
+            ))}
         </Suspense>
       </main>
     </div>
-  );
+  )
 }

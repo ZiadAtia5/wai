@@ -51,28 +51,34 @@ export async function getAcademicYears(): Promise<AcademicYearResponse[]> {
 
 export function getPublicCourses(
   page = 1,
-
   pageSize = 20,
+  search = "",
+  academicYear?: string | number,
 ): Promise<PagedResult<ApiRecord>> {
   const query = new URLSearchParams({
     page: String(page),
-
     pageSize: String(pageSize),
   })
+  if (search.trim()) query.set("search", search.trim())
+  if (academicYear !== undefined && academicYear !== "")
+    query.set("academicYear", String(academicYear))
 
   return getPagedResult(`/courses?${query.toString()}`)
 }
 
 export function getPublicTeachers(
   page = 1,
-
   pageSize = 20,
+  search = "",
+  academicYear?: string | number,
 ): Promise<PagedResult<ApiRecord>> {
   const query = new URLSearchParams({
     page: String(page),
-
     pageSize: String(pageSize),
   })
+  if (search.trim()) query.set("search", search.trim())
+  if (academicYear !== undefined && academicYear !== "")
+    query.set("academicYear", String(academicYear))
 
   return getPagedResult(`/teachers?${query.toString()}`)
 }

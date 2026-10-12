@@ -1,3 +1,5 @@
+import { arabicErrorMessage } from "../utils/notifications"
+
 interface ApiQueryStateProps {
   loading: boolean
 
@@ -39,7 +41,7 @@ export default function ApiQueryState({
   if (error) {
     return (
       <div className="py-16 text-center" role="alert">
-        <p className="text-sm text-danger mb-4">{error}</p>
+        <p className="text-sm text-danger mb-4">{arabicErrorMessage(error)}</p>
         <button
           type="button"
           onClick={onRetry}
