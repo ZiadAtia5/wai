@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react"
 
 import { getAuthToken } from "./api/client"
+
 import type { NavigateFn, View } from "./types"
 
 import PublicNavbar from "./components/layout/PublicNavbar"
@@ -16,11 +17,21 @@ const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
 const DashboardPage = lazy(() => import("./pages/DashboardPage"))
 
 export default function App() {
-  const [view, setView] = useState<View>("landing")
+  const [view, setView] = useState<View>(() => {
+    const enrollmentPreview =
+      import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get(
+        "teacherEnrollmentMock",
+      ) === "1"
+
+    return enrollmentPreview ? "dashboard" : "landing"
+  })
 
   useEffect(() => {
     const handleExpiredSession = () => setView("login")
+
     window.addEventListener("eduhub:auth-expired", handleExpiredSession)
+
     return () =>
       window.removeEventListener("eduhub:auth-expired", handleExpiredSession)
   }, [])
@@ -39,7 +50,9 @@ export default function App() {
           "'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif",
       }}
     >
-      <PublicNavbar currentView={view} navigate={navigate} />
+      {view !== "dashboard" && (
+        <PublicNavbar currentView={view} navigate={navigate} />
+      )}
       <main>
         <Suspense
           fallback={<div className="min-h-[60vh] bg-canvas" aria-busy="true" />}

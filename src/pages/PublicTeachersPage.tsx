@@ -1,4 +1,5 @@
 import { getPublicTeachers } from "../api/catalog"
+
 import { teachersApi } from "../api/endpoints"
 
 import PublicCatalogPage from "./PublicCatalogPage"

@@ -1,21 +1,29 @@
 interface NuwaLogoProps {
   size?: "sm" | "md" | "lg"
+
   variant?: "full" | "mark" | "wordmark"
+
   color?: "default" | "white" | "deep"
+
   className?: string
 }
 
 export default function NuwaLogo({
   size = "md",
+
   variant = "full",
+
   color = "default",
+
   className = "",
 }: NuwaLogoProps) {
   const sizes = { sm: 28, md: 36, lg: 48 }
+
   const h = sizes[size]
 
   const primaryColor =
     color === "white" ? "#FFFFFF" : color === "deep" ? "#123B66" : "#1769AA"
+
   const accentColor =
     color === "white"
       ? "rgba(255,255,255,0.6)"
@@ -68,6 +76,7 @@ export default function NuwaLogo({
   if (variant === "mark") return <NuwaMark />
 
   const textSizes = { sm: "text-xl", md: "text-2xl", lg: "text-3xl" }
+
   const subSizes = { sm: "text-[9px]", md: "text-[11px]", lg: "text-sm" }
 
   const textColor = color === "white" ? "text-white" : "text-nuwa-deep"
@@ -81,6 +90,7 @@ export default function NuwaLogo({
           className={`${textSizes[size]} font-bold ${textColor} tracking-tight leading-none`}
           style={{
             fontFamily: "'IBM Plex Sans Arabic', sans-serif",
+
             letterSpacing: "-0.02em",
           }}
         >
@@ -110,6 +120,7 @@ export default function NuwaLogo({
           className={`${textSizes[size]} font-bold ${textColor} tracking-tight leading-none`}
           style={{
             fontFamily: "'IBM Plex Sans Arabic', sans-serif",
+
             letterSpacing: "-0.02em",
           }}
         >

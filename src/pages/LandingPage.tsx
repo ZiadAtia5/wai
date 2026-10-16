@@ -3,11 +3,13 @@ import {
   ArrowUpLeft,
   BookOpen,
   Check,
+  ClipboardCheck,
   GraduationCap,
   Play,
   Sparkles,
   Users,
 } from "lucide-react"
+
 import { useState } from "react"
 
 import {
@@ -15,21 +17,31 @@ import {
   getPublicCourses,
   getPublicTeachers,
 } from "../api/catalog"
+
 import ApiQueryState from "../components/ApiQueryState"
+
 import { useApiQuery } from "../hooks/useApiQuery"
+
 import type { NavigateFn } from "../types"
 
 async function loadCatalogSummary() {
   const [courses, teachers, academicYears, featured] = await Promise.all([
     getPublicCourses(1, 1),
+
     getPublicTeachers(1, 1),
+
     getAcademicYears(),
+
     getPublicCourses(1, 3),
   ])
+
   return {
     courseCount: courses.totalCount,
+
     teacherCount: teachers.totalCount,
+
     academicYears,
+
     featured: featured.items,
   }
 }
@@ -42,6 +54,7 @@ function record(value: unknown): Record<string, unknown> {
 
 export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
   const [reloadKey, setReloadKey] = useState(0)
+
   const { data, error, loading } = useApiQuery(loadCatalogSummary, reloadKey)
 
   return (
@@ -238,6 +251,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
               <div className="mt-8 grid gap-5 md:grid-cols-3">
                 {data.featured.map((item, index) => {
                   const course = record(item)
+
                   return (
                     <article
                       key={String(course.id ?? index)}
@@ -291,6 +305,13 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                                 : "اكتشف الدورة"}
                           </span>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate("public:courses")}
+                          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-nuwa-base hover:text-nuwa-deep"
+                        >
+                          تفاصيل الدورات <ArrowUpLeft size={15} />
+                        </button>
                       </div>
                     </article>
                   )
@@ -298,6 +319,59 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
               </div>
             )}
           </ApiQueryState>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-5 py-14 sm:px-8 md:py-20">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-nuwa-base">
+              لكل طرف مساحته
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-ink sm:text-3xl">
+              الطالب والمعلم في رحلة تعلم واحدة
+            </h2>
+          </div>
+          <p className="max-w-lg text-sm leading-7 text-ink-muted">
+            أدوات واضحة تساعد الطالب على متابعة دراسته، وتساعد المعلم على تنظيم
+            دوراته ومتابعة طلباته.
+          </p>
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <article className="rounded-2xl border border-stroke bg-white p-6 shadow-sm">
+            <span className="grid size-11 place-items-center rounded-xl bg-sky-50 text-nuwa-base">
+              <GraduationCap size={23} />
+            </span>
+            <h3 className="mt-4 text-lg font-bold text-ink">مساحة الطالب</h3>
+            <p className="mt-2 text-sm leading-7 text-ink-muted">
+              متابعة الدورات المسجل بها، والوصول إلى الدروس والموارد والاختبارات
+              ومراجعة التقدم في مكان واحد.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate("register")}
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-nuwa-base hover:text-nuwa-deep"
+            >
+              إنشاء حساب طالب <ArrowLeft size={16} />
+            </button>
+          </article>
+          <article className="rounded-2xl border border-stroke bg-white p-6 shadow-sm">
+            <span className="grid size-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+              <ClipboardCheck size={22} />
+            </span>
+            <h3 className="mt-4 text-lg font-bold text-ink">مساحة المعلم</h3>
+            <p className="mt-2 text-sm leading-7 text-ink-muted">
+              تنظيم الدورات والمحتوى التعليمي، ومراجعة طلبات التحاق الطلاب
+              ومتابعة ما يخص العملية التعليمية.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate("public:teachers")}
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-nuwa-base hover:text-nuwa-deep"
+            >
+              تعرف على المعلمين <ArrowLeft size={16} />
+            </button>
+          </article>
         </div>
       </section>
 
@@ -332,11 +406,15 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
 
 function Stat({
   icon,
+
   label,
+
   value,
 }: {
   icon: React.ReactNode
+
   label: string
+
   value: number
 }) {
   return (

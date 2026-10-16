@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 
 import { ApiError } from "../../api/client"
+
 import { quizzesApi, teachersApi } from "../../api/endpoints"
 
 type DataRecord = Record<string, unknown>
@@ -11,67 +12,136 @@ function record(value: unknown): DataRecord {
 
 function records(value: unknown): DataRecord[] {
   if (!Array.isArray(value)) return []
+
   return value.filter(
     (item): item is DataRecord => typeof item === "object" && item !== null,
   )
 }
 
+function unwrapRecord(value: unknown, key: string): DataRecord {
+  const root = record(value)
+  if (root[key] !== undefined) return record(root[key])
+  const nestedData = record(root.data)
+  if (nestedData[key] !== undefined) return record(nestedData[key])
+  return record(root.data ?? root)
+}
+
 const control =
   "h-10 w-full rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
+
 const field = "grid gap-1 text-xs font-semibold text-ink-muted"
 
 export default function TeacherCourseContent({
   courseId,
+
   onChanged,
+
   onFeedback,
 }: {
   courseId: string
+
   onChanged: () => void
+
   onFeedback: (message: string) => void
 }) {
   const [reload, setReload] = useState(0)
+
   const [course, setCourse] = useState<DataRecord | null>(null)
+
+  const [courseLoading, setCourseLoading] = useState(true)
+
+  const [courseError, setCourseError] = useState<string | null>(null)
+
   const [busy, setBusy] = useState(false)
+
   const [quizLessonId, setQuizLessonId] = useState<string | null>(null)
+
   const [quiz, setQuiz] = useState<DataRecord | null>(null)
+
   const [quizMissing, setQuizMissing] = useState(false)
+
   const [addingQuestion, setAddingQuestion] = useState(false)
+
   const [attempts, setAttempts] = useState<DataRecord[] | null>(null)
 
   useEffect(() => {
     let active = true
+
     setCourse(null)
+
+    setCourseLoading(true)
+
+    setCourseError(null)
+
+    setQuizLessonId(null)
+
+    setQuiz(null)
+
+    setQuizMissing(false)
+
+    setAddingQuestion(false)
+
+    setAttempts(null)
+
     teachersApi
+
       .course(courseId)
+
       .then((result) => {
-        if (active) setCourse(record(result))
+        if (active) {
+          setCourse(unwrapRecord(result, "course"))
+
+          setCourseLoading(false)
+        }
       })
+
       .catch((cause: unknown) => {
-        if (active)
-          onFeedback(
-            cause instanceof Error ? cause.message : "تعذر تحميل محتوى الدورة.",
+        if (active) {
+          setCourseError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to load course content.",
           )
+
+          setCourseLoading(false)
+        }
       })
+
     return () => {
       active = false
     }
-  }, [courseId, reload, onFeedback])
+  }, [courseId, reload])
 
   async function mutate(
     request: () => Promise<unknown>,
+
     message: string,
   ): Promise<boolean> {
     if (busy) return false
+
     setBusy(true)
+
     onFeedback("")
+
     try {
       await request()
+
       onFeedback(message)
+
       setReload((value) => value + 1)
+
       onChanged()
+
       return true
     } catch (cause) {
-      onFeedback(cause instanceof Error ? cause.message : "تعذر حفظ التغييرات.")
+      onFeedback(
+        cause instanceof ApiError && cause.status === 403
+          ? "رفض الخادم هذا الإجراء (403). تأكد أن الدرس تابع لدورتك وأن حساب المعلم مخوّل لإنشاء الاختبارات."
+          : cause instanceof Error
+            ? cause.message
+            : "تعذر حفظ التغييرات.",
+      )
+
       return false
     } finally {
       setBusy(false)
@@ -80,74 +150,103 @@ export default function TeacherCourseContent({
 
   async function createModule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     const formElement = event.currentTarget
+
     const form = new FormData(formElement)
+
     const body = {
       title: String(form.get("title") ?? "").trim(),
+
       order: Number(form.get("order")),
     }
-    await mutate(
+
+    const saved = await mutate(
       () => teachersApi.createModule(courseId, body),
+
       "تمت إضافة الوحدة.",
     )
-    formElement.reset()
+
+    if (saved) formElement.reset()
   }
 
   async function createLesson(
     moduleId: string,
+
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
+
     const formElement = event.currentTarget
+
     const form = new FormData(formElement)
+
     const body = {
       title: String(form.get("title") ?? "").trim(),
+
       description: String(form.get("description") ?? "").trim(),
+
       order: Number(form.get("order")),
     }
-    await mutate(
+
+    const saved = await mutate(
       () => teachersApi.createLesson(moduleId, body),
+
       "تمت إضافة الدرس.",
     )
-    formElement.reset()
+
+    if (saved) formElement.reset()
   }
 
   async function updateModule(
     moduleId: string,
+
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
+
     const title = String(
       new FormData(event.currentTarget).get("title") ?? "",
     ).trim()
+
     await mutate(
       () => teachersApi.updateModule(moduleId, { title }),
+
       "تم تحديث الوحدة.",
     )
   }
 
   async function updateLesson(
     lessonId: string,
+
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
+
     const form = new FormData(event.currentTarget)
+
     const body = {
       title: String(form.get("title") ?? "").trim(),
+
       description: String(form.get("description") ?? "").trim(),
     }
+
     await mutate(
       () => teachersApi.updateLesson(lessonId, body),
+
       "تم تحديث الدرس.",
     )
   }
 
   async function openQuiz(lessonId: string) {
     setQuizLessonId(lessonId)
+
     setQuiz(null)
+
     setQuizMissing(false)
+
     try {
-      setQuiz(record(await quizzesApi.forLesson(lessonId)))
+      setQuiz(unwrapRecord(await quizzesApi.forLesson(lessonId), "quiz"))
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404)
         setQuizMissing(true)
@@ -160,17 +259,25 @@ export default function TeacherCourseContent({
 
   async function createQuiz(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     if (!quizLessonId) return
+
     const form = new FormData(event.currentTarget)
+
     const body = {
       title: String(form.get("title") ?? "").trim(),
+
       description: String(form.get("description") ?? "").trim(),
+
       passingScore: Number(form.get("passingScore")),
-      maxAttempts: Number(form.get("maxAttempts")),
+
+      maxAttempts: 1,
     }
+
     if (
       await mutate(
         () => quizzesApi.createForLesson(quizLessonId, body),
+
         "تم إنشاء الاختبار.",
       )
     ) {
@@ -180,17 +287,25 @@ export default function TeacherCourseContent({
 
   async function updateQuiz(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     if (!quiz || quiz.id === undefined) return
+
     const form = new FormData(event.currentTarget)
+
     const body = {
       title: String(form.get("title") ?? "").trim(),
+
       description: String(form.get("description") ?? "").trim(),
+
       passingScore: Number(form.get("passingScore")),
-      maxAttempts: Number(form.get("maxAttempts")),
+
+      maxAttempts: 1,
     }
+
     if (
       await mutate(
         () => quizzesApi.update(String(quiz.id), body),
+
         "تم تحديث الاختبار.",
       )
     ) {
@@ -200,39 +315,55 @@ export default function TeacherCourseContent({
 
   async function addQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     if (!quiz || quiz.id === undefined) return
+
     const form = new FormData(event.currentTarget)
+
     const body = {
       text: String(form.get("text") ?? "").trim(),
+
       type: Number(form.get("type")),
+
       points: Number(form.get("points")),
+
       order: Number(form.get("order")),
     }
+
     if (
       await mutate(
         () => quizzesApi.addQuestion(String(quiz.id), body),
+
         "تمت إضافة السؤال.",
       )
     ) {
       setAddingQuestion(false)
+
       await openQuiz(String(quizLessonId))
     }
   }
 
   async function addOption(
     questionId: string,
+
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
+
     const form = new FormData(event.currentTarget)
+
     const body = {
       text: String(form.get("text") ?? "").trim(),
+
       isCorrect: form.get("isCorrect") === "on",
+
       order: Number(form.get("order")),
     }
+
     if (
       await mutate(
         () => quizzesApi.addOption(questionId, body),
+
         "تمت إضافة الاختيار.",
       )
     ) {
@@ -242,66 +373,89 @@ export default function TeacherCourseContent({
 
   async function moveModule(
     modules: DataRecord[],
+
     index: number,
+
     offset: number,
   ) {
     const target = index + offset
+
     if (target < 0 || target >= modules.length) return
+
     const reordered = [...modules]
     ;[reordered[index], reordered[target]] = [
       reordered[target],
+
       reordered[index],
     ]
+
     await mutate(
       () =>
         teachersApi.reorderModules(courseId, {
           orderedIds: reordered.map((item) => Number(item.id)),
         }),
+
       "تم تحديث ترتيب الوحدات.",
     )
   }
 
   async function moveLesson(
     moduleId: string,
+
     lessons: DataRecord[],
+
     index: number,
+
     offset: number,
   ) {
     const target = index + offset
+
     if (target < 0 || target >= lessons.length) return
+
     const reordered = [...lessons]
     ;[reordered[index], reordered[target]] = [
       reordered[target],
+
       reordered[index],
     ]
+
     await mutate(
       () =>
         teachersApi.reorderLessons(moduleId, {
           orderedIds: reordered.map((item) => Number(item.id)),
         }),
+
       "تم تحديث ترتيب الدروس.",
     )
   }
 
   async function moveQuestion(
     questions: DataRecord[],
+
     quizId: string,
+
     index: number,
+
     offset: number,
   ) {
     const target = index + offset
+
     if (target < 0 || target >= questions.length) return
+
     const reordered = [...questions]
     ;[reordered[index], reordered[target]] = [
       reordered[target],
+
       reordered[index],
     ]
+
     if (
       await mutate(
         () =>
           quizzesApi.reorderQuestions(quizId, {
             orderedIds: reordered.map((item) => Number(item.id)),
           }),
+
         "تم تحديث ترتيب الأسئلة.",
       )
     ) {
@@ -313,6 +467,7 @@ export default function TeacherCourseContent({
     if (
       await mutate(
         () => quizzesApi.updateQuestion(questionId, body),
+
         "تم تحديث السؤال.",
       )
     )
@@ -323,6 +478,7 @@ export default function TeacherCourseContent({
     if (
       await mutate(
         () => quizzesApi.updateOption(optionId, body),
+
         "تم تحديث الاختيار.",
       )
     )
@@ -333,6 +489,7 @@ export default function TeacherCourseContent({
     if (
       await mutate(
         () => quizzesApi.deleteQuestion(questionId),
+
         "تم حذف السؤال.",
       )
     )
@@ -348,8 +505,10 @@ export default function TeacherCourseContent({
 
   async function loadAttempts() {
     if (!quiz || quiz.id === undefined) return
+
     try {
       const result = await quizzesApi.attempts(String(quiz.id))
+
       setAttempts(
         Array.isArray(result) ? records(result) : records(record(result).items),
       )
@@ -362,13 +521,16 @@ export default function TeacherCourseContent({
 
   async function toggleQuizPublish() {
     if (!quiz || quiz.id === undefined) return
+
     const publish = !Boolean(quiz.isPublished)
+
     if (
       await mutate(
         () =>
           publish
             ? quizzesApi.publish(String(quiz.id))
             : quizzesApi.unpublish(String(quiz.id)),
+
         publish ? "تم نشر الاختبار." : "تم إلغاء نشر الاختبار.",
       )
     ) {
@@ -376,14 +538,32 @@ export default function TeacherCourseContent({
     }
   }
 
-  if (!course)
+  if (courseLoading)
     return (
       <p className="rounded-xl border border-stroke bg-white p-4 text-sm text-ink-muted">
         جارٍ تحميل محتوى الدورة...
       </p>
     )
 
+  if (courseError || !course)
+    return (
+      <div
+        className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger"
+        role="alert"
+      >
+        <p>{courseError ?? "Course details were empty."}</p>
+        <button
+          type="button"
+          onClick={() => setReload((value) => value + 1)}
+          className="mt-3 rounded-lg border border-danger/30 px-3 py-2 font-semibold"
+        >
+          Retry
+        </button>
+      </div>
+    )
+
   const modules = records(course.modules)
+
   return (
     <section className="mt-4 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -424,8 +604,10 @@ export default function TeacherCourseContent({
       ) : (
         <div className="space-y-3">
           {modules.map((module, moduleIndex) => {
-            const moduleId = String(module.id)
+            const moduleId = String(module.id ?? module.moduleId)
+
             const lessons = records(module.lessons)
+
             return (
               <article
                 key={moduleId}
@@ -481,6 +663,7 @@ export default function TeacherCourseContent({
                       ) {
                         void mutate(
                           () => teachersApi.deleteModule(moduleId),
+
                           "تم حذف الوحدة.",
                         )
                       }
@@ -492,9 +675,12 @@ export default function TeacherCourseContent({
                 </div>
                 <ul className="mt-3 divide-y divide-stroke">
                   {lessons.map((lesson, lessonIndex) => {
-                    const lessonId = String(lesson.id)
+                    const lessonId = String(lesson.id ?? lesson.lessonId)
+
                     const video = record(lesson.video)
+
                     const resources = records(lesson.resources)
+
                     return (
                       <li key={lessonId} className="py-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -506,8 +692,11 @@ export default function TeacherCourseContent({
                               onClick={() =>
                                 void moveLesson(
                                   moduleId,
+
                                   lessons,
+
                                   lessonIndex,
+
                                   -1,
                                 )
                               }
@@ -524,8 +713,11 @@ export default function TeacherCourseContent({
                               onClick={() =>
                                 void moveLesson(
                                   moduleId,
+
                                   lessons,
+
                                   lessonIndex,
+
                                   1,
                                 )
                               }
@@ -567,6 +759,7 @@ export default function TeacherCourseContent({
                               if (window.confirm("هل تريد حذف هذا الدرس؟"))
                                 void mutate(
                                   () => teachersApi.deleteLesson(lessonId),
+
                                   "تم حذف الدرس.",
                                 )
                             }}
@@ -602,6 +795,7 @@ export default function TeacherCourseContent({
                                         teachersApi.deleteResource(
                                           String(resource.id),
                                         ),
+
                                       "تم حذف المورد.",
                                     )
                                 }}
@@ -616,16 +810,20 @@ export default function TeacherCourseContent({
                           <form
                             onSubmit={(event) => {
                               event.preventDefault()
+
                               const file = new FormData(
                                 event.currentTarget,
                               ).get("file")
+
                               if (file instanceof File && file.size)
                                 void mutate(
                                   () =>
                                     teachersApi.uploadLessonVideo(
                                       lessonId,
+
                                       file,
                                     ),
+
                                   "تم رفع فيديو الدرس.",
                                 )
                             }}
@@ -651,18 +849,22 @@ export default function TeacherCourseContent({
                           <form
                             onSubmit={(event) => {
                               event.preventDefault()
+
                               const url = String(
                                 new FormData(event.currentTarget).get(
                                   "youTubeUrl",
                                 ) ?? "",
                               ).trim()
+
                               void mutate(
                                 () =>
                                   teachersApi.setLessonYoutubeVideo(lessonId, {
                                     youTubeUrl: url,
                                   }),
+
                                 "تم ربط فيديو YouTube.",
                               )
+
                               event.currentTarget.reset()
                             }}
                             className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
@@ -693,6 +895,7 @@ export default function TeacherCourseContent({
                                     void mutate(
                                       () =>
                                         teachersApi.deleteLessonVideo(lessonId),
+
                                       "تم حذف الفيديو.",
                                     )
                                 }}
@@ -705,16 +908,22 @@ export default function TeacherCourseContent({
                           <form
                             onSubmit={(event) => {
                               event.preventDefault()
+
                               const form = new FormData(event.currentTarget)
+
                               const file = form.get("file")
+
                               if (file instanceof File && file.size)
                                 void mutate(
                                   () =>
                                     teachersApi.uploadLessonResource(
                                       lessonId,
+
                                       file,
+
                                       String(form.get("name") ?? "").trim(),
                                     ),
+
                                   "تم رفع المورد.",
                                 )
                             }}
@@ -743,18 +952,24 @@ export default function TeacherCourseContent({
                           <form
                             onSubmit={(event) => {
                               event.preventDefault()
+
                               const form = new FormData(event.currentTarget)
+
                               void mutate(
                                 () =>
                                   teachersApi.addExternalLessonResource(
                                     lessonId,
+
                                     String(form.get("name") ?? "").trim(),
+
                                     String(
                                       form.get("externalUrl") ?? "",
                                     ).trim(),
                                   ),
+
                                 "تمت إضافة الرابط.",
                               )
+
                               event.currentTarget.reset()
                             }}
                             className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
@@ -821,16 +1036,9 @@ export default function TeacherCourseContent({
                                       className={control}
                                     />
                                   </label>
-                                  <label className={field}>
-                                    عدد المحاولات
-                                    <input
-                                      name="maxAttempts"
-                                      type="number"
-                                      min="1"
-                                      required
-                                      className={control}
-                                    />
-                                  </label>
+                                  <div className="flex items-center rounded-lg bg-nuwa-soft px-3 text-xs font-semibold text-nuwa-deep">
+                                    محاولة واحدة لكل طالب
+                                  </div>
                                   <button
                                     disabled={busy}
                                     className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
@@ -878,6 +1086,7 @@ export default function TeacherCourseContent({
                                                 quizzesApi.delete(
                                                   String(quiz.id),
                                                 ),
+
                                               "تم حذف الاختبار.",
                                             )
                                         }}
@@ -923,19 +1132,9 @@ export default function TeacherCourseContent({
                                         className={control}
                                       />
                                     </label>
-                                    <label className={field}>
-                                      عدد المحاولات
-                                      <input
-                                        name="maxAttempts"
-                                        type="number"
-                                        min="1"
-                                        required
-                                        defaultValue={String(
-                                          quiz.maxAttempts ?? 1,
-                                        )}
-                                        className={control}
-                                      />
-                                    </label>
+                                    <div className="flex items-center rounded-lg bg-nuwa-soft px-3 text-xs font-semibold text-nuwa-deep">
+                                      محاولة واحدة لكل طالب
+                                    </div>
                                     <button
                                       disabled={busy}
                                       className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
@@ -966,8 +1165,11 @@ export default function TeacherCourseContent({
                                                 onClick={() =>
                                                   void moveQuestion(
                                                     records(quiz.questions),
+
                                                     String(quiz.id),
+
                                                     questionIndex,
+
                                                     -1,
                                                   )
                                                 }
@@ -988,8 +1190,11 @@ export default function TeacherCourseContent({
                                                 onClick={() =>
                                                   void moveQuestion(
                                                     records(quiz.questions),
+
                                                     String(quiz.id),
+
                                                     questionIndex,
+
                                                     1,
                                                   )
                                                 }
@@ -1023,22 +1228,28 @@ export default function TeacherCourseContent({
                                             <form
                                               onSubmit={(event) => {
                                                 event.preventDefault()
+
                                                 const form = new FormData(
                                                   event.currentTarget,
                                                 )
+
                                                 const body = {
                                                   text: String(
                                                     form.get("text") ?? "",
                                                   ).trim(),
+
                                                   type: Number(
                                                     form.get("type"),
                                                   ),
+
                                                   points: Number(
                                                     form.get("points"),
                                                   ),
                                                 }
+
                                                 void updateQuestion(
                                                   String(question.id),
+
                                                   body,
                                                 )
                                               }}
@@ -1107,18 +1318,22 @@ export default function TeacherCourseContent({
                                                     <form
                                                       onSubmit={(event) => {
                                                         event.preventDefault()
+
                                                         const form =
                                                           new FormData(
                                                             event.currentTarget,
                                                           )
+
                                                         void updateOption(
                                                           String(option.id),
+
                                                           {
                                                             text: String(
                                                               form.get(
                                                                 "text",
                                                               ) ?? "",
                                                             ).trim(),
+
                                                             isCorrect:
                                                               form.get(
                                                                 "isCorrect",
@@ -1183,6 +1398,7 @@ export default function TeacherCourseContent({
                                             onSubmit={(event) =>
                                               void addOption(
                                                 String(question.id),
+
                                                 event,
                                               )
                                             }

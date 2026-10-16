@@ -14,6 +14,7 @@ interface PublicNavbarProps {
 
 interface PublicNavigationItem {
   label: string
+
   view: View
 }
 

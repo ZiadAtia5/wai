@@ -16,6 +16,7 @@ import ApiQueryState from "../components/ApiQueryState"
 import { useApiQuery } from "../hooks/useApiQuery"
 
 import type { NavigateFn } from "../types"
+
 import { notifyError, notifySuccess } from "../utils/notifications"
 
 interface PublicCatalogPageProps {
@@ -27,8 +28,11 @@ interface PublicCatalogPageProps {
 
   load: (
     page?: number,
+
     pageSize?: number,
+
     search?: string,
+
     academicYear?: string,
   ) => Promise<PagedResult<ApiRecord>>
 
@@ -64,6 +68,12 @@ function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "-"
 
   return typeof value === "object" ? JSON.stringify(value) : String(value)
+}
+
+function teacherNameOf(record: Record<string, unknown>): string | null {
+  const nested = asRecord(record.teacher)
+  const value = record.teacherName ?? record.instructorName ?? nested?.fullName ?? nested?.name
+  return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
 function scalarFields(record: Record<string, unknown>): [string, unknown][] {
@@ -119,9 +129,11 @@ export default function PublicCatalogPage({
     let active = true
 
     getAcademicYears()
+
       .then((years) => {
         if (active) setAcademicYears(years)
       })
+
       .catch(() => undefined)
 
     return () => {
@@ -131,6 +143,7 @@ export default function PublicCatalogPage({
 
   const pageLoader = useCallback(
     () => load(page, 12, search, academicYear),
+
     [load, page, search, academicYear],
   )
 
@@ -161,6 +174,7 @@ export default function PublicCatalogPage({
       if (loadRelated) setRelated(await loadRelated(id))
     } catch (cause) {
       notifyError(cause, "تعذر تحميل التفاصيل.")
+
       setActionMessage(
         cause instanceof ApiError ? cause.message : "تعذر تحميل التفاصيل.",
       )
@@ -172,6 +186,7 @@ export default function PublicCatalogPage({
 
     if (!getAuthToken()) {
       notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."))
+
       setActionMessage("سجّل الدخول أولاً لإرسال طلب الالتحاق.")
 
       navigate?.("login")
@@ -185,11 +200,13 @@ export default function PublicCatalogPage({
 
     try {
       await action(String(detail.id))
+
       notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
 
       setActionMessage("تم إرسال طلب الالتحاق بنجاح.")
     } catch (cause) {
       notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+
       setActionMessage(
         cause instanceof Error ? cause.message : "تعذر تنفيذ الطلب.",
       )
@@ -203,6 +220,7 @@ export default function PublicCatalogPage({
     : asRecord(related) && Array.isArray(asRecord(related)?.items)
       ? asRecord(related)?.items as unknown[]
       : []
+
   const detailFields = detail ? scalarFields(detail) : []
 
   return (
@@ -223,8 +241,11 @@ export default function PublicCatalogPage({
         <form
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()
+
             setPage(1)
+
             setSearch(searchInput.trim())
+
             setDetail(null)
           }}
           className="mb-6 grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-[1fr_220px_auto]"
@@ -244,7 +265,9 @@ export default function PublicCatalogPage({
               value={academicYear}
               onChange={(event) => {
                 setAcademicYear(event.target.value)
+
                 setPage(1)
+
                 setDetail(null)
               }}
               className="h-10 rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
@@ -398,6 +421,11 @@ export default function PublicCatalogPage({
                       <h2 className="font-semibold text-ink">
                         {titleOf(record)}
                       </h2>
+                      {teacherNameOf(record) && (
+                        <p className="mt-1 text-xs font-semibold text-sky-700">
+                          المعلم: {teacherNameOf(record)}
+                        </p>
+                      )}
                       <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-muted">
                         {String(
                           record.description ??
