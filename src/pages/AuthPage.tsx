@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+
 import {
   ArrowRight,
   BookOpen,
@@ -11,33 +12,47 @@ import {
 } from "lucide-react"
 
 import { ApiError, setAuthToken } from "../api/client"
+
 import { authApi, type ApiObject } from "../api/endpoints"
+
 import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
+
 import { notifyError, notifySuccess } from "../utils/notifications"
+
 import type { NavigateFn } from "../types"
 
 interface AuthPageProps {
   mode: "login" | "register"
+
   navigate: NavigateFn
 }
 
 export default function AuthPage({ mode, navigate }: AuthPageProps) {
   const isLogin = mode === "login"
+
   const [busy, setBusy] = useState(false)
+
   const [showPassword, setShowPassword] = useState(false)
+
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+
   const [success, setSuccess] = useState("")
 
   useEffect(() => {
     if (isLogin) return
+
     let active = true
+
     getAcademicYears()
+
       .then((years) => {
         if (active) setAcademicYears(years)
       })
+
       .catch((error: unknown) =>
         notifyError(error, "تعذر تحميل الصفوف الدراسية."),
       )
+
     return () => {
       active = false
     }
@@ -45,42 +60,65 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     if (!event.currentTarget.checkValidity()) {
       event.currentTarget.querySelector<HTMLElement>(":invalid")?.focus()
+
       notifyError(
         new Error("تحقق من الحقول المطلوبة وتنسيق البريد وكلمة المرور."),
       )
+
       return
     }
+
     setBusy(true)
+
     setSuccess("")
+
     const formData = new FormData(event.currentTarget)
+
     const values = Object.fromEntries(formData.entries())
+
     let body: ApiObject
 
     if (isLogin) {
       body = {
         email: String(values.email ?? "").trim(),
+
         password: String(values.password ?? ""),
       }
     } else {
       const password = String(values.password ?? "")
+
       const confirmPassword = String(values.confirmPassword ?? "")
+
       if (password !== confirmPassword) {
         notifyError(new Error("كلمتا المرور غير متطابقتين."))
+
         setBusy(false)
+
         return
       }
+
       body = {
         firstName: String(values.firstName ?? "").trim(),
+
         secondName: String(values.secondName ?? "").trim(),
+
         thirdName: String(values.thirdName ?? "").trim(),
+
         email: String(values.email ?? "").trim(),
+
         password,
+
         confirmPassword,
+
         phoneNumber: String(values.phoneNumber ?? "").trim(),
+
         parentPhoneNumber: String(values.parentPhoneNumber ?? "").trim(),
+
         studentNumber: String(values.studentNumber ?? "").trim(),
+
         academicYear: Number(values.academicYear),
       }
     }
@@ -89,44 +127,75 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
       const response = await (isLogin
         ? authApi.login(body)
         : authApi.registerStudent(body))
+
       const record =
         typeof response === "object" && response !== null
           ? response as Record<string, unknown>
           : {}
+
       const nested =
         typeof record.data === "object" && record.data !== null
           ? record.data as Record<string, unknown>
           : {}
+
       if ((record.pendingApproval ?? nested.pendingApproval) === true) {
         const message = record.message ?? nested.message
+
         const notice =
           typeof message === "string" && /[\u0600-\u06ff]/.test(message)
             ? message
             : "تم استلام طلبك بنجاح. سيصبح بإمكانك تسجيل الدخول بعد اعتماد الحساب."
+
         setSuccess(notice)
+
         notifySuccess(notice)
+
         return
       }
+
       const token =
         record.token ?? record.accessToken ?? nested.token ?? nested.accessToken
+
       if (typeof token !== "string" || !token)
         throw new ApiError("لم يرسل الخادم رمز جلسة صالحاً.")
+
+      const userSource = record.user ?? nested.user
       const user =
-        typeof record.user === "object" && record.user !== null
-          ? record.user as Record<string, unknown>
-          : {}
+        typeof userSource === "object" && userSource !== null
+          ? userSource as Record<string, unknown>
+          : record
+
       setAuthToken(token)
+
       window.sessionStorage.setItem(
         "eduhub.auth.role",
-        String(user.role ?? record.role ?? "Student").toLowerCase(),
+
+        String(user.role ?? record.role ?? nested.role ?? "Student").toLowerCase(),
       )
+
+      const displayName = [
+        user.firstName ?? nested.firstName ?? record.firstName,
+        user.secondName ?? nested.secondName ?? record.secondName,
+        user.thirdName ?? nested.thirdName ?? record.thirdName,
+        user.lastName ?? nested.lastName ?? record.lastName,
+      ]
+        .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+        .join(" ")
+      const accountName =
+        user.fullName ?? user.displayName ?? user.name ?? nested.fullName ?? nested.name ?? displayName
+      if (typeof accountName === "string" && accountName.trim()) {
+        window.sessionStorage.setItem("eduhub.auth.name", accountName.trim())
+      }
+
       notifySuccess(
         isLogin ? "تم تسجيل الدخول بنجاح." : "تم إنشاء الحساب بنجاح.",
       )
+
       navigate("dashboard")
     } catch (error) {
       notifyError(
         error,
+
         isLogin
           ? "تعذر تسجيل الدخول. تحقق من بياناتك وحاول مجدداً."
           : "تعذر إنشاء الحساب. راجع البيانات وحاول مجدداً.",
@@ -167,10 +236,13 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
           <div className="relative grid gap-3">
             {[
               [BookOpen, "دورات ومحتوى منظم"],
+
               [ShieldCheck, "حساب تعليمي آمن"],
+
               [Sparkles, "متابعة لتقدمك"],
             ].map(([Icon, label]) => {
               const ItemIcon = Icon as typeof BookOpen
+
               return (
                 <div
                   key={String(label)}
@@ -375,9 +447,11 @@ const inputClass =
 
 function FieldGroup({
   title,
+
   children,
 }: {
   title: string
+
   children: ReactNode
 }) {
   return (
@@ -390,19 +464,31 @@ function FieldGroup({
 
 function TextField({
   label,
+
   name,
+
   type = "text",
+
   placeholder,
+
   autoComplete,
+
   dir,
+
   className = "",
 }: {
   label: string
+
   name: string
+
   type?: string
+
   placeholder?: string
+
   autoComplete?: string
+
   dir?: "ltr" | "rtl"
+
   className?: string
 }) {
   return (
@@ -425,15 +511,23 @@ function TextField({
 
 function PasswordField({
   label,
+
   name,
+
   visible,
+
   toggle,
+
   autoComplete,
 }: {
   label: string
+
   name: string
+
   visible: boolean
+
   toggle: () => void
+
   autoComplete: string
 }) {
   return (

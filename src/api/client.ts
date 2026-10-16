@@ -1,14 +1,17 @@
 export class ApiError extends Error {
   constructor(
     message: string,
+
     readonly status?: number,
   ) {
     super(message)
+
     this.name = "ApiError"
   }
 }
 
 const REQUEST_TIMEOUT_MS = 15_000
+
 const AUTH_TOKEN_KEY = "eduhub.auth.token"
 
 export function getAuthToken(): string | null {
@@ -55,9 +58,11 @@ export function isSecureApiConfigured(): boolean {
 
 export async function apiRequest<T>(
   path: string,
+
   options: RequestInit = {},
 ): Promise<T> {
   const baseUrl = getApiBaseUrl()
+
   const method = (options.method || "GET").toUpperCase()
 
   if (!path.startsWith("/") || path.startsWith("//")) {
@@ -67,11 +72,13 @@ export async function apiRequest<T>(
   const apiUrlObject = new URL(baseUrl)
 
   // التحقق مما إذا كان سيرفر الـ API نفسه شغال على اللوكل
+
   const isApiLocalhost =
     apiUrlObject.hostname === "localhost" ||
     apiUrlObject.hostname === "127.0.0.1"
 
   // يمنع الاتصال غير المشفّر فقط إذا كان الـ API سيرفر خارجي (ليس localhost) وليس طلب GET
+
   if (
     apiUrlObject.protocol !== "https:" &&
     !isApiLocalhost &&
@@ -81,12 +88,15 @@ export async function apiRequest<T>(
   }
 
   const controller = new AbortController()
+
   const timeout = window.setTimeout(
     () => controller.abort(),
+
     REQUEST_TIMEOUT_MS,
   )
 
   const headers = new Headers(options.headers)
+
   const token = getAuthToken()
 
   if (token && !headers.has("Authorization")) {
@@ -106,25 +116,35 @@ export async function apiRequest<T>(
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
+
       headers,
+
       signal: controller.signal,
+
       mode: "cors",
+
       credentials: "omit",
     })
 
     if (!response.ok) {
       if (response.status === 401) {
         clearAuthToken()
+
         window.sessionStorage.removeItem("eduhub.auth.role")
+
         window.dispatchEvent(new Event("eduhub:auth-expired"))
       }
 
       let message = getHttpErrorMessage(response.status)
+
       try {
         const payload: unknown = await response.json()
+
         if (typeof payload === "object" && payload !== null) {
           const body = payload as Record<string, unknown>
+
           const candidate = body.message ?? body.detail ?? body.title
+
           if (typeof candidate === "string" && candidate.trim()) {
             message = candidate
           }
@@ -132,12 +152,14 @@ export async function apiRequest<T>(
       } catch {
         // Keep the status-specific message when the API has no JSON error body.
       }
+
       throw new ApiError(message, response.status)
     }
 
     if (response.status === 204) return undefined as T
 
     const responseText = await response.text()
+
     if (!responseText) return undefined as T
 
     try {
@@ -160,10 +182,16 @@ export async function apiRequest<T>(
 
 function getHttpErrorMessage(status: number): string {
   if (status === 401) return "يلزم تسجيل الدخول للوصول إلى هذه البيانات."
+
   if (status === 403) return "لا تملك صلاحية الوصول إلى هذه البيانات."
+
   if (status === 404) return "المورد المطلوب غير موجود."
+
   if (status === 422) return "تحقق من البيانات المدخلة ثم حاول مجدداً."
+
   if (status === 429) return "طلبات كثيرة. انتظر قليلاً ثم حاول مجدداً."
+
   if (status >= 500) return "حدث خطأ في الخادم. حاول مجدداً لاحقاً."
+
   return "تعذر إكمال الطلب إلى الخادم."
 }

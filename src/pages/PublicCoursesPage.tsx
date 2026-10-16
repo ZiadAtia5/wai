@@ -1,4 +1,5 @@
 import { getPublicCourses } from "../api/catalog"
+
 import { coursesApi } from "../api/endpoints"
 
 import PublicCatalogPage from "./PublicCatalogPage"
