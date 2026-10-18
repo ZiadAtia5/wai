@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import PersonAvatar from "../PersonAvatar"
+import { useConfirmation } from "../ConfirmationProvider"
 
 type RequestStatus = "pending" | "approved" | "rejected"
 
@@ -55,7 +56,11 @@ interface TeacherEnrollmentRequestsProps {
 
   onRetry: () => void
 
-  onDecision: (requestId: string, approve: boolean) => Promise<boolean>
+  onDecision: (
+    requestId: string,
+    approve: boolean,
+    rejectionAlreadyConfirmed?: boolean,
+  ) => Promise<boolean>
 }
 
 interface EnrollmentFilter {
@@ -122,9 +127,6 @@ function text(...values: unknown[]): string {
 }
 
 function statusOf(value: unknown, isApproved?: unknown): RequestStatus {
-  if (isApproved === true) return "approved"
-  if (isApproved === false) return "pending"
-
   const status = String(value ?? "pending").trim().toLowerCase()
 
   // The API serializes EnrollmentStatus as an integer enum:
@@ -136,6 +138,9 @@ function statusOf(value: unknown, isApproved?: unknown): RequestStatus {
   if (["rejected", "declined", "cancelled", "canceled", "2"].includes(status)) {
     return "rejected"
   }
+
+  if (isApproved === true) return "approved"
+  if (isApproved === false) return "pending"
 
   return "pending"
 }
@@ -446,6 +451,7 @@ export default function TeacherEnrollmentRequests({
 
   onDecision,
 }: TeacherEnrollmentRequestsProps) {
+  const confirm = useConfirmation()
   const [query, setQuery] = useState("")
 
   const [filter, setFilter] = useState<FilterStatus>("all")
@@ -550,11 +556,31 @@ export default function TeacherEnrollmentRequests({
     )
 
   async function decide(request: EnrollmentRequest, approve: boolean) {
-    if (
-      request.status === "approved" &&
-      !approve &&
-      !window.confirm("هل تريد رفض الطالب بعد الموافقة عليه؟")
-    ) {
+    if (request.status === "approved" && !approve) {
+      const confirmed = await confirm({
+        title: "رفض الطالب بعد الموافقة؟",
+        message:
+          "سيتم إلغاء موافقة الطالب على هذه الدورة، وقد يفقد إمكانية الوصول إلى محتواها.",
+        variant: "warning",
+        confirmText: "رفض الطالب",
+      })
+
+      if (!confirmed) return
+
+      setBusyRequests((current) => [...current, request.id])
+      try {
+        const succeeded = await onDecision(request.id, false, true)
+        if (succeeded) {
+          setStatusOverrides((current) => ({
+            ...current,
+            [request.id]: "rejected",
+          }))
+        }
+      } finally {
+        setBusyRequests((current) =>
+          current.filter((id) => id !== request.id),
+        )
+      }
       return
     }
 

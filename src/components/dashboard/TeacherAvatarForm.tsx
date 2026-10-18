@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react"
 
 import { teachersApi } from "../../api/endpoints"
+import { useConfirmation } from "../ConfirmationProvider"
 
 const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted"
 
@@ -17,6 +18,7 @@ export default function TeacherAvatarForm({
 
   onSaved: () => void
 }) {
+  const confirm = useConfirmation()
   const [deleting, setDeleting] = useState(false)
 
   async function upload(event: FormEvent<HTMLFormElement>) {
@@ -40,23 +42,25 @@ export default function TeacherAvatarForm({
   }
 
   async function remove() {
-    if (!window.confirm("هل تريد حذف الصورة الشخصية؟")) return
+    const confirmed = await confirm({
+      title: "حذف الصورة الشخصية؟",
+      message: "سيتم حذف الصورة من ملف المعلم وإظهار الصورة الافتراضية.",
+      variant: "danger",
+      confirmText: "حذف الصورة",
+      onConfirm: async () => {
+        setDeleting(true)
+        onFeedback("")
+        try {
+          await teachersApi.deleteProfileImage()
+        } finally {
+          setDeleting(false)
+        }
+      },
+    })
+    if (!confirmed) return
 
-    setDeleting(true)
-
-    onFeedback("")
-
-    try {
-      await teachersApi.deleteProfileImage()
-
-      onFeedback("تم حذف الصورة الشخصية.")
-
-      onSaved()
-    } catch (cause) {
-      onFeedback(cause instanceof Error ? cause.message : "تعذر حذف الصورة.")
-    } finally {
-      setDeleting(false)
-    }
+    onFeedback("تم حذف الصورة الشخصية.")
+    onSaved()
   }
 
   return (

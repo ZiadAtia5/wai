@@ -30,6 +30,8 @@ import {
 import TeacherCourseContent from "./TeacherCourseContent"
 import LessonVideoPlayer from "./LessonVideoPlayer"
 
+import { useConfirmation } from "../ConfirmationProvider"
+
 import ProfileImageEditor from "./ProfileImageEditor"
 
 import PersonAvatar from "../PersonAvatar"
@@ -646,11 +648,16 @@ export default function RoleForms({
 
   onFocusCourseHandled,
 }: RoleFormsProps) {
+  const confirm = useConfirmation()
   const [years, setYears] = useState<AcademicYearResponse[]>([])
 
   const profileFormRef = useRef<HTMLFormElement>(null)
 
   const [editingProfile, setEditingProfile] = useState(false)
+
+  const [editingAdminName, setEditingAdminName] = useState(false)
+
+  const [adminNameOverride, setAdminNameOverride] = useState<string | null>(null)
 
   const [profileImageOverride, setProfileImageOverride] =
     useState<string | null>(null)
@@ -1077,6 +1084,28 @@ export default function RoleForms({
     }
   }
 
+  async function updateAdminName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = new FormData(event.currentTarget)
+    const name = String(form.get("name") ?? "").trim()
+    if (!name) {
+      onFeedback("اكتب الاسم قبل الحفظ.")
+      return
+    }
+
+    const saved = await mutate(
+      () => adminApi.updateMe({ name }),
+      "تم تحديث اسم الحساب.",
+    )
+
+    if (saved) {
+      setAdminNameOverride(name)
+      window.sessionStorage.setItem("eduhub.auth.name", name)
+      setEditingAdminName(false)
+    }
+  }
+
   const openProgress = useCallback(async (courseId: string, enrollmentCourse?: unknown) => {
     setProgressCourse(courseId)
 
@@ -1450,133 +1479,192 @@ export default function RoleForms({
             إنشاء حساب معلم
           </button>
         </form>
-        {editingTeacher && (
-          <form
-            onSubmit={(event) => void updateTeacher(event)}
-            className="grid gap-3 rounded-xl border border-nuwa-base/30 bg-nuwa-soft p-4 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            <label className={labelClass}>
-              الاسم الأول
-              <input
-                name="firstName"
-                required
-                defaultValue={String(editingTeacher.firstName ?? "")}
-                className={fieldClass}
-              />
-            </label>
-            <label className={labelClass}>
-              اسم العائلة
-              <input
-                name="lastName"
-                required
-                defaultValue={String(editingTeacher.lastName ?? "")}
-                className={fieldClass}
-              />
-            </label>
-            <label className={labelClass}>
-              رقم الهاتف
-              <input
-                name="phoneNumber"
-                type="tel"
-                required
-                defaultValue={String(editingTeacher.phoneNumber ?? "")}
-                className={fieldClass}
-              />
-            </label>
-            <label className={labelClass}>
-              نبذة
-              <input
-                name="bio"
-                defaultValue={String(editingTeacher.bio ?? "")}
-                className={fieldClass}
-              />
-            </label>
-            <label className={labelClass}>
-              الصفوف التي يدرّسها
-              <select
-                name="academicYears"
-                multiple
-                required
-                defaultValue={
-                  Array.isArray(editingTeacher.academicYears)
-                    ? editingTeacher.academicYears.map(String)
-                    : []
-                }
-                className="min-h-20 rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
-              >
-                {years.map((year) => (
-                  <option key={year.id} value={year.value}>
-                    {year.arabicName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-end gap-2">
-              <button
-                disabled={busy}
-                className="rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                حفظ بيانات المعلم
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingTeacher(null)}
-                className="rounded-lg border border-stroke px-4 py-2.5 text-sm"
-              >
-                إلغاء
-              </button>
-            </div>
-          </form>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {listFrom(data).map((teacher) => (
-            <button
-              type="button"
+        <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {listFrom(data).map((teacher) => {
+            const isEditingTeacher =
+              editingTeacher &&
+              String(editingTeacher.id) === String(teacher.id)
+            const teacherDetails = isEditingTeacher ? editingTeacher : teacher
+
+            return (
+            <article
               key={String(teacher.id)}
-              onClick={async () => {
-                try {
-                  setEditingTeacher(
-                    asRecord(await adminApi.teacher(String(teacher.id))),
-                  )
-                } catch (cause) {
-                  onFeedback(
-                    cause instanceof Error
-                      ? cause.message
-                      : "تعذر تحميل بيانات المعلم.",
-                  )
-                }
-              }}
-              className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-[24px] border border-stroke bg-white p-5 text-center text-sm shadow-nuwa transition hover:-translate-y-0.5 hover:shadow-nuwa-md"
+              className="rounded-[24px] border border-stroke bg-white p-5 text-sm shadow-nuwa transition hover:-translate-y-0.5 hover:shadow-nuwa-md"
             >
-              <PersonAvatar
-                name={String(
-                  teacher.fullName ?? teacher.name ?? teacher.email ?? "مدرس",
+              {isEditingTeacher && editingTeacher && (
+                  <form
+                    onSubmit={(event) => void updateTeacher(event)}
+                    className="mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
+                  >
+                    <h3 className="sm:col-span-2 font-bold text-ink">
+                      تعديل بيانات المعلم
+                    </h3>
+                    <label className={labelClass}>
+                      الاسم الأول
+                      <input
+                        name="firstName"
+                        required
+                        defaultValue={String(editingTeacher.firstName ?? "")}
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      اسم العائلة
+                      <input
+                        name="lastName"
+                        required
+                        defaultValue={String(editingTeacher.lastName ?? "")}
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      رقم الهاتف
+                      <input
+                        name="phoneNumber"
+                        type="tel"
+                        required
+                        defaultValue={String(editingTeacher.phoneNumber ?? "")}
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      نبذة
+                      <input
+                        name="bio"
+                        defaultValue={String(editingTeacher.bio ?? "")}
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={`${labelClass} sm:col-span-2`}>
+                      الصفوف التي يدرّسها
+                      <select
+                        name="academicYears"
+                        multiple
+                        required
+                        defaultValue={
+                          Array.isArray(editingTeacher.academicYears)
+                            ? editingTeacher.academicYears.map(String)
+                            : []
+                        }
+                        className="min-h-20 w-full rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
+                      >
+                        {years.map((year) => (
+                          <option key={year.id} value={year.value}>
+                            {year.arabicName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                      <button
+                        disabled={busy}
+                        className="rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        حفظ بيانات المعلم
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTeacher(null)}
+                        className="rounded-lg border border-stroke px-4 py-2.5 text-sm"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  </form>
                 )}
-                imageUrl={String(
-                  teacher.avatarUrl ??
-                    teacher.profileImageUrl ??
-                    teacher.imageUrl ??
-                    "",
-                )}
-                size="lg"
-                status={teacher.isActive === true ? "active" : undefined}
-              />
-              <span className="font-bold text-ink">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <PersonAvatar
+                  name={String(
+                    teacher.fullName ?? teacher.name ?? teacher.email ?? "مدرس",
+                  )}
+                  imageUrl={String(
+                    teacher.avatarUrl ??
+                      teacher.profileImageUrl ??
+                      teacher.imageUrl ??
+                      "",
+                  )}
+                  size="lg"
+                  status={teacher.isActive === true ? "active" : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      editingTeacher &&
+                      String(editingTeacher.id) === String(teacher.id)
+                    ) {
+                      setEditingTeacher(null)
+                      return
+                    }
+                    try {
+                      setEditingTeacher(
+                        asRecord(await adminApi.teacher(String(teacher.id))),
+                      )
+                    } catch (cause) {
+                      onFeedback(
+                        cause instanceof Error
+                          ? cause.message
+                          : "تعذر تحميل بيانات المعلم.",
+                      )
+                    }
+                  }}
+                  className="inline-flex max-w-[60%] shrink-0 items-center gap-2 rounded-xl border border-nuwa-base/20 bg-nuwa-ice px-3 py-2 text-xs font-semibold text-nuwa-deep transition hover:bg-nuwa-soft sm:max-w-none"
+                >
+                  <Pencil size={14} />
+                  {isEditingTeacher
+                    ? "إغلاق التعديل"
+                    : "تعديل المعلم"}
+                </button>
+              </div>
+              <h3 className="font-bold text-ink">
                 {String(
                   teacher.fullName ??
                     teacher.name ??
                     teacher.email ??
                     teacher.id,
                 )}
-              </span>
-              <span className="rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
+              </h3>
+              {teacherDetails.email && (
+                <p className="mt-1 break-all text-xs text-ink-muted">
+                  {String(teacherDetails.email)}
+                </p>
+              )}
+              {teacherDetails.phoneNumber && (
+                <p className="mt-1 text-xs text-ink-muted">
+                  {String(teacherDetails.phoneNumber)}
+                </p>
+              )}
+              {teacherDetails.bio && (
+                <p className="mt-3 line-clamp-3 text-xs leading-6 text-ink-muted">
+                  {String(teacherDetails.bio)}
+                </p>
+              )}
+              {Array.isArray(teacherDetails.academicYears) &&
+                teacherDetails.academicYears.length > 0 && (
+                  <p className="mt-2 text-xs text-ink-muted">
+                    الصفوف: {teacherDetails.academicYears
+                      .map((year) =>
+                        typeof year === "object" && year !== null
+                          ? String(
+                              (year as RecordValue).arabicName ??
+                                (year as RecordValue).name ??
+                                (year as RecordValue).value ??
+                                "",
+                            )
+                          : String(year),
+                      )
+                      .filter(Boolean)
+                      .join("، ")}
+                  </p>
+                )}
+              <span className="mt-3 inline-flex rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
                 {String(
                   teacher.subjectName ?? teacher.specialization ?? "حساب مدرس",
                 )}
               </span>
-              تعديل: {String(teacher.fullName ?? teacher.email ?? teacher.id)}
-            </button>
-          ))}
+            </article>
+            )
+          })}
         </div>
       </div>
     )
@@ -1875,7 +1963,7 @@ export default function RoleForms({
                     </span>
                   </div>
 
-                  <div className="space-y-4 p-4">
+                  <div className="min-w-0 space-y-4 p-2.5 sm:p-4">
                     <div className="min-w-0">
                       <h4 className="truncate text-base font-bold text-ink">
                         {String(course.title ?? `دورة ${id}`)}
@@ -1966,40 +2054,39 @@ export default function RoleForms({
                         type="button"
                         disabled={busy || !id}
                         onClick={() => {
-                          if (
-                            !window.confirm(
-                              "حذف الدورة نهائي ولا يمكن التراجع عنه. هل تريد المتابعة؟",
-                            )
-                          )
-                            return
+                          void (async () => {
+                            const confirmed = await confirm({
+                              title: "حذف الدورة نهائيًا؟",
+                              message:
+                                "سيتم حذف الدورة ومحتواها نهائيًا، ولن يمكن استعادتها.",
+                              variant: "danger",
+                              confirmText: "حذف نهائي",
+                              onConfirm: async () => {
+                                const saved = await mutate(async () => {
+                                  if (isPublished) {
+                                    await teachersApi.unpublishCourse(id)
+                                    setPublishedOverrides((current) => ({
+                                      ...current,
+                                      [id]: false,
+                                    }))
+                                  }
 
-                          void mutate(async () => {
-                            if (isPublished) {
-                              await teachersApi.unpublishCourse(id)
-
-                              setPublishedOverrides((current) => ({
-                                ...current,
-
-                                [id]: false,
-                              }))
-                            }
-
-                            await teachersApi.deleteCourse(id)
-                          }, "تم حذف الدورة نهائياً.").then((saved) => {
-                            if (!saved) return
+                                  await teachersApi.deleteCourse(id)
+                                }, "تم حذف الدورة نهائياً.")
+                                if (!saved) throw new Error("تعذر حذف الدورة.")
+                              },
+                            })
+                            if (!confirmed) return
 
                             setDeletedCourseIds((current) => {
                               const next = new Set(current)
-
                               next.add(id)
-
                               return next
                             })
 
                             if (isEditing) setEditingCourse(null)
-
                             if (isShowingContent) setContentCourseId(null)
-                          })
+                          })()
                         }}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-danger transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -2044,12 +2131,21 @@ export default function RoleForms({
                             type="button"
                             disabled={busy}
                             onClick={() => {
-                              if (window.confirm("هل تريد حذف غلاف الدورة؟"))
-                                void mutate(
-                                  () => teachersApi.deleteCourseCover(id),
-
-                                  "تم حذف غلاف الدورة.",
-                                )
+                              void confirm({
+                                title: "حذف غلاف الدورة؟",
+                                message:
+                                  "سيتم إزالة صورة الغلاف الحالية من الدورة.",
+                                variant: "danger",
+                                confirmText: "حذف الغلاف",
+                                onConfirm: async () => {
+                                  const saved = await mutate(
+                                    () => teachersApi.deleteCourseCover(id),
+                                    "تم حذف غلاف الدورة.",
+                                  )
+                                  if (!saved)
+                                    throw new Error("تعذر حذف غلاف الدورة.")
+                                },
+                              })
                             }}
                             className="mt-2 text-xs font-semibold text-danger hover:underline disabled:opacity-50"
                           >
@@ -2063,7 +2159,7 @@ export default function RoleForms({
                       <form
                         key={`edit-${id}`}
                         onSubmit={(event) => void updateCourse(event)}
-                        className="space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-4"
+                        className="min-w-0 space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-3 sm:p-4"
                       >
                         <div>
                           <h5 className="text-sm font-bold text-nuwa-deep">
@@ -2094,7 +2190,7 @@ export default function RoleForms({
                             className="w-full resize-y rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
                           />
                         </label>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                           <label className={labelClass}>
                             السعر
                             <input
@@ -2716,7 +2812,14 @@ export default function RoleForms({
   }
 
   if (isAdmin && section === "profile") {
-    const adminName = String(record.name ?? record.fullName ?? "مدير النظام")
+    const adminName =
+      adminNameOverride ??
+      String(
+        record.name ??
+          record.fullName ??
+          window.sessionStorage.getItem("eduhub.auth.name") ??
+          "مدير النظام",
+      )
     const adminImage =
       profileImageOverride ??
       (profileImageSource(record) ||
@@ -2724,7 +2827,7 @@ export default function RoleForms({
         "")
     return (
       <section className="mb-5 overflow-hidden rounded-3xl border border-emerald-900/10 bg-white shadow-[0_18px_55px_-35px_rgba(12,68,43,0.35)]">
-        <div className="relative isolate overflow-hidden bg-gradient-to-l from-[#0b3b25] via-[#176b43] to-[#25845a] px-6 py-8 text-white sm:px-9">
+        <div className="relative isolate overflow-hidden bg-gradient-to-l from-[#0b3b25] via-[#176b43] to-[#25845a] px-4 py-6 text-white sm:px-9 sm:py-8">
           <div
             aria-hidden="true"
             className="absolute -left-12 -top-24 -z-10 size-64 rounded-full border-[32px] border-white/10"
@@ -2733,7 +2836,7 @@ export default function RoleForms({
             aria-hidden="true"
             className="absolute -bottom-28 right-1/3 -z-10 size-64 rounded-full border-[24px] border-white/10"
           />
-          <div className="flex flex-wrap items-center gap-5">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5">
             <PersonAvatar name={adminName} imageUrl={adminImage} size="lg" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-emerald-50/80">
@@ -2746,19 +2849,26 @@ export default function RoleForms({
                 مدير النظام
               </span>
             </div>
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4 text-sm text-emerald-50 backdrop-blur-sm">
+            <div className="w-full rounded-2xl border border-white/15 bg-white/10 p-4 text-sm text-emerald-50 backdrop-blur-sm sm:w-auto">
               بيانات حسابك الإدارية
             </div>
             <button
               type="button"
+              onClick={() => setEditingAdminName((current) => !current)}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-white/60 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20 sm:w-auto"
+            >
+              <Pencil size={15} /> تعديل الاسم
+            </button>
+            <button
+              type="button"
               onClick={() => setEditingProfile(true)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-emerald-900 shadow-sm transition hover:bg-emerald-50"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-emerald-900 shadow-sm transition hover:bg-emerald-50 sm:w-auto"
             >
               <Pencil size={15} /> تعديل الصورة الشخصية
             </button>
           </div>
         </div>
-        <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-7">
+        <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 sm:p-7">
           <div className="rounded-2xl bg-[#f3f8f5] p-4">
             <p className="text-xs font-medium text-ink-muted">الاسم الظاهر</p>
             <p className="mt-1 font-semibold text-ink">{adminName}</p>
@@ -2768,8 +2878,40 @@ export default function RoleForms({
             <p className="mt-1 font-semibold text-ink">مدير النظام</p>
           </div>
         </div>
+        {editingAdminName && (
+          <form
+            onSubmit={(event) => void updateAdminName(event)}
+            className="grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end sm:p-7"
+          >
+            <label className={labelClass}>
+              الاسم الظاهر
+              <input
+                name="name"
+                required
+                defaultValue={adminName}
+                className={fieldClass}
+                autoComplete="name"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setEditingAdminName(false)}
+              disabled={busy}
+              className="min-h-11 rounded-full border border-stroke px-5 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="min-h-11 rounded-full bg-gradient-to-l from-[#0b3b25] to-[#176b43] px-6 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
+            >
+              {busy ? "جارٍ الحفظ…" : "حفظ الاسم"}
+            </button>
+          </form>
+        )}
         {editingProfile && (
-          <div className="p-5 pt-0 sm:px-7 sm:pb-7">
+          <div className="min-w-0 p-4 pt-0 sm:px-7 sm:pb-7">
             <ProfileImageEditor
               role="admin"
               name={adminName}
@@ -2821,8 +2963,8 @@ export default function RoleForms({
 
     return (
       <div className="mb-5 grid gap-4">
-        <section className="overflow-hidden rounded-3xl border border-stroke bg-white shadow-sm">
-          <div className="relative isolate overflow-hidden px-6 py-7 text-ink sm:px-9">
+        <section className="min-w-0 overflow-hidden rounded-3xl border border-stroke bg-white shadow-sm">
+          <div className="relative isolate overflow-hidden px-4 py-6 text-ink sm:px-9 sm:py-7">
             <div
               aria-hidden="true"
               className="absolute -left-12 -top-24 -z-10 size-64 rounded-full border-[32px] border-emerald-900/5"
@@ -2831,7 +2973,7 @@ export default function RoleForms({
               aria-hidden="true"
               className="absolute -bottom-28 right-1/3 -z-10 size-64 rounded-full border-[24px] border-emerald-900/5"
             />
-            <div className="flex flex-wrap items-center gap-5">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5">
               <PersonAvatar
                 name={profileName}
                 imageUrl={profileImage}
@@ -2851,7 +2993,7 @@ export default function RoleForms({
                   {isTeacher ? "حساب معلم" : "حساب طالب"}
                 </span>
               </div>
-              <div className="rounded-2xl bg-[#f3f8f5] px-4 py-3 text-sm font-medium text-ink-muted">
+              <div className="w-full rounded-2xl bg-[#f3f8f5] px-4 py-3 text-sm font-medium text-ink-muted sm:w-auto">
                 {String(
                   record.academicYearName ??
                     (isTeacher ? "ملف المعلم" : "الملف الدراسي"),
@@ -2860,13 +3002,13 @@ export default function RoleForms({
               <button
                 type="button"
                 onClick={() => setEditingProfile(true)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-gradient-to-l from-[#0b3b25] to-[#176b43] px-5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-l from-[#0b3b25] to-[#176b43] px-5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 sm:w-auto"
               >
                 <Pencil size={15} /> تعديل الملف الشخصي
               </button>
             </div>
           </div>
-          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
+          <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
             {[
               ["البريد الإلكتروني", record.email ?? "غير مضاف"],
               ["رقم الهاتف", record.phoneNumber ?? "غير مضاف"],
@@ -2896,7 +3038,7 @@ export default function RoleForms({
           </div>
         </section>
         {editingProfile && (
-          <section className="rounded-3xl border border-stroke bg-white p-5 shadow-sm sm:p-7">
+          <section className="min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7">
             <div className="mb-5">
               <h3 className="text-xl font-bold text-ink">الملف الشخصي</h3>
               <p className="mt-1 text-sm text-ink-muted">
@@ -2924,7 +3066,7 @@ export default function RoleForms({
             <form
               ref={profileFormRef}
               onSubmit={(event) => void updateProfile(event)}
-              className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0"
             >
               <label className={labelClass}>
                 الاسم الأول
@@ -3063,7 +3205,7 @@ export default function RoleForms({
                   </select>
                 </label>
               )}
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-stroke pt-4 sm:col-span-2 lg:col-span-3">
+              <div className="flex flex-col-reverse items-stretch justify-end gap-2 border-t border-stroke pt-4 sm:col-span-2 sm:flex-row sm:items-center lg:col-span-3">
                 <button
                   type="button"
                   onClick={() => {

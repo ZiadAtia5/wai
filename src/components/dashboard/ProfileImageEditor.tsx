@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "
 import { ImagePlus, Trash2, Upload } from "lucide-react"
 
 import { adminApi, studentsApi, teachersApi } from "../../api/endpoints"
+import { useConfirmation } from "../ConfirmationProvider"
 import PersonAvatar from "../PersonAvatar"
 
 type ProfileRole = "student" | "teacher" | "admin"
@@ -55,6 +56,7 @@ export default function ProfileImageEditor({
   onImageChange?: (imageUrl: string) => void
   onSaved: () => void
 }) {
+  const confirm = useConfirmation()
   const [file, setFile] = useState<File | null>(null)
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
   const [removed, setRemoved] = useState(false)
@@ -138,13 +140,21 @@ export default function ProfileImageEditor({
       return
     }
     if (!imageUrl && !uploadedUrl) return
-    if (!window.confirm("هل تريد حذف الصورة الشخصية؟")) return
-    setSaving(true)
+    const confirmed = await confirm({
+      title: "حذف الصورة الشخصية؟",
+      message: "سيتم حذف الصورة من ملفك الشخصي وإظهار الصورة الافتراضية.",
+      variant: "danger",
+      confirmText: "حذف الصورة",
+      onConfirm: async () => {
+        if (role === "admin") await adminApi.deleteProfileImage()
+        else if (role === "teacher") await teachersApi.deleteProfileImage()
+        else await studentsApi.deleteProfileImage()
+      },
+    })
+    if (!confirmed) return
+
     onFeedback("")
     try {
-      if (role === "admin") await adminApi.deleteProfileImage()
-      else if (role === "teacher") await teachersApi.deleteProfileImage()
-      else await studentsApi.deleteProfileImage()
       window.sessionStorage.removeItem("eduhub.auth.image")
       window.dispatchEvent(
         new CustomEvent("eduhub:profile-image-updated", { detail: "" }),
@@ -157,8 +167,6 @@ export default function ProfileImageEditor({
       onSaved()
     } catch (cause) {
       onFeedback(cause instanceof Error ? cause.message : "تعذر حذف الصورة.")
-    } finally {
-      setSaving(false)
     }
   }
 
