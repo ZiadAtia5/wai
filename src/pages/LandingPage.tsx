@@ -59,26 +59,26 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
 
   return (
     <div className="overflow-hidden bg-canvas">
-      <section className="relative isolate bg-[#0b2742] text-white">
+      <section className="relative isolate bg-[#0b3b25] text-white">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_82%_30%,rgba(35,136,217,.34),transparent_38%),radial-gradient(ellipse_at_8%_90%,rgba(23,105,170,.25),transparent_35%)]" />
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 md:min-h-[570px] md:grid-cols-[1.08fr_.92fr] md:py-24">
           <div>
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-sm text-sky-100">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-sm text-emerald-100">
               <Sparkles size={15} /> تعليم يفتح لك آفاقاً جديدة
             </div>
             <h1 className="max-w-2xl text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl md:text-[3.55rem]">
               طريقك إلى التفوق
               <br />
-              <span className="text-sky-300">يبدأ من هنا</span>
+              <span className="text-emerald-300">يبدأ من هنا</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-8 text-slate-300 sm:text-lg">
+            <p className="mt-6 max-w-xl text-base leading-8 text-neutral-300 sm:text-lg">
               اكتشف دورات تعليمية يقدمها معلمون متخصصون، وتعلّم بالوتيرة التي
               تناسبك مع متابعة واضحة لتقدمك.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={() => navigate("public:courses")}
-                className="inline-flex h-12 items-center gap-2 rounded-xl bg-sky-400 px-5 font-semibold text-[#09233d] shadow-lg shadow-sky-950/20 transition hover:bg-sky-300"
+                className="inline-flex h-12 items-center gap-2 rounded-xl bg-emerald-400 px-5 font-semibold text-[#092b1a] shadow-lg shadow-emerald-950/20 transition hover:bg-emerald-300"
               >
                 اكتشف الدورات <ArrowLeft size={17} />
               </button>
@@ -89,7 +89,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                 <Users size={17} /> تعرف على معلمينا
               </button>
             </div>
-            <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-300">
+            <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-neutral-300">
               <span className="inline-flex items-center gap-2">
                 <Check size={16} className="text-emerald-300" /> محتوى تعليمي
                 منظم
@@ -100,34 +100,34 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
             </div>
           </div>
           <div className="relative mx-auto w-full max-w-[460px]">
-            <div className="absolute -inset-5 rounded-[2.5rem] bg-sky-400/10 blur-2xl" />
+            <div className="absolute -inset-5 rounded-[2.5rem] bg-emerald-400/10 blur-2xl" />
             <div className="relative rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/10 to-white/[.03] p-5 shadow-2xl backdrop-blur sm:p-7">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-300">مساحة تعلمك</p>
+                  <p className="text-sm text-neutral-300">مساحة تعلمك</p>
                   <p className="mt-1 text-xl font-semibold">ابدأ بخطوة اليوم</p>
                 </div>
-                <div className="grid size-12 place-items-center rounded-2xl bg-sky-300/15 text-sky-200">
+                <div className="grid size-12 place-items-center rounded-2xl bg-emerald-300/15 text-emerald-200">
                   <GraduationCap size={25} />
                 </div>
               </div>
-              <div className="my-6 rounded-2xl border border-white/10 bg-[#071d32]/70 p-5">
+              <div className="my-6 rounded-2xl border border-white/10 bg-[#071f14]/70 p-5">
                 <div className="flex items-center gap-3">
-                  <div className="grid size-11 place-items-center rounded-xl bg-sky-300 text-[#09233d]">
+                  <div className="grid size-11 place-items-center rounded-xl bg-emerald-300 text-[#092b1a]">
                     <BookOpen size={21} />
                   </div>
                   <div>
                     <p className="font-semibold">تعلّم بأسلوبك</p>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-neutral-400">
                       دروس وموارد واختبارات
                     </p>
                   </div>
-                  <Play size={16} className="ms-auto text-sky-200" />
+                  <Play size={16} className="ms-auto text-emerald-200" />
                 </div>
                 <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full w-2/3 rounded-full bg-gradient-to-l from-sky-300 to-cyan-200" />
+                  <div className="h-full w-2/3 rounded-full bg-gradient-to-l from-emerald-300 to-cyan-200" />
                 </div>
-                <div className="mt-2 flex justify-between text-xs text-slate-400">
+                <div className="mt-2 flex justify-between text-xs text-neutral-400">
                   <span>تقدمك يتحدث مع كل درس</span>
                   <span>●</span>
                 </div>
@@ -155,7 +155,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                 )}
               </ApiQueryState>
             </div>
-            <div className="absolute -bottom-5 -left-3 hidden items-center gap-2 rounded-xl border border-white/10 bg-[#123b5b] px-4 py-3 text-sm shadow-xl sm:flex">
+            <div className="absolute -bottom-5 -left-3 hidden items-center gap-2 rounded-xl border border-white/10 bg-[#123b25] px-4 py-3 text-sm shadow-xl sm:flex">
               <span className="grid size-8 place-items-center rounded-lg bg-emerald-300/15 text-emerald-200">
                 <Check size={17} />
               </span>
@@ -192,13 +192,13 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                 <button
                   key={year.id}
                   onClick={() => navigate("public:courses")}
-                  className="group flex items-center gap-4 rounded-2xl border border-stroke bg-white p-5 text-start shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-nuwa-md"
+                  className="group flex items-center gap-4 rounded-2xl border border-stroke bg-white p-5 text-start shadow-sm transition hover:-tranneutral-y-0.5 hover:border-emerald-300 hover:shadow-nuwa-md"
                 >
                   <span
                     className={`grid size-12 place-items-center rounded-xl ${
                       index % 2
                         ? "bg-violet-50 text-violet-700"
-                        : "bg-sky-50 text-nuwa-base"
+                        : "bg-emerald-50 text-nuwa-base"
                     }`}
                   >
                     <GraduationCap size={23} />
@@ -213,7 +213,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                   </span>
                   <ArrowUpLeft
                     size={18}
-                    className="text-ink-muted transition group-hover:-translate-x-1 group-hover:translate-y-1 group-hover:text-nuwa-base"
+                    className="text-ink-muted transition group-hover:-tranneutral-x-1 group-hover:tranneutral-y-1 group-hover:text-nuwa-base"
                   />
                 </button>
               ))}
@@ -255,9 +255,9 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
                   return (
                     <article
                       key={String(course.id ?? index)}
-                      className="overflow-hidden rounded-2xl border border-stroke bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-nuwa-md"
+                      className="overflow-hidden rounded-2xl border border-stroke bg-white shadow-sm transition hover:-tranneutral-y-1 hover:shadow-nuwa-md"
                     >
-                      <div className="relative flex h-40 items-end overflow-hidden bg-gradient-to-br from-[#123b66] via-[#1769aa] to-[#56b5d8] p-5">
+                      <div className="relative flex h-40 items-end overflow-hidden bg-gradient-to-br from-[#0b3b25] via-[#176b43] to-[#56b5d8] p-5">
                         {typeof course.coverImageUrl === "string" &&
                         course.coverImageUrl ? (
                           <img
@@ -339,7 +339,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-stroke bg-white p-6 shadow-sm">
-            <span className="grid size-11 place-items-center rounded-xl bg-sky-50 text-nuwa-base">
+            <span className="grid size-11 place-items-center rounded-xl bg-emerald-50 text-nuwa-base">
               <GraduationCap size={23} />
             </span>
             <h3 className="mt-4 text-lg font-bold text-ink">مساحة الطالب</h3>
@@ -419,12 +419,12 @@ function Stat({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.06] p-3">
-      <span className="grid size-9 place-items-center rounded-lg bg-sky-300/15 text-sky-200">
+      <span className="grid size-9 place-items-center rounded-lg bg-emerald-300/15 text-emerald-200">
         {icon}
       </span>
       <span>
         <span className="block text-lg font-bold">{value}</span>
-        <span className="text-xs text-slate-300">{label}</span>
+        <span className="text-xs text-neutral-300">{label}</span>
       </span>
     </div>
   )

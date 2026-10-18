@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { FileVideo2, Link2, Upload } from "lucide-react"
 
 import { ApiError } from "../../api/client"
 
 import { quizzesApi, teachersApi } from "../../api/endpoints"
+import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
 
 type DataRecord = Record<string, unknown>
 
@@ -54,6 +56,10 @@ export default function TeacherCourseContent({
 
   const [busy, setBusy] = useState(false)
 
+  const [videoInputModes, setVideoInputModes] = useState<
+    Record<string, "upload" | "youtube" | null>
+  >({})
+
   const [quizLessonId, setQuizLessonId] = useState<string | null>(null)
 
   const [quiz, setQuiz] = useState<DataRecord | null>(null)
@@ -100,7 +106,7 @@ export default function TeacherCourseContent({
           setCourseError(
             cause instanceof Error
               ? cause.message
-              : "Unable to load course content.",
+              : "تعذر تحميل محتوى الدورة.",
           )
 
           setCourseLoading(false)
@@ -551,13 +557,13 @@ export default function TeacherCourseContent({
         className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger"
         role="alert"
       >
-        <p>{courseError ?? "Course details were empty."}</p>
+        <p>{courseError ?? "لا تتوفر تفاصيل لهذه الدورة."}</p>
         <button
           type="button"
           onClick={() => setReload((value) => value + 1)}
           className="mt-3 rounded-lg border border-danger/30 px-3 py-2 font-semibold"
         >
-          Retry
+          إعادة المحاولة
         </button>
       </div>
     )
@@ -565,7 +571,7 @@ export default function TeacherCourseContent({
   const modules = records(course.modules)
 
   return (
-    <section className="mt-4 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-4">
+    <section className="mt-5 rounded-2xl border border-nuwa-base/15 bg-gradient-to-b from-nuwa-ice to-white p-5 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-ink">
           محتوى: {String(course.title ?? `الدورة ${courseId}`)}
@@ -574,11 +580,11 @@ export default function TeacherCourseContent({
       </div>
       <form
         onSubmit={(event) => void createModule(event)}
-        className="mb-4 grid gap-3 rounded-lg border border-stroke bg-white p-3 sm:grid-cols-[1fr_140px_auto] sm:items-end"
+        className="mb-5 grid gap-3 rounded-2xl border border-stroke bg-white p-4 shadow-sm sm:grid-cols-[1fr_140px_auto] sm:items-end"
       >
         <label className={field}>
           عنوان الوحدة
-          <input name="title" required className={control} />
+          <input name="title" required placeholder="مثال: الوحدة الأولى — أساسيات المادة" className={control} />
         </label>
         <label className={field}>
           الترتيب
@@ -587,6 +593,7 @@ export default function TeacherCourseContent({
             type="number"
             min="1"
             required
+            defaultValue={modules.length + 1}
             className={control}
           />
         </label>
@@ -611,7 +618,7 @@ export default function TeacherCourseContent({
             return (
               <article
                 key={moduleId}
-                className="rounded-lg border border-stroke bg-white p-4"
+                className="rounded-2xl border border-stroke bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex gap-1">
@@ -682,7 +689,7 @@ export default function TeacherCourseContent({
                     const resources = records(lesson.resources)
 
                     return (
-                      <li key={lessonId} className="py-3">
+                      <li key={lessonId} className="rounded-xl border border-stroke/70 bg-white px-4 py-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="flex gap-1">
                             <button
@@ -806,17 +813,56 @@ export default function TeacherCourseContent({
                             </span>
                           ))}
                         </div>
-                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        {Boolean(video.videoUrl || video.providerVideoId) && (
+                          <LessonVideoPlayer
+                            video={video}
+                            title={String(lesson.title ?? "معاينة فيديو الدرس")}
+                          />
+                        )}
+                        <section className="mt-4 rounded-2xl border border-stroke bg-white p-4 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                              <FileVideo2 size={19} />
+                            </span>
+                            <div>
+                              <h5 className="text-sm font-bold text-ink">فيديو الدرس</h5>
+                              <p className="mt-1 text-xs leading-5 text-ink-muted">اختر طريقة عرض الفيديو. سيظهر الحقل المناسب بعد الاختيار.</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {([
+                              { mode: "youtube", title: "رابط من YouTube", description: "أضف رابط فيديو ليعمل داخل صفحة الدرس.", Icon: Link2 },
+                              { mode: "upload", title: "رفع فيديو من الجهاز", description: "اختر ملف فيديو محفوظًا على جهازك.", Icon: Upload },
+                            ] as const).map(({ mode, title, description, Icon }) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                aria-pressed={videoInputModes[lessonId] === mode}
+                                onClick={() => setVideoInputModes((current) => ({ ...current, [lessonId]: mode }))}
+                                className={`flex min-h-20 items-center gap-3 rounded-xl border p-3 text-start transition ${videoInputModes[lessonId] === mode ? "border-nuwa-base bg-nuwa-soft/70 text-nuwa-deep ring-2 ring-nuwa-base/10" : "border-stroke bg-canvas/60 text-ink hover:border-nuwa-base/40 hover:bg-white"}`}
+                              >
+                                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white text-nuwa-base shadow-sm"><Icon size={19} /></span>
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-bold">{title}</span>
+                                  <span className="mt-1 block text-xs leading-5 text-ink-muted">{description}</span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                          {videoInputModes[lessonId] === "upload" && (
                           <form
-                            onSubmit={(event) => {
+                            onSubmit={async (event) => {
                               event.preventDefault()
+                              const form = event.currentTarget
 
                               const file = new FormData(
-                                event.currentTarget,
+                                form,
                               ).get("file")
 
-                              if (file instanceof File && file.size)
-                                void mutate(
+                              if (file instanceof File && file.size) {
+                                const saved = await mutate(
                                   () =>
                                     teachersApi.uploadLessonVideo(
                                       lessonId,
@@ -826,17 +872,19 @@ export default function TeacherCourseContent({
 
                                   "تم رفع فيديو الدرس.",
                                 )
+                                if (saved) form.reset()
+                              }
                             }}
-                            className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
+                            className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
                           >
-                            <label className={field}>
+                            <label className={`${field} w-full min-w-0`}>
                               رفع ملف فيديو
                               <input
                                 name="file"
                                 type="file"
                                 accept="video/*"
                                 required
-                                className="max-w-full text-xs"
+                                className="w-full max-w-full text-xs"
                               />
                             </label>
                             <button
@@ -846,17 +894,25 @@ export default function TeacherCourseContent({
                               رفع الفيديو
                             </button>
                           </form>
+                          )}
+                          {videoInputModes[lessonId] === "youtube" && (
                           <form
-                            onSubmit={(event) => {
+                            onSubmit={async (event) => {
                               event.preventDefault()
+                              const form = event.currentTarget
 
                               const url = String(
-                                new FormData(event.currentTarget).get(
+                                new FormData(form).get(
                                   "youTubeUrl",
                                 ) ?? "",
                               ).trim()
 
-                              void mutate(
+                              if (!youtubeVideoId(url)) {
+                                onFeedback("أدخل رابط فيديو صحيحًا من YouTube.")
+                                return
+                              }
+
+                              const saved = await mutate(
                                 () =>
                                   teachersApi.setLessonYoutubeVideo(lessonId, {
                                     youTubeUrl: url,
@@ -865,16 +921,17 @@ export default function TeacherCourseContent({
                                 "تم ربط فيديو YouTube.",
                               )
 
-                              event.currentTarget.reset()
+                              if (saved) form.reset()
                             }}
-                            className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
+                            className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
                           >
-                            <label className={field}>
+                            <label className={`${field} w-full min-w-0`}>
                               رابط YouTube
                               <input
                                 name="youTubeUrl"
                                 type="url"
                                 required
+                                placeholder="https://www.youtube.com/watch?v=..."
                                 className={control}
                               />
                             </label>
@@ -905,16 +962,39 @@ export default function TeacherCourseContent({
                               </button>
                             )}
                           </form>
+                          )}
+                        </div>
+                        {video.id !== undefined && videoInputModes[lessonId] !== "youtube" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              if (window.confirm("هل تريد حذف فيديو الدرس؟"))
+                                void mutate(
+                                  () => teachersApi.deleteLessonVideo(lessonId),
+                                  "تم حذف الفيديو.",
+                                )
+                            }}
+                            className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            حذف فيديو الدرس
+                          </button>
+                        )}
+                        <div className="mt-5 border-t border-stroke pt-4">
+                          <h5 className="text-sm font-bold text-ink">ملفات وروابط مساعدة للدرس</h5>
+                          <p className="mt-1 text-xs text-ink-muted">أضف ملفًا قابلًا للتنزيل أو رابطًا خارجيًا مرتبطًا بهذا الدرس.</p>
+                        <div className="mt-3 grid gap-3 xl:grid-cols-2">
                           <form
-                            onSubmit={(event) => {
+                            onSubmit={async (event) => {
                               event.preventDefault()
 
-                              const form = new FormData(event.currentTarget)
+                              const formElement = event.currentTarget
+                              const form = new FormData(formElement)
 
                               const file = form.get("file")
 
-                              if (file instanceof File && file.size)
-                                void mutate(
+                              if (file instanceof File && file.size) {
+                                const saved = await mutate(
                                   () =>
                                     teachersApi.uploadLessonResource(
                                       lessonId,
@@ -926,8 +1006,10 @@ export default function TeacherCourseContent({
 
                                   "تم رفع المورد.",
                                 )
+                                if (saved) formElement.reset()
+                              }
                             }}
-                            className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
+                            className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
                           >
                             <label className={field}>
                               اسم المورد
@@ -950,12 +1032,13 @@ export default function TeacherCourseContent({
                             </button>
                           </form>
                           <form
-                            onSubmit={(event) => {
+                            onSubmit={async (event) => {
                               event.preventDefault()
 
-                              const form = new FormData(event.currentTarget)
+                              const formElement = event.currentTarget
+                              const form = new FormData(formElement)
 
-                              void mutate(
+                              const saved = await mutate(
                                 () =>
                                   teachersApi.addExternalLessonResource(
                                     lessonId,
@@ -970,9 +1053,9 @@ export default function TeacherCourseContent({
                                 "تمت إضافة الرابط.",
                               )
 
-                              event.currentTarget.reset()
+                              if (saved) formElement.reset()
                             }}
-                            className="flex flex-wrap items-end gap-2 rounded-lg bg-canvas p-3"
+                            className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
                           >
                             <label className={field}>
                               اسم الرابط
@@ -994,6 +1077,7 @@ export default function TeacherCourseContent({
                               إضافة مورد خارجي
                             </button>
                           </form>
+                        </div>
                         </div>
                         <div className="mt-3">
                           <button
@@ -1547,11 +1631,11 @@ export default function TeacherCourseContent({
                   </span>
                   <label className={field}>
                     العنوان
-                    <input name="title" required className={control} />
+                    <input name="title" required placeholder="مثال: مقدمة الدرس" className={control} />
                   </label>
                   <label className={field}>
                     الوصف
-                    <input name="description" required className={control} />
+                    <input name="description" required placeholder="الموضوعات أو المهارة التي يغطيها الدرس" className={control} />
                   </label>
                   <label className={field}>
                     الترتيب
@@ -1560,6 +1644,7 @@ export default function TeacherCourseContent({
                       type="number"
                       min="1"
                       required
+                      defaultValue={lessons.length + 1}
                       className={control}
                     />
                   </label>

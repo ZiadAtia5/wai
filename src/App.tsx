@@ -12,6 +12,8 @@ const AuthPage = lazy(() => import("./pages/AuthPage"))
 
 const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"))
 
+const CourseDetailsPage = lazy(() => import("./pages/CourseDetailsPage"))
+
 const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"))
@@ -27,6 +29,8 @@ export default function App() {
     return enrollmentPreview ? "dashboard" : "landing"
   })
 
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
+
   useEffect(() => {
     const handleExpiredSession = () => setView("login")
 
@@ -36,7 +40,11 @@ export default function App() {
       window.removeEventListener("eduhub:auth-expired", handleExpiredSession)
   }, [])
 
-  const navigate: NavigateFn = (nextView) => {
+  const navigate: NavigateFn = (nextView, params) => {
+    if (nextView === "public:course-detail") {
+      setSelectedCourseId(params?.courseId ?? null)
+    }
+
     setView(nextView === "dashboard" && !getAuthToken() ? "login" : nextView)
 
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -63,6 +71,12 @@ export default function App() {
             <AuthPage mode="register" navigate={navigate} />
           )}
           {view === "public:courses" && (
+            <PublicCoursesPage navigate={navigate} />
+          )}
+          {view === "public:course-detail" && selectedCourseId && (
+            <CourseDetailsPage courseId={selectedCourseId} navigate={navigate} />
+          )}
+          {view === "public:course-detail" && !selectedCourseId && (
             <PublicCoursesPage navigate={navigate} />
           )}
           {view === "public:teachers" && <PublicTeachersPage />}

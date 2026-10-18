@@ -6,10 +6,11 @@ import {
   ChevronDown,
   Clock3,
   Search,
-  UserRound,
   UsersRound,
   X,
 } from "lucide-react"
+
+import PersonAvatar from "../PersonAvatar"
 
 type RequestStatus = "pending" | "approved" | "rejected"
 
@@ -76,26 +77,9 @@ function CourseThumbnail({ src }: { src: string }) {
       onError={() => setFailed(true)}
     />
   ) : (
-    <div className="grid size-full place-items-center text-slate-400">
+    <div className="grid size-full place-items-center text-neutral-400">
       <BookOpen size={24} aria-hidden="true" />
     </div>
-  )
-}
-
-function StudentAvatar({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => setFailed(false), [src])
-
-  return src && !failed ? (
-    <img
-      src={src}
-      alt=""
-      className="size-full object-cover"
-      onError={() => setFailed(true)}
-    />
-  ) : (
-    <UserRound size={21} aria-hidden="true" />
   )
 }
 
@@ -137,16 +121,21 @@ function text(...values: unknown[]): string {
   return value === undefined || value === null ? "" : String(value).trim()
 }
 
-function statusOf(value: unknown): RequestStatus {
-  const status = String(value ?? "pending")
+function statusOf(value: unknown, isApproved?: unknown): RequestStatus {
+  if (isApproved === true) return "approved"
+  if (isApproved === false) return "pending"
 
-    .trim()
+  const status = String(value ?? "pending").trim().toLowerCase()
 
-    .toLowerCase()
+  // The API serializes EnrollmentStatus as an integer enum:
+  // Pending=0, Approved=1, Rejected=2, Completed=3.
+  if (["approved", "accepted", "active", "enrolled", "1", "3"].includes(status)) {
+    return "approved"
+  }
 
-  if (["approved", "accepted", "1"].includes(status)) return "approved"
-
-  if (["rejected", "declined", "2"].includes(status)) return "rejected"
+  if (["rejected", "declined", "cancelled", "canceled", "2"].includes(status)) {
+    return "rejected"
+  }
 
   return "pending"
 }
@@ -198,7 +187,10 @@ function requestFrom(
     requestedAt:
       text(request.requestedAt, request.createdAt, request.enrolledAt) || null,
 
-    status: statusOf(request.status ?? request.enrollmentStatus),
+    status: statusOf(
+      request.status ?? request.enrollmentStatus ?? request.state,
+      request.isApproved,
+    ),
 
     note: text(request.note, request.message, request.studentMessage),
 
@@ -337,22 +329,31 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         title:
           text(
             record.courseTitle,
+
             record.title,
+
             nestedCourse.title,
+
             nestedCourse.name,
-          ) || "Course",
+          ) || "دورة بدون عنوان",
 
         category: text(
           record.category,
+
           record.subjectName,
+
           nestedCourse.category,
+
           nestedCourse.subjectName,
         ),
 
         thumbnail: text(
           record.thumbnail,
+
           record.coverImageUrl,
+
           nestedCourse.thumbnail,
+
           nestedCourse.coverImageUrl,
         ),
 
@@ -369,24 +370,33 @@ function normalizeCourses(value: unknown): CourseRequests[] {
     course.title =
       text(
         record.courseTitle,
+
         record.title,
+
         nestedCourse.title,
+
         nestedCourse.name,
       ) || course.title
 
     course.category =
       text(
         record.category,
+
         record.subjectName,
+
         nestedCourse.category,
+
         nestedCourse.subjectName,
       ) || course.category
 
     course.thumbnail =
       text(
         record.thumbnail,
+
         record.coverImageUrl,
+
         nestedCourse.thumbnail,
+
         nestedCourse.coverImageUrl,
       ) || course.thumbnail
   })
@@ -581,7 +591,7 @@ export default function TeacherEnrollmentRequests({
         {[1, 2].map((item) => (
           <div
             key={item}
-            className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white"
+            className="h-32 animate-pulse rounded-2xl border border-neutral-200 bg-white"
           />
         ))}
       </div>
@@ -608,24 +618,26 @@ export default function TeacherEnrollmentRequests({
 
   return (
     <section className="space-y-5" aria-label="طلبات الالتحاق بالدورات">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">طلبات الالتحاق</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-bold text-neutral-900">
+              طلبات الالتحاق
+            </h2>
+            <p className="mt-1 text-sm text-neutral-500">
               راجع طلبات الطلاب لكل دورة واتخذ الإجراء المناسب.
             </p>
           </div>
           <label className="relative block w-full lg:max-w-sm">
             <Search
               size={17}
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400"
             />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="ابحث باسم الطالب أو الدورة أو بيانات التواصل"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pr-10 pl-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+              className="h-11 w-full rounded-xl border border-neutral-200 bg-white pr-10 pl-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 hover:border-neutral-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
             />
           </label>
         </div>
@@ -641,10 +653,10 @@ export default function TeacherEnrollmentRequests({
               type="button"
               aria-pressed={filter === item.id}
               onClick={() => setFilter(item.id)}
-              className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${
                 filter === item.id
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                  ? "bg-neutral-900 text-white shadow-sm"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 hover:text-neutral-900"
               }`}
             >
               {item.label}
@@ -652,7 +664,7 @@ export default function TeacherEnrollmentRequests({
                 className={`rounded-full px-2 py-0.5 text-xs ${
                   filter === item.id
                     ? "bg-white/15 text-white"
-                    : "bg-white text-slate-600"
+                    : "bg-white text-neutral-600"
                 }`}
               >
                 {counts[item.id]}
@@ -663,19 +675,19 @@ export default function TeacherEnrollmentRequests({
       </div>
 
       {courses.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+        <div className="rounded-2xl border border-dashed border-neutral-300 bg-white px-6 py-14 text-center">
+          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-700">
             <UsersRound size={25} />
           </div>
-          <h3 className="mt-4 text-base font-bold text-slate-900">
+          <h3 className="mt-4 text-base font-bold text-neutral-900">
             لا توجد طلبات التحاق حتى الآن
           </h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-neutral-500">
             ستظهر الطلبات الجديدة هنا بمجرد إرسالها من الطلاب.
           </p>
         </div>
       ) : visibleCourses.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-neutral-300 bg-white px-6 py-12 text-center text-sm text-neutral-500">
           لا توجد نتائج تطابق البحث الحالي.
         </div>
       ) : (
@@ -690,7 +702,7 @@ export default function TeacherEnrollmentRequests({
             return (
               <article
                 key={course.id}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md"
               >
                 <button
                   type="button"
@@ -699,28 +711,30 @@ export default function TeacherEnrollmentRequests({
                   onClick={() =>
                     setExpandedCourses((current) => {
                       const next = new Set(current)
+
                       if (next.has(course.id)) next.delete(course.id)
                       else next.add(course.id)
+
                       return next
                     })
                   }
-                  className="flex w-full items-center gap-3 p-4 text-right transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-600 sm:gap-4 sm:p-5"
+                  className="flex w-full items-center gap-3 p-4 text-right transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-emerald-600 sm:gap-4 sm:p-5"
                 >
-                  <div className="size-14 shrink-0 overflow-hidden rounded-xl bg-slate-100 sm:size-16">
+                  <div className="size-14 shrink-0 overflow-hidden rounded-xl bg-neutral-100 sm:size-16">
                     <CourseThumbnail src={course.thumbnail} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate font-bold text-slate-900">
+                      <h3 className="truncate font-bold text-neutral-900">
                         {course.title}
                       </h3>
                       {course.category && (
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                           {course.category}
                         </span>
                       )}
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
                       <span className="inline-flex items-center gap-1">
                         <UsersRound size={14} /> {course.requests.length} طلب
                       </span>
@@ -733,7 +747,7 @@ export default function TeacherEnrollmentRequests({
                   </div>
                   <ChevronDown
                     size={19}
-                    className={`shrink-0 text-slate-400 transition-transform ${
+                    className={`shrink-0 text-neutral-400 transition-transform ${
                       isOpen ? "rotate-180" : ""
                     }`}
                   />
@@ -748,14 +762,14 @@ export default function TeacherEnrollmentRequests({
                   }`}
                 >
                   <div className="min-h-0 overflow-hidden">
-                    <div className="border-t border-slate-100 bg-slate-50/60 p-3 sm:p-5">
+                    <div className="border-t border-neutral-100 bg-neutral-50/60 p-3 sm:p-5">
                       {course.requests.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center">
+                        <div className="rounded-xl border border-dashed border-neutral-300 bg-white px-4 py-8 text-center">
                           <Clock3
-                            className="mx-auto text-slate-400"
+                            className="mx-auto text-neutral-400"
                             size={22}
                           />
-                          <p className="mt-2 text-sm font-medium text-slate-600">
+                          <p className="mt-2 text-sm font-medium text-neutral-600">
                             لا توجد طلبات بهذه الحالة لهذه الدورة.
                           </p>
                         </div>
@@ -764,15 +778,24 @@ export default function TeacherEnrollmentRequests({
                           {course.requests.map((request) => (
                             <div
                               key={request.id}
-                              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300"
+                              className="rounded-[22px] border border-stroke bg-white p-4 shadow-nuwa transition hover:-translate-y-0.5 hover:shadow-nuwa-md"
                             >
                               <div className="flex items-start gap-3">
-                                <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-100 text-slate-500">
-                                  <StudentAvatar src={request.avatarUrl} />
-                                </div>
+                                <PersonAvatar
+                                  name={request.studentName}
+                                  imageUrl={request.avatarUrl}
+                                  size="md"
+                                  status={
+                                    request.status === "approved"
+                                      ? "active"
+                                      : request.status === "pending"
+                                        ? "pending"
+                                        : "inactive"
+                                  }
+                                />
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 className="font-bold text-slate-900">
+                                    <h4 className="font-bold text-ink">
                                       {request.studentName}
                                     </h4>
                                     <span
@@ -785,8 +808,8 @@ export default function TeacherEnrollmentRequests({
                                     {request.status === "approved" && (
                                       <button
                                         type="button"
-                                        aria-label="Reject approved student"
-                                        title="Reject student"
+                                        aria-label="رفض الطالب المقبول"
+                                        title="رفض الطالب"
                                         disabled={busyRequests.includes(
                                           request.id,
                                         )}
@@ -801,8 +824,8 @@ export default function TeacherEnrollmentRequests({
                                     {request.status === "rejected" && (
                                       <button
                                         type="button"
-                                        aria-label="Approve rejected student again"
-                                        title="Approve student again"
+                                        aria-label="إعادة قبول الطالب المرفوض"
+                                        title="إعادة قبول الطالب"
                                         disabled={busyRequests.includes(
                                           request.id,
                                         )}
@@ -815,11 +838,11 @@ export default function TeacherEnrollmentRequests({
                                       </button>
                                     )}
                                   </div>
-                                  <div className="mt-2 space-y-1 text-sm text-slate-500">
+                                  <div className="mt-2 space-y-1 text-sm text-neutral-500">
                                     {request.email && (
                                       <a
                                         href={`mailto:${request.email}`}
-                                        className="block truncate hover:text-blue-700"
+                                        className="block truncate hover:text-emerald-700"
                                       >
                                         {request.email}
                                       </a>
@@ -828,7 +851,7 @@ export default function TeacherEnrollmentRequests({
                                       <a
                                         href={`tel:${request.phone}`}
                                         dir="ltr"
-                                        className="block w-fit hover:text-blue-700"
+                                        className="block w-fit hover:text-emerald-700"
                                       >
                                         {request.phone}
                                       </a>
@@ -836,7 +859,7 @@ export default function TeacherEnrollmentRequests({
                                   </div>
                                 </div>
                               </div>
-                              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                              <div className="mt-3 flex items-center gap-1.5 text-xs text-neutral-400">
                                 <Clock3 size={14} />
                                 <time
                                   dateTime={request.requestedAt ?? undefined}
@@ -845,12 +868,12 @@ export default function TeacherEnrollmentRequests({
                                 </time>
                               </div>
                               {request.note && (
-                                <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                <p className="mt-3 rounded-lg bg-neutral-50 p-3 text-sm leading-6 text-neutral-600">
                                   {request.note}
                                 </p>
                               )}
                               {request.status === "pending" && (
-                                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                                <div className="mt-4 flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
                                   <button
                                     type="button"
                                     disabled={busyRequests.includes(request.id)}

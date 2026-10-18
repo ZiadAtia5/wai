@@ -6,400 +6,25 @@ import { quizzesApi, teachersApi } from "../../api/endpoints"
 
 import ApiQueryState from "../ApiQueryState"
 
+import PersonAvatar from "../PersonAvatar"
+
 import { useApiQuery } from "../../hooks/useApiQuery"
 
-type DataRecord = Record<string, unknown>
-
-interface CourseInfo {
-  id: string
-
-  title: string
-}
-
-interface EnrollmentRow {
-  studentKey: string
-
-  studentName: string
-
-  email: string
-
-  phone: string
-
-  courseId: string
-
-  courseTitle: string
-
-  status: string
-
-  progressPercent: number | null
-
-  completedLessons: number | null
-
-  totalLessons: number | null
-}
-
-interface AttemptRow {
-  studentKey: string
-
-  studentName: string
-
-  email: string
-
-  courseId: string
-
-  courseTitle: string
-
-  quizTitle: string
-
-  score: number | null
-
-  totalScore: number | null
-
-  percentage: number | null
-
-  submittedAt: string
-}
-
-interface ProgressData {
-  courses: CourseInfo[]
-
-  enrollments: EnrollmentRow[]
-
-  attempts: AttemptRow[]
-
-  warnings: string[]
-}
-
-function asRecord(value: unknown): DataRecord {
-  return typeof value === "object" && value !== null ? value as DataRecord : {}
-}
-
-function records(value: unknown): DataRecord[] {
-  if (Array.isArray(value))
-    return value.filter(
-      (item): item is DataRecord => typeof item === "object" && item !== null,
-    )
-
-  const root = asRecord(value)
-
-  for (const key of [
-    "items",
-    "results",
-
-    "data",
-
-    "courses",
-
-    "modules",
-
-    "lessons",
-
-    "attempts",
-
-    "requests",
-
-    "enrollments",
-  ]) {
-    if (Array.isArray(root[key])) return records(root[key])
-  }
-  for (const key of ["data", "result", "response"]) {
-    if (root[key] && typeof root[key] === "object") return records(root[key])
-  }
-  return []
-}
-
-function unwrap(value: unknown, ...keys: string[]): DataRecord {
-  const root = asRecord(value)
-
-  for (const key of keys) {
-    if (root[key] !== undefined) return asRecord(root[key])
-
-    const nestedData = asRecord(root.data)
-
-    if (nestedData[key] !== undefined) return asRecord(nestedData[key])
-  }
-
-  return asRecord(root.data ?? root)
-}
-
-function getText(...values: unknown[]): string {
-  const found = values.find(
-    (value) =>
-      (typeof value === "string" && value.trim()) || typeof value === "number",
-  )
-
-  return found === undefined ? "" : String(found).trim()
-}
-
-function getNumber(...values: unknown[]): number | null {
-  const value = values.find(
-    (candidate) =>
-      candidate !== null &&
-      candidate !== undefined &&
-      candidate !== "" &&
-      Number.isFinite(Number(candidate)),
-  )
-
-  return value === undefined ? null : Number(value)
-}
-
-function stableStudentKey(student: DataRecord, email: string, name: string) {
-  return getText(student.id, student.studentId) || email.toLowerCase() || name
-}
-
-function enrollmentRows(
-  response: unknown,
-
-  courseById: Map<string, CourseInfo>,
-): EnrollmentRow[] {
-  if (Array.isArray(response))
-    return response.flatMap((page) => enrollmentRows(page, courseById))
-
-  const root = asRecord(response)
-
-  const groupedRows: EnrollmentRow[] = []
-
-  const add = (
-    request: DataRecord,
-
-    parent: DataRecord = {},
-
-    index = 0,
-  ) => {
-    const course = asRecord(request.course ?? parent.course)
-    const student = asRecord(request.student ?? request.studentProfile)
-
-    const progressDetails = asRecord(request.progress ?? request.courseProgress)
-
-    const courseId = getText(
-      request.courseId,
-
-      course.id,
-
-      course.courseId,
-
-      parent.courseId,
-
-      parent.id,
-    )
-
-    const courseInfo = courseById.get(courseId)
-
-    const email = getText(
-      request.studentEmail,
-
-      request.email,
-
-      student.email,
-    )
-
-    const studentName =
-      getText(
-        request.studentName,
-
-        request.fullName,
-
-        student.fullName,
-
-        student.displayName,
-
-        student.name,
-
-        [student.firstName, student.lastName]
-
-          .filter((part) => typeof part === "string")
-
-          .join(" "),
-
-        email,
-      ) || `طالب ${index + 1}`
-
-    const studentKey =
-      getText(
-        student.id,
-        student.studentId,
-        request.studentId,
-        request.userId,
-      ) ||
-      stableStudentKey(student, email, studentName) ||
-      `${courseId || "course"}-${index}`
-
-    const progressPercent = getNumber(
-      request.progressPercentage,
-      request.progressPercent,
-      request.completionPercentage,
-      progressDetails.progressPercentage,
-      progressDetails.progressPercent,
-      progressDetails.completionPercentage,
-    )
-    const completed = getNumber(
-      request.completedLessons,
-      request.completedLessonCount,
-      request.lessonsCompleted,
-      progressDetails.completedLessons,
-      progressDetails.completedLessonCount,
-    )
-    const total = getNumber(
-      request.totalLessons,
-      request.lessonCount,
-      request.lessonsCount,
-      progressDetails.totalLessons,
-      progressDetails.lessonCount,
-    )
-
-    groupedRows.push({
-      studentKey,
-
-      studentName,
-
-      email,
-
-      phone: getText(
-        request.studentPhone,
-        request.phoneNumber,
-        student.phoneNumber,
-      ),
-
-      courseId,
-
-      courseTitle:
-        getText(
-          request.courseTitle,
-
-          course.title,
-
-          course.name,
-
-          parent.courseTitle,
-
-          courseInfo?.title,
-        ) || "دورة",
-
-      status: getText(
-        request.status,
-
-        request.enrollmentStatus,
-
-        request.isApproved === true ? "approved" : "",
-
-        request.isApproved === false ? "pending" : "",
-      ),
-
-      progressPercent:
-        progressPercent !== null &&
-        progressPercent >= 0 &&
-        progressPercent <= 100
-          ? progressPercent
-          : completed !== null && total !== null && total > 0 && completed >= 0
-            ? Math.min(100, (completed / total) * 100)
-            : null,
-
-      completedLessons: completed,
-
-      totalLessons: total,
-    })
-  }
-
-  const nestedCourses = records(root.courses)
-
-  for (const [courseIndex, course] of nestedCourses.entries()) {
-    const requests = records(
-      course.requests ?? course.enrollmentRequests ?? course.enrollments,
-    )
-
-    requests.forEach((request, index) => add(request, course, index))
-
-    if (!requests.length && course.student) add(course, course, courseIndex)
-  }
-
-  const requestsRoot =
-    root.requests ?? root.items ?? root.enrollments ?? root.data ?? response
-
-  for (const [index, item] of records(requestsRoot).entries()) {
-    const children = records(
-      item.requests ?? item.enrollmentRequests ?? item.enrollments,
-    )
-
-    if (children.length) {
-      children.forEach((child, childIndex) => add(child, item, childIndex))
-    } else if (item.student || item.studentId || item.studentName) {
-      add(item, {}, index)
-    }
-  }
-
-  const unique = new Map<string, EnrollmentRow>()
-
-  for (const row of groupedRows) {
-    const key = `${row.studentKey}:${row.courseId}`
-
-    unique.set(key, { ...unique.get(key), ...row })
-  }
-
-  return [...unique.values()]
-}
-
-function scoreValues(attempt: DataRecord) {
-  const score = getNumber(
-    attempt.score,
-
-    attempt.pointsEarned,
-
-    attempt.earnedPoints,
-
-    attempt.grade,
-  )
-
-  const total = getNumber(
-    attempt.totalPoints,
-
-    attempt.maxScore,
-
-    attempt.totalScore,
-
-    attempt.outOf,
-  )
-
-  const percentage = getNumber(attempt.percentage, attempt.scorePercentage)
-
-  return {
-    score,
-
-    total,
-
-    percentage:
-      percentage !== null
-        ? percentage
-        : score !== null && total !== null && total > 0
-          ? (score / total) * 100
-          : null,
-  }
-}
-
-function formatDate(value: unknown): string {
-  if (typeof value !== "string" || !value) return "غير محدد"
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) return value
-
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-
-    timeStyle: "short",
-  }).format(date)
-}
-
-function statusLabel(status: string): string {
-  if (/reject|declin|cancel/i.test(status)) return "مرفوض"
-
-  if (/pending|await|review/i.test(status)) return "بانتظار الموافقة"
-
-  if (/complete|finish/i.test(status)) return "مكتمل"
-
-  if (/approv|active|accept|enroll/i.test(status)) return "ملتحق"
-
-  return status || "غير محدد"
-}
+import {
+  asRecord,
+  enrollmentRows,
+  formatDate,
+  getText,
+  records,
+  scoreValues,
+  stableStudentKey,
+  statusLabel,
+  unwrap,
+  type AttemptRow,
+  type CourseInfo,
+  type EnrollmentRow,
+  type ProgressData,
+} from "./teacherStudentProgressData"
 
 async function loadStudentProgress(): Promise<ProgressData> {
   const [coursesResult, enrollmentsResult] = await Promise.allSettled([
@@ -820,7 +445,7 @@ export default function TeacherStudentProgress() {
         onRetry={() => setReloadKey((key) => key + 1)}
       >
         {overview.length > 0 && (
-          <div className="space-y-3">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {overview.map((student) => {
               const expanded = selectedStudent === student.key
 
@@ -853,7 +478,7 @@ export default function TeacherStudentProgress() {
               return (
                 <article
                   key={student.key}
-                  className="overflow-hidden rounded-2xl border border-stroke bg-white shadow-nuwa"
+                  className="overflow-hidden rounded-[24px] border border-stroke bg-white shadow-nuwa transition-shadow hover:shadow-nuwa-md"
                 >
                   <button
                     type="button"
@@ -861,8 +486,9 @@ export default function TeacherStudentProgress() {
                       setSelectedStudent(expanded ? null : student.key)
                     }
                     aria-expanded={expanded}
-                    className="grid w-full gap-4 p-4 text-start transition hover:bg-canvas/70 sm:grid-cols-[minmax(180px,1.3fr)_repeat(3,minmax(100px,.7fr))_auto] sm:items-center sm:p-5"
+                    className="flex w-full flex-col items-center gap-4 p-5 text-center transition hover:bg-canvas/50"
                   >
+                    <PersonAvatar name={student.name} size="lg" />
                     <span className="min-w-0">
                       <span className="block truncate font-bold text-ink">
                         {student.name}
@@ -887,6 +513,18 @@ export default function TeacherStudentProgress() {
                         studentAverage === null ? "—" : `${studentAverage}٪`
                       }
                     />
+                    <div className="w-full text-start">
+                      <div className="flex justify-between text-xs text-ink-muted">
+                        <span>متوسط التقدم</span>
+                        <span>{progressAverage === null ? "—" : `${progressAverage}٪`}</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-canvas">
+                        <div
+                          className="h-full rounded-full bg-nuwa-base transition-[width] duration-500"
+                          style={{ width: `${progressAverage ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
                     <span className="text-xs font-bold text-nuwa-base">
                       {expanded ? "إخفاء التفاصيل" : "تفاصيل الطالب"}
                     </span>

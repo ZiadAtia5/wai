@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 
+import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react"
+
 import { ApiError } from "../api/client"
 
 import { getAuthToken } from "../api/client"
+import { studentsApi } from "../api/endpoints"
 
 import {
   getAcademicYears,
@@ -12,6 +15,8 @@ import {
 } from "../api/catalog"
 
 import ApiQueryState from "../components/ApiQueryState"
+
+import PersonAvatar from "../components/PersonAvatar"
 
 import { useApiQuery } from "../hooks/useApiQuery"
 
@@ -45,6 +50,10 @@ interface PublicCatalogPageProps {
   actionLabel?: string
 
   navigate?: NavigateFn
+
+  personCards?: boolean
+
+  courseCatalog?: boolean
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -72,7 +81,13 @@ function displayValue(value: unknown): string {
 
 function teacherNameOf(record: Record<string, unknown>): string | null {
   const nested = asRecord(record.teacher)
-  const value = record.teacherName ?? record.instructorName ?? nested?.fullName ?? nested?.name
+
+  const value =
+    record.teacherName ??
+    record.instructorName ??
+    nested?.fullName ??
+    nested?.name
+
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
@@ -104,6 +119,9 @@ export default function PublicCatalogPage({
   actionLabel,
 
   navigate,
+
+  personCards = false,
+  courseCatalog = false,
 }: PublicCatalogPageProps) {
   const [page, setPage] = useState(1)
 
@@ -124,6 +142,52 @@ export default function PublicCatalogPage({
   const [academicYear, setAcademicYear] = useState("")
 
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [enrollmentChecked, setEnrollmentChecked] = useState(false)
+
+  useEffect(() => {
+    const role = window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    if (!action || !role.includes("student") || !getAuthToken()) {
+      setEnrollmentChecked(true)
+      return
+    }
+
+    let active = true
+    studentsApi.enrollments({ page: 1, pageSize: 100 })
+      .then((response) => {
+        if (!active) return
+        const root = asRecord(response)
+        const nested = asRecord(root?.data)
+        const items = Array.isArray(response)
+          ? response
+          : Array.isArray(root?.items)
+            ? root.items
+            : Array.isArray(root?.enrollments)
+              ? root.enrollments
+              : Array.isArray(root?.data)
+                ? root.data
+              : Array.isArray(nested?.items)
+                ? nested.items
+                : Array.isArray(nested?.enrollments)
+                  ? nested.enrollments
+                  : []
+        const ids = items.flatMap((item) => {
+          const record = asRecord(item)
+          const course = asRecord(record?.course)
+          const id = record?.courseId ?? course?.id
+          return id === undefined || id === null ? [] : [String(id)]
+        })
+        setEnrolledCourseIds(new Set(ids))
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setEnrollmentChecked(true)
+      })
+
+    return () => { active = false }
+  }, [action])
 
   useEffect(() => {
     let active = true
@@ -184,6 +248,12 @@ export default function PublicCatalogPage({
   async function runAction() {
     if (!action || detail?.id === undefined || detail.id === null) return
 
+    const courseId = String(detail.id)
+    if (enrolledCourseIds.has(courseId)) {
+      setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
+      return
+    }
+
     if (!getAuthToken()) {
       notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."))
 
@@ -194,17 +264,41 @@ export default function PublicCatalogPage({
       return
     }
 
+    if (
+      courseCatalog &&
+      !(window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+        .toLowerCase()
+        .includes("student")
+    ) {
+      const message = "طلب الالتحاق بالدورات متاح لحساب الطالب فقط."
+      notifyError(new Error(message))
+      setActionMessage(message)
+      return
+    }
+
     if (actionLoading) return
 
     setActionLoading(true)
 
     try {
-      await action(String(detail.id))
+      await action(courseId)
+
+      setEnrolledCourseIds((current) => new Set(current).add(courseId))
 
       notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
 
       setActionMessage("تم إرسال طلب الالتحاق بنجاح.")
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : ""
+      const duplicate =
+        (cause instanceof ApiError && cause.status === 409) ||
+        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message)
+      if (duplicate) {
+        setEnrolledCourseIds((current) => new Set(current).add(courseId))
+        setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
+        notifySuccess("أنت مسجل بالفعل في هذه الدورة.")
+        return
+      }
       notifyError(cause, "تعذر إرسال طلب الالتحاق.")
 
       setActionMessage(
@@ -225,11 +319,17 @@ export default function PublicCatalogPage({
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
-      <header className="border-b border-stroke bg-surface">
-        <div className="mx-auto max-w-360 px-6 py-8 md:px-10">
-          <h1 className="mb-1 text-2xl font-bold text-ink">{title}</h1>
-          <p className="text-sm text-ink-muted">{description}</p>
-          {data && !error && (
+      <header className={courseCatalog ? "px-4 pt-5 sm:px-6 lg:px-8" : "border-b border-stroke bg-surface"}>
+        <div className={`mx-auto max-w-360 ${courseCatalog ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}>
+          {courseCatalog && <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-50"><BookOpen size={15} /> تعلّم على وتيرتك</span>}
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <h1 className={`mb-2 font-bold tracking-tight ${courseCatalog ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}>{title}</h1>
+              <p className={`max-w-2xl text-sm leading-7 ${courseCatalog ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}>{description}</p>
+            </div>
+            {courseCatalog && data && !error && <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur"><strong className="block text-2xl">{data.totalCount}</strong><span className="text-xs text-emerald-50/75">دورة متاحة</span></div>}
+          </div>
+          {!courseCatalog && data && !error && (
             <p className="mt-3 text-xs text-ink-muted" aria-live="polite">
               إجمالي النتائج من الخادم: {data.totalCount}
             </p>
@@ -248,14 +348,14 @@ export default function PublicCatalogPage({
 
             setDetail(null)
           }}
-          className="mb-6 grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-[1fr_220px_auto]"
+          className={`mb-7 grid gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:grid-cols-[1fr_220px_auto] ${courseCatalog ? "p-5 md:p-6" : ""}`}
         >
           <label className="grid gap-1 text-xs font-semibold text-ink-muted">
             بحث
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              className="h-10 rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
+              className="h-11 rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
               placeholder="اكتب الاسم أو عنوان الدورة"
             />
           </label>
@@ -270,7 +370,7 @@ export default function PublicCatalogPage({
 
                 setDetail(null)
               }}
-              className="h-10 rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
+              className="h-11 rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
             >
               <option value="">كل الصفوف</option>
               {academicYears.map((year) => (
@@ -280,23 +380,34 @@ export default function PublicCatalogPage({
               ))}
             </select>
           </label>
-          <button className="self-end rounded-lg bg-nuwa-base px-5 py-2.5 text-sm font-semibold text-white">
+          <button className="self-end rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base">
             بحث
           </button>
         </form>
         {detail && (
           <section
-            className="mb-8 border border-stroke bg-surface p-5"
+            className={`mb-8 overflow-hidden rounded-[28px] border border-stroke bg-surface shadow-lg shadow-slate-900/5 ${courseCatalog ? "" : "p-5"}`}
             aria-live="polite"
           >
+            {courseCatalog && (
+              <div className="relative flex min-h-44 items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-6 py-7 text-white md:min-h-56 md:px-9">
+                {String(detail.coverImageUrl ?? detail.thumbnailUrl ?? detail.imageUrl ?? "") && (
+                  <img src={String(detail.coverImageUrl ?? detail.thumbnailUrl ?? detail.imageUrl)} alt="" className="absolute inset-0 size-full object-cover opacity-30" />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/80 to-transparent" />
+                <div className="relative z-10 max-w-3xl">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur"><GraduationCap size={15} /> تفاصيل الدورة</span>
+                  <h2 className="mt-3 text-2xl font-bold leading-tight md:text-3xl">{titleOf(detail)}</h2>
+                </div>
+                <button type="button" onClick={() => { setDetail(null); setRelated(null) }} className="absolute left-5 top-5 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-white/25 bg-black/15 px-4 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15">إغلاق <ArrowLeft size={16} /></button>
+              </div>
+            )}
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stroke pb-4">
               <div>
-                <p className="text-xs font-semibold text-nuwa-base">التفاصيل</p>
-                <h2 className="mt-1 text-xl font-bold text-ink">
-                  {titleOf(detail)}
-                </h2>
+                {!courseCatalog && <><p className="text-xs font-semibold text-nuwa-base">التفاصيل</p><h2 className="mt-1 text-xl font-bold text-ink">{titleOf(detail)}</h2></>}
+                {courseCatalog && <div className="flex flex-wrap gap-2">{detail.academicYear != null && <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">{String(detail.academicYear)}</span>}{detail.subjectName != null && <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">{String(detail.subjectName)}</span>}</div>}
               </div>
-              <button
+              {!courseCatalog && <button
                 onClick={() => {
                   setDetail(null)
 
@@ -305,23 +416,18 @@ export default function PublicCatalogPage({
                 className="h-9 border border-stroke px-3 text-sm"
               >
                 إغلاق
-              </button>
+              </button>}
             </div>
             {typeof (detail.description ?? detail.bio) === "string" && (
-              <details className="mt-4 rounded-xl border border-stroke bg-canvas p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-nuwa-base">
-                  قراءة الوصف الكامل
-                </summary>
-                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-ink-muted">
-                  {String(detail.description ?? detail.bio)}
-                </p>
-              </details>
+              <p className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}>
+                {String(detail.description ?? detail.bio)}
+              </p>
             )}
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {detailFields.slice(0, 6).map(([key, value]) => (
+            <dl className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}>
+              {detailFields.filter(([key]) => !/(^id$|image|url|description|bio)/i.test(key)).slice(0, courseCatalog ? 9 : 6).map(([key, value]) => (
                 <div key={key}>
                   <dt className="text-xs text-ink-muted">{key}</dt>
-                  <dd className="mt-1 wrap-break-word text-sm text-ink">
+                  <dd className={`mt-1 wrap-break-word text-sm text-ink ${courseCatalog ? "rounded-xl bg-canvas p-3" : ""}`}>
                     {displayValue(value)}
                   </dd>
                 </div>
@@ -347,11 +453,18 @@ export default function PublicCatalogPage({
             {action && (
               <button
                 type="button"
-                disabled={actionLoading}
+                disabled={
+                  actionLoading ||
+                  (enrolledCourseIds.has(String(detail.id)) && enrollmentChecked)
+                }
                 onClick={() => void runAction()}
-                className="mt-5 h-10 rounded-lg bg-nuwa-base px-4 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60"
+                className={`inline-flex h-12 items-center justify-center rounded-xl bg-nuwa-base px-6 text-sm font-bold text-white shadow-md shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep disabled:cursor-not-allowed disabled:opacity-60 ${courseCatalog ? "mx-6 mb-6 w-[calc(100%-3rem)] md:mx-9 md:w-auto md:min-w-64" : "mt-5"}`}
               >
-                {actionLoading ? "جارٍ الإرسال..." : (actionLabel ?? "تنفيذ")}
+                {actionLoading
+                  ? "جارٍ الإرسال..."
+                  : enrolledCourseIds.has(String(detail.id)) && enrollmentChecked
+                    ? "مسجل بالفعل"
+                    : (actionLabel ?? "تنفيذ")}
               </button>
             )}
             {loadRelated && (
@@ -405,7 +518,7 @@ export default function PublicCatalogPage({
         >
           {data && data.items.length > 0 && (
             <>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <div className={`grid gap-5 md:grid-cols-2 ${courseCatalog ? "xl:grid-cols-3" : "lg:grid-cols-3"}`}>
                 {data.items.map((item, index) => {
                   const record = asRecord(item)
 
@@ -415,18 +528,69 @@ export default function PublicCatalogPage({
                     <button
                       key={String(record.id ?? index)}
                       type="button"
-                      onClick={() => void selectRecord(item)}
-                      className="group rounded-2xl border border-stroke bg-surface p-5 text-start shadow-sm transition hover:-translate-y-1 hover:border-sky-300 hover:shadow-nuwa-md"
+                      onClick={() => {
+                        if (courseCatalog && navigate && record.id != null) {
+                          navigate("public:course-detail", {
+                            courseId: String(record.id),
+                          })
+                          return
+                        }
+
+                        void selectRecord(item)
+                      }}
+                      className={`group relative overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${courseCatalog ? "flex min-h-80 flex-col" : ""} ${
+                        personCards
+                          ? "flex min-h-72 flex-col items-center text-center"
+                          : ""
+                      }`}
                     >
-                      <h2 className="font-semibold text-ink">
+                      {courseCatalog && <div className="relative mb-5 grid h-40 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700">
+                        {String(record.coverImageUrl ?? record.thumbnailUrl ?? record.imageUrl ?? "") ? <img src={String(record.coverImageUrl ?? record.thumbnailUrl ?? record.imageUrl)} alt="" className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105" /> : <><div className="absolute -right-6 -top-10 size-40 rounded-full border border-white/15" /><div className="absolute -right-1 -top-4 size-28 rounded-full border border-white/15" /><BookOpen size={42} className="relative text-white/90" /></>}
+                        <span className="absolute bottom-3 right-3 rounded-full border border-white/20 bg-black/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">{String(record.academicYear ?? "دورة تعليمية")}</span>
+                      </div>}
+                      {personCards && (
+                        <PersonAvatar
+                          name={titleOf(record)}
+                          imageUrl={String(
+                            record.avatarUrl ??
+                              record.profileImageUrl ??
+                              record.imageUrl ??
+                              "",
+                          )}
+                          size="lg"
+                          status={
+                            record.isActive === true ||
+                            record.isApproved === true
+                              ? "active"
+                              : record.isApproved === false
+                                ? "pending"
+                                : undefined
+                          }
+                        />
+                      )}
+                      <h2
+                        className={`font-semibold leading-7 text-ink ${courseCatalog ? "text-lg" : ""} ${
+                          personCards ? "mt-3" : ""
+                        }`}
+                      >
                         {titleOf(record)}
                       </h2>
+                      {personCards &&
+                        Boolean(
+                          record.subjectName || record.specialization,
+                        ) && (
+                          <span className="mt-2 rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
+                            {String(
+                              record.subjectName ?? record.specialization,
+                            )}
+                          </span>
+                        )}
                       {teacherNameOf(record) && (
-                        <p className="mt-1 text-xs font-semibold text-sky-700">
+                        <p className="mt-1 text-xs font-semibold text-emerald-700">
                           المعلم: {teacherNameOf(record)}
                         </p>
                       )}
-                      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-muted">
+                      <p className="mt-2 line-clamp-3 text-sm leading-7 text-ink-muted">
                         {String(
                           record.description ??
                             record.bio ??
@@ -435,18 +599,37 @@ export default function PublicCatalogPage({
                             "",
                         )}
                       </p>
-                      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
-                        {["price", "subjectName", "academicYear", "courseCount"]
+                      <div
+                        className={`mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted ${
+                          personCards ? "justify-center" : ""
+                        }`}
+                      >
+                        {(courseCatalog
+                          ? ["price", "subjectName", "academicYear"]
+                          : personCards
+                          ? ["courseCount", "academicYear"]
+                          : [
+                              "price",
+                              "subjectName",
+                              "academicYear",
+                              "courseCount",
+                            ]
+                        )
 
                           .filter((key) => record[key] !== undefined)
 
                           .map((key) => (
                             <span key={key}>
-                              {key}: {displayValue(record[key])}
+                              {key === "price" ? "السعر" : key === "subjectName" ? "المادة" : key === "academicYear" ? "الصف" : key}: {displayValue(record[key])}
                             </span>
                           ))}
                       </div>
-                      <span className="mt-4 inline-block text-sm font-medium text-nuwa-base">
+                      {courseCatalog && <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4 text-xs text-ink-muted"><span className="inline-flex items-center gap-1.5">{teacherNameOf(record) ? <UserRound size={14} /> : <BookOpen size={14} />}{teacherNameOf(record) ?? "دورة تعليمية"}</span><span className="inline-flex items-center gap-1 font-semibold text-emerald-800">التفاصيل <ArrowLeft size={14} /></span></div>}
+                      <span
+                        className={`${
+                          personCards ? "mt-auto pt-4" : "mt-4"
+                        } inline-block text-sm font-semibold text-nuwa-base`}
+                      >
                         عرض التفاصيل
                       </span>
                     </button>
