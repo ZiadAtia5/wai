@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { FileVideo2, Link2, Upload } from "lucide-react"
 
 import { ApiError } from "../../api/client"
+import { useConfirmation } from "../ConfirmationProvider"
 
 import { quizzesApi, teachersApi } from "../../api/endpoints"
 import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
@@ -29,9 +30,9 @@ function unwrapRecord(value: unknown, key: string): DataRecord {
 }
 
 const control =
-  "h-10 w-full rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
+  "h-10 min-w-0 w-full rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
 
-const field = "grid gap-1 text-xs font-semibold text-ink-muted"
+const field = "grid min-w-0 gap-1 text-xs font-semibold text-ink-muted"
 
 export default function TeacherCourseContent({
   courseId,
@@ -46,6 +47,7 @@ export default function TeacherCourseContent({
 
   onFeedback: (message: string) => void
 }) {
+  const confirm = useConfirmation()
   const [reload, setReload] = useState(0)
 
   const [course, setCourse] = useState<DataRecord | null>(null)
@@ -152,6 +154,25 @@ export default function TeacherCourseContent({
     } finally {
       setBusy(false)
     }
+  }
+
+  function confirmMutation(
+    title: string,
+    message: string,
+    request: () => Promise<unknown>,
+    success: string,
+    confirmText = "حذف",
+  ) {
+    return confirm({
+      title,
+      message,
+      variant: "danger",
+      confirmText,
+      onConfirm: async () => {
+        const saved = await mutate(request, success)
+        if (!saved) throw new Error("تعذر إتمام العملية.")
+      },
+    })
   }
 
   async function createModule(event: FormEvent<HTMLFormElement>) {
@@ -571,7 +592,7 @@ export default function TeacherCourseContent({
   const modules = records(course.modules)
 
   return (
-    <section className="mt-5 rounded-2xl border border-nuwa-base/15 bg-gradient-to-b from-nuwa-ice to-white p-5 shadow-sm sm:p-6">
+    <section className="mt-5 min-w-0 max-w-full rounded-2xl border border-nuwa-base/15 bg-gradient-to-b from-nuwa-ice to-white p-3 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-ink">
           محتوى: {String(course.title ?? `الدورة ${courseId}`)}
@@ -618,16 +639,16 @@ export default function TeacherCourseContent({
             return (
               <article
                 key={moduleId}
-                className="rounded-2xl border border-stroke bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                className="min-w-0 rounded-2xl border border-stroke bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex gap-1">
+                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+                  <div className="flex shrink-0 gap-1">
                     <button
                       type="button"
                       disabled={busy || moduleIndex === 0}
                       aria-label="رفع ترتيب الوحدة"
                       onClick={() => void moveModule(modules, moduleIndex, -1)}
-                      className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                      className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
                     >
                       ↑
                     </button>
@@ -636,14 +657,14 @@ export default function TeacherCourseContent({
                       disabled={busy || moduleIndex === modules.length - 1}
                       aria-label="خفض ترتيب الوحدة"
                       onClick={() => void moveModule(modules, moduleIndex, 1)}
-                      className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                      className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
                     >
                       ↓
                     </button>
                   </div>
                   <form
                     onSubmit={(event) => void updateModule(moduleId, event)}
-                    className="flex min-w-0 flex-1 gap-2"
+                    className="col-span-2 grid min-w-0 gap-2 sm:col-span-1 sm:grid-cols-[minmax(0,1fr)_auto]"
                   >
                     <input
                       name="title"
@@ -654,7 +675,7 @@ export default function TeacherCourseContent({
                     />
                     <button
                       disabled={busy}
-                      className="shrink-0 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                      className="min-h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
                     >
                       حفظ الاسم
                     </button>
@@ -663,24 +684,20 @@ export default function TeacherCourseContent({
                     type="button"
                     disabled={busy}
                     onClick={() => {
-                      if (
-                        window.confirm(
-                          "حذف الوحدة سيحذف محتواها أيضاً. هل تريد المتابعة؟",
-                        )
-                      ) {
-                        void mutate(
-                          () => teachersApi.deleteModule(moduleId),
-
-                          "تم حذف الوحدة.",
-                        )
-                      }
+                      void confirmMutation(
+                        "حذف الوحدة ومحتواها؟",
+                        "سيؤدي حذف الوحدة إلى حذف دروسها ومواردها المرتبطة بها.",
+                        () => teachersApi.deleteModule(moduleId),
+                        "تم حذف الوحدة.",
+                        "حذف الوحدة",
+                      )
                     }}
-                    className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
+                    className="col-span-2 min-h-10 justify-self-start rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50 sm:col-span-1 sm:col-start-3"
                   >
                     حذف الوحدة
                   </button>
                 </div>
-                <ul className="mt-3 divide-y divide-stroke">
+                <ul className="mt-3 min-w-0 space-y-3">
                   {lessons.map((lesson, lessonIndex) => {
                     const lessonId = String(lesson.id ?? lesson.lessonId)
 
@@ -689,9 +706,9 @@ export default function TeacherCourseContent({
                     const resources = records(lesson.resources)
 
                     return (
-                      <li key={lessonId} className="rounded-xl border border-stroke/70 bg-white px-4 py-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="flex gap-1">
+                      <li key={lessonId} className="min-w-0 rounded-xl border border-stroke/70 bg-white p-3 sm:p-4">
+                          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+                          <div className="flex shrink-0 gap-1">
                             <button
                               type="button"
                               disabled={busy || lessonIndex === 0}
@@ -707,7 +724,7 @@ export default function TeacherCourseContent({
                                   -1,
                                 )
                               }
-                              className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                              className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
                             >
                               ↑
                             </button>
@@ -728,7 +745,7 @@ export default function TeacherCourseContent({
                                   1,
                                 )
                               }
-                              className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                              className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
                             >
                               ↓
                             </button>
@@ -737,7 +754,7 @@ export default function TeacherCourseContent({
                             onSubmit={(event) =>
                               void updateLesson(lessonId, event)
                             }
-                            className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[1fr_1.4fr_auto]"
+                            className="col-span-2 grid min-w-0 gap-2 sm:col-span-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]"
                           >
                             <input
                               name="title"
@@ -754,7 +771,7 @@ export default function TeacherCourseContent({
                             />
                             <button
                               disabled={busy}
-                              className="rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                              className="min-h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
                             >
                               حفظ الدرس
                             </button>
@@ -763,14 +780,15 @@ export default function TeacherCourseContent({
                             type="button"
                             disabled={busy}
                             onClick={() => {
-                              if (window.confirm("هل تريد حذف هذا الدرس؟"))
-                                void mutate(
-                                  () => teachersApi.deleteLesson(lessonId),
-
-                                  "تم حذف الدرس.",
-                                )
+                              void confirmMutation(
+                                "حذف الدرس؟",
+                                "سيتم حذف الدرس ومحتواه المرتبط به من الدورة.",
+                                () => teachersApi.deleteLesson(lessonId),
+                                "تم حذف الدرس.",
+                                "حذف الدرس",
+                              )
                             }}
-                            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
+                            className="col-span-2 min-h-10 justify-self-start rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50 sm:col-span-1 sm:col-start-3"
                           >
                             حذف الدرس
                           </button>
@@ -789,22 +807,23 @@ export default function TeacherCourseContent({
                           {resources.map((resource) => (
                             <span
                               key={String(resource.id)}
-                              className="inline-flex items-center gap-1 rounded bg-canvas px-2 py-1"
+                              className="inline-flex max-w-full break-all items-center gap-1 rounded bg-canvas px-2 py-1"
                             >
                               {String(resource.name ?? "مورد")}
                               <button
                                 type="button"
                                 aria-label="حذف المورد"
                                 onClick={() => {
-                                  if (window.confirm("هل تريد حذف هذا المورد؟"))
-                                    void mutate(
-                                      () =>
-                                        teachersApi.deleteResource(
-                                          String(resource.id),
-                                        ),
-
-                                      "تم حذف المورد.",
-                                    )
+                                  void confirmMutation(
+                                    "حذف المورد؟",
+                                    `سيتم حذف المورد «${String(resource.name ?? "المورد")}» من الدرس.`,
+                                    () =>
+                                      teachersApi.deleteResource(
+                                        String(resource.id),
+                                      ),
+                                    "تم حذف المورد.",
+                                    "حذف المورد",
+                                  )
                                 }}
                                 className="text-danger"
                               >
@@ -946,15 +965,14 @@ export default function TeacherCourseContent({
                                 type="button"
                                 disabled={busy}
                                 onClick={() => {
-                                  if (
-                                    window.confirm("هل تريد حذف فيديو الدرس؟")
+                                  void confirmMutation(
+                                    "حذف فيديو الدرس؟",
+                                    "سيتم إزالة الفيديو الحالي من هذا الدرس.",
+                                    () =>
+                                      teachersApi.deleteLessonVideo(lessonId),
+                                    "تم حذف الفيديو.",
+                                    "حذف الفيديو",
                                   )
-                                    void mutate(
-                                      () =>
-                                        teachersApi.deleteLessonVideo(lessonId),
-
-                                      "تم حذف الفيديو.",
-                                    )
                                 }}
                                 className="rounded-lg px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
                               >
@@ -969,11 +987,13 @@ export default function TeacherCourseContent({
                             type="button"
                             disabled={busy}
                             onClick={() => {
-                              if (window.confirm("هل تريد حذف فيديو الدرس؟"))
-                                void mutate(
-                                  () => teachersApi.deleteLessonVideo(lessonId),
-                                  "تم حذف الفيديو.",
-                                )
+                              void confirmMutation(
+                                "حذف فيديو الدرس؟",
+                                "سيتم إزالة الفيديو الحالي من هذا الدرس.",
+                                () => teachersApi.deleteLessonVideo(lessonId),
+                                "تم حذف الفيديو.",
+                                "حذف الفيديو",
+                              )
                             }}
                             className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -1160,19 +1180,16 @@ export default function TeacherCourseContent({
                                         type="button"
                                         disabled={busy}
                                         onClick={() => {
-                                          if (
-                                            window.confirm(
-                                              "حذف الاختبار وأسئلته؟",
-                                            )
+                                          void confirmMutation(
+                                            "حذف الاختبار وأسئلته؟",
+                                            "سيتم حذف الاختبار وجميع أسئلته ومحاولات الطلاب المرتبطة به.",
+                                            () =>
+                                              quizzesApi.delete(
+                                                String(quiz.id),
+                                              ),
+                                            "تم حذف الاختبار.",
+                                            "حذف الاختبار",
                                           )
-                                            void mutate(
-                                              () =>
-                                                quizzesApi.delete(
-                                                  String(quiz.id),
-                                                ),
-
-                                              "تم حذف الاختبار.",
-                                            )
                                         }}
                                         className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
                                       >
@@ -1290,14 +1307,16 @@ export default function TeacherCourseContent({
                                                 type="button"
                                                 disabled={busy}
                                                 onClick={() => {
-                                                  if (
-                                                    window.confirm(
-                                                      "هل تريد حذف السؤال؟",
-                                                    )
+                                                  void confirmMutation(
+                                                    "حذف السؤال؟",
+                                                    "سيتم حذف السؤال وإزالته من الاختبار.",
+                                                    () =>
+                                                      removeQuestion(
+                                                        String(question.id),
+                                                      ),
+                                                    "تم حذف السؤال.",
+                                                    "حذف السؤال",
                                                   )
-                                                    void removeQuestion(
-                                                      String(question.id),
-                                                    )
                                                 }}
                                                 className="text-xs font-semibold text-danger disabled:opacity-50"
                                               >
@@ -1461,14 +1480,16 @@ export default function TeacherCourseContent({
                                                     type="button"
                                                     disabled={busy}
                                                     onClick={() => {
-                                                      if (
-                                                        window.confirm(
-                                                          "هل تريد حذف هذا الاختيار؟",
-                                                        )
+                                                      void confirmMutation(
+                                                        "حذف الاختيار؟",
+                                                        "سيتم حذف هذا الاختيار من السؤال.",
+                                                        () =>
+                                                          removeOption(
+                                                            String(option.id),
+                                                          ),
+                                                        "تم حذف الاختيار.",
+                                                        "حذف الاختيار",
                                                       )
-                                                        void removeOption(
-                                                          String(option.id),
-                                                        )
                                                     }}
                                                     className="text-danger disabled:opacity-50"
                                                   >

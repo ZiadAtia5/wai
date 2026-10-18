@@ -337,7 +337,7 @@ export default function PublicCatalogPage({
         </div>
       </header>
 
-      <main className="mx-auto max-w-360 px-6 py-8 md:px-10">
+      <main className="mx-auto min-w-0 max-w-360 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
         <form
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()
@@ -348,18 +348,18 @@ export default function PublicCatalogPage({
 
             setDetail(null)
           }}
-          className={`mb-7 grid gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:grid-cols-[1fr_220px_auto] ${courseCatalog ? "p-5 md:p-6" : ""}`}
+          className={`mb-7 grid min-w-0 gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto] sm:items-end ${courseCatalog ? "sm:p-5 md:p-6" : ""}`}
         >
-          <label className="grid gap-1 text-xs font-semibold text-ink-muted">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
             بحث
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              className="h-11 rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
+              className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
               placeholder="اكتب الاسم أو عنوان الدورة"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-ink-muted">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
             الصف الدراسي
             <select
               value={academicYear}
@@ -370,7 +370,7 @@ export default function PublicCatalogPage({
 
                 setDetail(null)
               }}
-              className="h-11 rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
+              className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
             >
               <option value="">كل الصفوف</option>
               {academicYears.map((year) => (
@@ -380,7 +380,7 @@ export default function PublicCatalogPage({
               ))}
             </select>
           </label>
-          <button className="self-end rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base">
+          <button className="min-h-11 w-full rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base sm:w-auto">
             بحث
           </button>
         </form>

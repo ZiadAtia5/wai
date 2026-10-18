@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react"
 
 import { getAuthToken } from "./api/client"
 
@@ -20,6 +20,24 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"))
 
 export default function App() {
   const [view, setView] = useState<View>(() => {
+    const savedView = window.history.state?.waiApp
+      ? window.history.state.view as View | undefined
+      : undefined
+    if (
+      savedView &&
+      [
+        "landing",
+        "login",
+        "register",
+        "public:courses",
+        "public:course-detail",
+        "public:teachers",
+        "dashboard",
+      ].includes(savedView)
+    ) {
+      return savedView
+    }
+
     const enrollmentPreview =
       import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get(
@@ -29,7 +47,13 @@ export default function App() {
     return enrollmentPreview ? "dashboard" : "landing"
   })
 
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
+    () =>
+      window.history.state?.waiApp &&
+      typeof window.history.state.selectedCourseId === "string"
+        ? window.history.state.selectedCourseId
+        : null,
+  )
 
   useEffect(() => {
     const handleExpiredSession = () => setView("login")
@@ -40,14 +64,58 @@ export default function App() {
       window.removeEventListener("eduhub:auth-expired", handleExpiredSession)
   }, [])
 
-  const navigate: NavigateFn = (nextView, params) => {
-    if (nextView === "public:course-detail") {
-      setSelectedCourseId(params?.courseId ?? null)
+  useEffect(() => {
+    const current = window.history.state
+    if (!current?.waiApp) {
+      window.history.replaceState(
+        { waiApp: true, view, selectedCourseId },
+        "",
+        window.location.href,
+      )
     }
 
-    setView(nextView === "dashboard" && !getAuthToken() ? "login" : nextView)
+    const restoreAppView = (event: PopStateEvent) => {
+      const state = event.state
+      if (!state?.waiApp || typeof state.view !== "string") return
 
-    window.scrollTo({ top: 0, behavior: "smooth" })
+      setView(state.view as View)
+      setSelectedCourseId(
+        typeof state.selectedCourseId === "string"
+          ? state.selectedCourseId
+          : null,
+      )
+    }
+
+    window.addEventListener("popstate", restoreAppView)
+    return () => window.removeEventListener("popstate", restoreAppView)
+  }, [])
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [view])
+
+  const navigate: NavigateFn = (nextView, params) => {
+    const targetView =
+      nextView === "dashboard" && !getAuthToken() ? "login" : nextView
+    const targetCourseId =
+      targetView === "public:course-detail"
+        ? params?.courseId ?? null
+        : null
+
+    if (targetView === view && targetCourseId === selectedCourseId) return
+
+    window.history.pushState(
+      { waiApp: true, view: targetView, selectedCourseId: targetCourseId },
+      "",
+      window.location.href,
+    )
+
+    setSelectedCourseId(targetCourseId)
+
+    setView(targetView)
+
   }
 
   return (
@@ -61,7 +129,7 @@ export default function App() {
       {view !== "dashboard" && (
         <PublicNavbar currentView={view} navigate={navigate} />
       )}
-      <main>
+      <main className={view === "dashboard" ? undefined : "pt-16"}>
         <Suspense
           fallback={<div className="min-h-[60vh] bg-canvas" aria-busy="true" />}
         >
@@ -74,7 +142,10 @@ export default function App() {
             <PublicCoursesPage navigate={navigate} />
           )}
           {view === "public:course-detail" && selectedCourseId && (
-            <CourseDetailsPage courseId={selectedCourseId} navigate={navigate} />
+            <CourseDetailsPage
+              courseId={selectedCourseId}
+              navigate={navigate}
+            />
           )}
           {view === "public:course-detail" && !selectedCourseId && (
             <PublicCoursesPage navigate={navigate} />

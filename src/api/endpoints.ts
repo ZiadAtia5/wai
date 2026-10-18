@@ -77,6 +77,8 @@ export const authApi = {
 export const adminApi = {
   me: () => get<unknown>("/admin/me"),
 
+  updateMe: (body: ApiObject) => put<unknown>("/admin/me", body),
+
   uploadProfileImage: (file: File) =>
     upload<unknown>("/admin/me/profile-image", file),
 

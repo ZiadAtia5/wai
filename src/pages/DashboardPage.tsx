@@ -1,7 +1,9 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react"
@@ -27,6 +29,8 @@ import {
   X,
 } from "lucide-react"
 
+import { domMax, LazyMotion, m } from "framer-motion"
+
 import { ApiError, clearAuthToken } from "../api/client"
 
 import {
@@ -40,6 +44,8 @@ import {
 } from "../api/endpoints"
 
 import ApiQueryState from "../components/ApiQueryState"
+
+import { useConfirmation } from "../components/ConfirmationProvider"
 
 import NuwaLogo from "../components/NuwaLogo"
 
@@ -89,7 +95,19 @@ function getSections(
       {
         key: "profile",
         label: "ملفي الشخصي",
-        load: adminApi.me,
+        load: async () => {
+          try {
+            return await adminApi.me()
+          } catch {
+            return {
+              name:
+                window.sessionStorage.getItem("eduhub.auth.name") ||
+                "مدير النظام",
+              profileImageUrl:
+                window.sessionStorage.getItem("eduhub.auth.image") || "",
+            }
+          }
+        },
       },
 
       { key: "courses", label: "الدورات", load: () => adminApi.courses(query) },
@@ -387,15 +405,24 @@ type CoursePublicationState = "published" | "unpublished" | "draft"
 function getCoursePublicationState(
   course: Record<string, unknown>,
 ): CoursePublicationState {
-  const nestedCourse = isRecord(course.course) ? course.course : null
-  if (nestedCourse) return getCoursePublicationState(nestedCourse)
-
   // Prefer an explicit publication flag over a generic status field.
   for (const key of ["isPublished", "published", "is_published"]) {
     const value = course[key]
-    if (value === true || value === 1 || value === "1" || value === "true")
+    const normalizedValue =
+      typeof value === "string" ? value.trim().toLowerCase() : value
+    if (
+      normalizedValue === true ||
+      normalizedValue === 1 ||
+      normalizedValue === "1" ||
+      normalizedValue === "true"
+    )
       return "published"
-    if (value === false || value === 0 || value === "0" || value === "false")
+    if (
+      normalizedValue === false ||
+      normalizedValue === 0 ||
+      normalizedValue === "0" ||
+      normalizedValue === "false"
+    )
       return "unpublished"
   }
   for (const key of ["isDraft", "is_draft"]) {
@@ -600,6 +627,8 @@ function getStudentName(record: Record<string, unknown>) {
 }
 
 export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
+  const confirm = useConfirmation()
+
   const useTeacherEnrollmentMock =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("teacherEnrollmentMock") ===
@@ -618,10 +647,45 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const query: PageQuery = { page, pageSize: 12, ...(search ? { search } : {}) }
 
   const [activeKey, setActiveKey] = useState(() =>
-    useTeacherEnrollmentMock
-      ? "enrollments"
-      : getSections(role, query, useTeacherEnrollmentMock)[0].key,
+    (() => {
+      const availableSections = getSections(role, query, useTeacherEnrollmentMock)
+      const savedSection = window.history.state?.waiApp &&
+        window.history.state.view === "dashboard"
+        ? window.history.state.dashboardSection
+        : null
+
+      if (
+        typeof savedSection === "string" &&
+        availableSections.some(({ key }) => key === savedSection)
+      ) {
+        return savedSection
+      }
+
+      return useTeacherEnrollmentMock
+        ? "enrollments"
+        : availableSections[0].key
+    })(),
   )
+
+  const sidebarNavRef = useRef<HTMLElement | null>(null)
+  const [sidebarIndicatorY, setSidebarIndicatorY] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const nav = sidebarNavRef.current
+    const activeItem = Array.from(
+      nav?.querySelectorAll<HTMLButtonElement>("[data-sidebar-item]") ?? [],
+    ).find((item) => item.dataset.sidebarItem === activeKey)
+
+    if (activeItem) {
+      setSidebarIndicatorY(
+        activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2,
+      )
+    }
+  }, [activeKey])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [activeKey])
 
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -640,6 +704,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const [coursePublicationOverrides, setCoursePublicationOverrides] = useState<
     Record<string, CoursePublicationState>
+  >({})
+
+  const [coursePublicationRecords, setCoursePublicationRecords] = useState<
+    Record<string, Record<string, unknown>>
   >({})
 
   const [approvedStudentIds, setApprovedStudentIds] = useState<Set<string>>(
@@ -691,6 +759,50 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     () => getSections(role, query, useTeacherEnrollmentMock),
     [role, page, search, useTeacherEnrollmentMock],
   )
+
+  const changeDashboardSection = (section: string) => {
+    if (section === activeKey) return
+
+    window.history.pushState(
+      {
+        ...window.history.state,
+        waiApp: true,
+        view: "dashboard",
+        dashboardSection: section,
+      },
+      "",
+      window.location.href,
+    )
+    setActiveKey(section)
+  }
+
+  useEffect(() => {
+    const currentState = window.history.state
+
+    if (currentState?.waiApp && currentState.view === "dashboard") {
+      window.history.replaceState(
+        { ...currentState, dashboardSection: activeKey },
+        "",
+        window.location.href,
+      )
+    }
+
+    const restoreDashboardSection = (event: PopStateEvent) => {
+      const state = event.state
+      if (!state?.waiApp || state.view !== "dashboard") return
+
+      const section = state.dashboardSection
+      if (
+        typeof section === "string" &&
+        sections.some(({ key }) => key === section)
+      ) {
+        setActiveKey(section)
+      }
+    }
+
+    window.addEventListener("popstate", restoreDashboardSection)
+    return () => window.removeEventListener("popstate", restoreDashboardSection)
+  }, [activeKey, sections])
 
   const section = sections.find(({ key }) => key === activeKey) ?? sections[0]
 
@@ -786,12 +898,30 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     const id = String(course.courseId ?? course.id ?? "")
     return coursePublicationOverrides[id] ?? getCoursePublicationState(course)
   }
-  const records = activeKey === "pending"
-    ? rawRecords.filter((record) => {
-        const studentId = String(record.studentId ?? record.userId ?? record.id ?? "")
-        return !approvedStudentIds.has(studentId)
-      })
-    : rawRecords
+  const courseRecords =
+    role.includes("admin") && activeKey === "courses"
+      ? [
+          ...rawRecords,
+          ...Object.entries(coursePublicationRecords)
+            .filter(
+              ([id]) =>
+                coursePublicationOverrides[id] === "unpublished" &&
+                !rawRecords.some(
+                  (record) => String(record.courseId ?? record.id ?? "") === id,
+                ),
+            )
+            .map(([, record]) => record),
+        ]
+      : rawRecords
+  const records =
+    activeKey === "pending"
+      ? rawRecords.filter((record) => {
+          const studentId = String(
+            record.studentId ?? record.userId ?? record.id ?? "",
+          )
+          return !approvedStudentIds.has(studentId)
+        })
+      : courseRecords
 
   const isAdminCourseSection = role.includes("admin") && activeKey === "courses"
   const displayedRecords = isAdminCourseSection
@@ -858,6 +988,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const showGenericRecords =
     !(role.includes("admin") && activeKey === "stats") &&
+    !(role.includes("admin") && activeKey === "teachers") &&
     activeKey !== "profile" &&
     !(
       role.includes("teacher") && ["overview", "courses"].includes(activeKey)
@@ -903,13 +1034,21 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     id: string,
 
     approve: boolean,
+    rejectionAlreadyConfirmed = false,
   ): Promise<boolean> {
-    if (
-      !approve &&
-      role.includes("admin") &&
-      !window.confirm("هل تريد رفض طلب الالتحاق؟")
-    )
-      return false
+    let rejectionConfirmed = rejectionAlreadyConfirmed
+    if (!approve && role.includes("admin") && !rejectionConfirmed) {
+      rejectionConfirmed = await confirm({
+        title: "رفض طلب الالتحاق؟",
+        message: "سيتم رفض طلب الطالب ولن يتمكن من دخول الدورة.",
+        variant: "warning",
+        confirmText: "رفض الطلب",
+        onConfirm: async () => {
+          await enrollmentsApi.adminReject(id)
+        },
+      })
+      if (!rejectionConfirmed) return false
+    }
 
     setActionFeedback("")
 
@@ -917,9 +1056,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       setActionLoading(`${id}-${approve ? "approve" : "reject"}`)
 
       if (role.includes("admin")) {
-        await (approve
-          ? enrollmentsApi.adminApprove(id)
-          : enrollmentsApi.adminReject(id))
+        if (approve) await enrollmentsApi.adminApprove(id)
+        else if (!rejectionConfirmed) await enrollmentsApi.adminReject(id)
       } else if (role.includes("teacher")) {
         await (approve
           ? teachersApi.approveEnrollment(id)
@@ -1002,16 +1140,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   }
 
   async function handleDeleteAllNotifications() {
-    if (!window.confirm("سيتم حذف جميع الإشعارات نهائيًا. هل تريد المتابعة؟"))
-      return
+    const confirmed = await confirm({
+      title: "حذف جميع الإشعارات؟",
+      message: "سيتم حذف جميع الإشعارات نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+      variant: "danger",
+      confirmText: "حذف الكل",
+      onConfirm: async () => {
+        await notificationsApi.removeAll()
+        const remaining = getNotificationRecords(await notificationsApi.list())
+        if (remaining.length > 0) {
+          throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.")
+        }
+      },
+    })
+    if (!confirmed) return
+
     setActionFeedback("")
     setActionLoading("delete-all-notifications")
     try {
-      await notificationsApi.removeAll()
-      const remaining = getNotificationRecords(await notificationsApi.list())
-      if (remaining.length > 0) {
-        throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.")
-      }
       setActionFeedback("تم حذف جميع الإشعارات.")
       setReloadKey((key) => key + 1)
       setNotificationReloadKey((key) => key + 1)
@@ -1030,11 +1176,17 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       return
     }
 
-    if (
-      !approve &&
-      !window.confirm("سيتم رفض طلب الطالب وحذفه. هل تريد المتابعة؟")
-    )
-      return
+    let rejectionConfirmed = false
+    if (!approve) {
+      rejectionConfirmed = await confirm({
+        title: "رفض طلب الطالب؟",
+        message: "سيتم رفض طلب التسجيل وحذفه نهائيًا.",
+        variant: "danger",
+        confirmText: "رفض وحذف",
+        onConfirm: () => adminApi.rejectStudent(id),
+      })
+      if (!rejectionConfirmed) return
+    }
 
     setActionFeedback("")
 
@@ -1042,7 +1194,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     try {
       if (approve) await adminApi.approveStudent(id)
-      else await adminApi.rejectStudent(id)
+      else if (!rejectionConfirmed) await adminApi.rejectStudent(id)
 
       if (approve) {
         setApprovedStudentIds((current) => new Set(current).add(id))
@@ -1071,7 +1223,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   }
 
   async function handleCoursePublish(id: string, publish: boolean) {
-    const currentCourse = rawRecords.find(
+    const currentCourse = courseRecords.find(
       (course) => String(course.id ?? course.courseId ?? "") === id,
     )
     if (
@@ -1084,6 +1236,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       return
     }
 
+    let unpublishConfirmed = false
+    if (!publish) {
+      const courseTitle = String(
+        currentCourse?.title ?? currentCourse?.name ?? "هذه الدورة",
+      )
+      unpublishConfirmed = await confirm({
+        title: "إلغاء نشر الدورة؟",
+        message: `سيتم إخفاء «${courseTitle}» عن الطلاب مع الاحتفاظ بها لإعادة نشرها لاحقًا.`,
+        variant: "warning",
+        confirmText: "إلغاء النشر",
+        onConfirm: async () => {
+          if (role.includes("admin")) await adminApi.unpublishCourse(id)
+          else await teachersApi.unpublishCourse(id)
+        },
+      })
+      if (!unpublishConfirmed) return
+    }
+
     setActionFeedback("")
 
     setActionLoading(`${id}-publish`)
@@ -1091,10 +1261,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     try {
       if (role.includes("admin")) {
         if (publish) await adminApi.publishCourse(id)
-        else await adminApi.unpublishCourse(id)
+        else if (!unpublishConfirmed) await adminApi.unpublishCourse(id)
       } else if (role.includes("teacher")) {
         if (publish) await teachersApi.publishCourse(id)
-        else await teachersApi.unpublishCourse(id)
+        else if (!unpublishConfirmed) await teachersApi.unpublishCourse(id)
       } else {
         setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.")
         return
@@ -1104,6 +1274,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         ...current,
         [id]: publish ? "published" : "unpublished",
       }))
+      if (currentCourse) {
+        setCoursePublicationRecords((current) => {
+          if (!publish) return { ...current, [id]: currentCourse }
+          const next = { ...current }
+          delete next[id]
+          return next
+        })
+      }
       setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.")
       setReloadKey((key) => key + 1)
     } catch (cause) {
@@ -1161,15 +1339,20 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   }
 
   async function handleSubjectDelete(id: string) {
-    if (!window.confirm("هل تريد حذف هذه المادة؟")) return
+    const confirmed = await confirm({
+      title: "حذف المادة؟",
+      message: "سيتم حذف المادة من المنصة. لا يمكن التراجع عن هذا الإجراء.",
+      variant: "danger",
+      confirmText: "حذف المادة",
+      onConfirm: () => adminApi.deleteSubject(id),
+    })
+    if (!confirmed) return
 
     setActionLoading(`${id}-delete`)
 
     setActionFeedback("")
 
     try {
-      await adminApi.deleteSubject(id)
-
       setActionFeedback("تم حذف المادة.")
 
       setReloadKey((key) => key + 1)
@@ -1182,7 +1365,15 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     }
   }
 
-  function signOut() {
+  async function signOut() {
+    const confirmed = await confirm({
+      title: "تسجيل الخروج؟",
+      message: "ستحتاج إلى تسجيل الدخول مرة أخرى لفتح مساحة العمل.",
+      variant: "primary",
+      confirmText: "تسجيل الخروج",
+    })
+    if (!confirmed) return
+
     clearAuthToken()
 
     window.sessionStorage.removeItem("eduhub.auth.role")
@@ -1249,7 +1440,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   return (
     <div className="dashboard-shell min-h-dvh bg-canvas pb-10 dir-rtl sm:pb-16">
       {/* Top Header Navigation */}
-      <header className="relative z-30 border-b border-emerald-900/10 bg-surface/90 backdrop-blur-xl lg:sticky lg:top-0 lg:mr-[300px] lg:ml-4 lg:mt-4 lg:rounded-[28px] lg:border-0 lg:shadow-sm">
+      <header className="relative z-30 border-b border-emerald-900/10 bg-surface/90 backdrop-blur-xl lg:sticky lg:top-0 lg:mr-[320px] lg:ml-4 lg:mt-4 lg:rounded-[28px] lg:border-0 lg:shadow-sm">
         <div
           dir="ltr"
           className="mx-auto flex min-h-[68px] max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 lg:px-6"
@@ -1332,8 +1523,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         <aside
           id="dashboard-sidebar"
           aria-label="القائمة الرئيسية"
-          className={`fixed inset-y-0 right-0 left-auto z-50 h-dvh w-[min(86vw,320px)] overflow-y-auto overscroll-contain border-l border-stroke bg-white p-4 shadow-2xl transition-transform duration-200 lg:fixed lg:inset-y-4 lg:right-4 lg:left-auto lg:top-4 lg:z-20 lg:h-[calc(100dvh-2rem)] lg:w-[280px] lg:rounded-[28px] lg:border-0 lg:shadow-nuwa-md lg:translate-x-0 ${
-            mobileNavOpen ? "translate-x-0" : "translate-x-full"
+          className={`fixed inset-y-3 right-3 left-auto z-50 h-[calc(100dvh-1.5rem)] w-[min(86vw,320px)] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-2xl border border-stroke bg-white p-4 shadow-nuwa-md transition-transform duration-200 lg:fixed lg:inset-y-4 lg:right-4 lg:left-auto lg:top-4 lg:z-20 lg:h-[calc(100dvh-2rem)] lg:w-[280px] lg:border lg:border-stroke lg:shadow-nuwa-md lg:translate-x-0 ${
+            mobileNavOpen
+              ? "translate-x-0"
+              : "translate-x-[calc(100%_+_0.75rem)]"
           }`}
         >
           <div className="mb-6 hidden items-center justify-between lg:flex">
@@ -1366,81 +1559,98 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
           <p className="mb-2 px-3 text-[11px] font-bold text-neutral-400">
             القائمة الرئيسية
           </p>
-          <nav className="grid gap-1" aria-label="أقسام لوحة التحكم">
-            {sections.map((item) => {
-              const isActive = activeKey === item.key
-
-              const iconMap: Record<string, typeof LayoutDashboard> = {
-                stats: LayoutDashboard,
-
-                overview: LayoutDashboard,
-
-                profile: CircleUserRound,
-
-                courses: BookOpen,
-
-                teachers: Users,
-
-                students: GraduationCap,
-
-                "student-progress": UsersRound,
-
-                pending: ClipboardList,
-
-                subjects: BookOpen,
-
-                enrollments: ClipboardList,
-
-                notifications: Bell,
-              }
-
-              const Icon = iconMap[item.key] ?? Settings2
-
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    setActiveKey(item.key)
-
-                    setPage(1)
-
-                    setSearch("")
-
-                    setSearchInput("")
-
-                    setMobileNavOpen(false)
+          <LazyMotion features={domMax}>
+            <nav
+              ref={sidebarNavRef}
+              className="relative grid gap-1"
+              aria-label="أقسام لوحة التحكم"
+            >
+              {sidebarIndicatorY !== null && (
+                <m.span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-0 top-0 z-0 h-10 w-[5px] rounded-l-md bg-[#176b43]"
+                  initial={false}
+                  animate={{ y: sidebarIndicatorY }}
+                  transition={{
+                    type: "tween",
+                    duration: 0.5,
+                    ease: [0.65, 0, 0.35, 1],
                   }}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition ${
-                    isActive
-                      ? "bg-nuwa-soft text-nuwa-base"
-                      : "text-neutral-600 hover:bg-neutral-50 hover:text-ink"
-                  }`}
-                >
-                  <span className="relative grid size-5 shrink-0 place-items-center">
-                    <Icon size={18} />
-                    {item.key === "notifications" &&
-                      unreadNotifications > 0 && (
-                        <span
-                          aria-label={`${unreadNotifications} إشعار غير مقروء`}
-                          className="absolute -right-3 -top-2 grid min-h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
-                        >
-                          {unreadNotifications > 99
-                            ? "99+"
-                            : unreadNotifications}
-                        </span>
-                      )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    {sectionLabels[item.key] ?? item.label}
-                  </span>
-                  {isActive && (
-                    <span className="absolute bottom-2 right-0 top-2 w-1 rounded-l-full bg-nuwa-base" />
-                  )}
-                </button>
-              )
-            })}
-          </nav>
+                />
+              )}
+              {sections.map((item) => {
+                const isActive = activeKey === item.key
+
+                const iconMap: Record<string, typeof LayoutDashboard> = {
+                  stats: LayoutDashboard,
+
+                  overview: LayoutDashboard,
+
+                  profile: CircleUserRound,
+
+                  courses: BookOpen,
+
+                  teachers: Users,
+
+                  students: GraduationCap,
+
+                  "student-progress": UsersRound,
+
+                  pending: ClipboardList,
+
+                  subjects: BookOpen,
+
+                  enrollments: ClipboardList,
+
+                  notifications: Bell,
+                }
+
+                const Icon = iconMap[item.key] ?? Settings2
+
+                return (
+                  <button
+                    key={item.key}
+                    data-sidebar-item={item.key}
+                    onClick={() => {
+                      changeDashboardSection(item.key)
+
+                      setPage(1)
+
+                      setSearch("")
+
+                      setSearchInput("")
+
+                      setMobileNavOpen(false)
+                    }}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`relative flex h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition-colors duration-200 ${
+                      isActive
+                        ? "text-[#065f46]"
+                        : "text-neutral-600 hover:bg-neutral-50 hover:text-ink"
+                    }`}
+                  >
+                    <span className="relative z-10 grid size-5 shrink-0 place-items-center">
+                      <Icon size={18} />
+                      {item.key === "notifications" &&
+                        unreadNotifications > 0 && (
+                          <span
+                            aria-label={`${unreadNotifications} إشعار غير مقروء`}
+                            className="absolute -right-3 -top-2 grid min-h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+                          >
+                            {unreadNotifications > 99
+                              ? "99+"
+                              : unreadNotifications}
+                          </span>
+                        )}
+                    </span>
+                    <span className="relative z-10 min-w-0 flex-1">
+                      {sectionLabels[item.key] ?? item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </nav>
+          </LazyMotion>
           <button
             onClick={() => navigate("landing")}
             className="mt-6 flex w-full items-center gap-3 border-t border-neutral-100 px-3 pt-5 text-sm font-semibold text-neutral-500 hover:text-nuwa-base"
@@ -1468,8 +1678,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             <span className="absolute bottom-5 left-5 size-3 rounded-full bg-emerald-300 shadow-[0_0_20px_rgb(110_231_183_/_80%)]" />
           </div>
         </aside>
-        <main className="min-w-0 flex-1 px-3 pb-8 pt-4 sm:px-6 sm:pt-6 lg:mr-[300px] lg:ml-4 lg:px-0 lg:pt-4">
-          <div className="mx-auto max-w-[1600px]">
+        <main
+          className={`min-w-0 flex-1 pb-8 pt-4 ${
+            role.includes("teacher") && activeKey === "courses"
+              ? "px-1 sm:px-3 sm:pt-6"
+              : "px-3 sm:px-6 sm:pt-6"
+          } lg:mr-[320px] lg:ml-4 lg:px-0 lg:pt-4`}
+        >
+          <div className="mx-auto max-w-[1920px]">
             {/* Action Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-stroke/70 bg-surface p-4 shadow-nuwa sm:gap-4 sm:p-6">
               <div>
@@ -1707,15 +1923,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                           لا تتوفر مؤشرات رقمية لعرضها حالياً.
                         </p>
                       )}
-                      <MetricBarChart
-                        title="تحليل مؤشرات المنصة"
-                        description="مقارنة القيم الحالية لأبرز المؤشرات"
-                        metrics={adminMetrics.map(({ key, label, value }) => ({
-                          key,
-                          label,
-                          value,
-                        }))}
-                      />
+                      <div className="mt-6 border-t border-stroke pt-6 sm:mt-8 sm:pt-8">
+                        <MetricBarChart
+                          title="تحليل مؤشرات المنصة"
+                          description="مقارنة القيم الحالية لأبرز المؤشرات"
+                          metrics={adminMetrics.map(
+                            ({ key, label, value }) => ({
+                              key,
+                              label,
+                              value,
+                            }),
+                          )}
+                        />
+                      </div>
                       <div className="mt-6">
                         <h4 className="text-sm font-bold text-ink">
                           الوصول السريع
@@ -1763,7 +1983,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               key={key}
                               type="button"
                               onClick={() => {
-                                setActiveKey(key)
+                                changeDashboardSection(key)
                                 setPage(1)
                                 setSearch("")
                                 setSearchInput("")
@@ -1935,7 +2155,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               type="button"
                               onClick={() => {
                                 setFocusStudentCourseId(null)
-                                setActiveKey("courses")
+                                changeDashboardSection("courses")
                                 setPage(1)
                                 setSearch("")
                                 setSearchInput("")
@@ -2041,7 +2261,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                               setFocusStudentCourseId(
                                                 String(courseId),
                                               )
-                                              setActiveKey("courses")
+                                              changeDashboardSection("courses")
                                               setPage(1)
                                               setSearch("")
                                               setSearchInput("")

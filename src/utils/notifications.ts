@@ -1,4 +1,4 @@
-import { toast } from "react-toastify"
+import toast from "react-hot-toast"
 
 const errorTranslations: Array<[RegExp, string]> = [
   [/email.*(already|exist|taken)/i, "هذا البريد الإلكتروني مسجل بالفعل."],
@@ -57,9 +57,9 @@ export function arabicErrorMessage(
 }
 
 export function notifySuccess(message: string) {
-  toast.success(message, { rtl: true })
+  toast.success(message)
 }
 
 export function notifyError(error: unknown, fallback?: string) {
-  toast.error(arabicErrorMessage(error, fallback), { rtl: true })
+  toast.error(arabicErrorMessage(error, fallback))
 }
