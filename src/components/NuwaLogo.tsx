@@ -22,14 +22,14 @@ export default function NuwaLogo({
   const h = sizes[size]
 
   const primaryColor =
-    color === "white" ? "#FFFFFF" : color === "deep" ? "#123B66" : "#1769AA"
+    color === "white" ? "#FFFFFF" : color === "deep" ? "#0B3B25" : "#176B43"
 
   const accentColor =
     color === "white"
       ? "rgba(255,255,255,0.6)"
       : color === "deep"
-        ? "#2388D9"
-        : "#2388D9"
+        ? "#42A879"
+        : "#42A879"
 
   const NuwaMark = () => (
     <svg
@@ -99,10 +99,10 @@ export default function NuwaLogo({
         <span
           className={`${subSizes[size]} font-medium tracking-[0.18em] uppercase`}
           style={{
-            color: color === "white" ? "rgba(255,255,255,0.7)" : "#526579",
+            color: color === "white" ? "rgba(255,255,255,0.7)" : "#68766E",
           }}
         >
-          WAI
+          منصة تعليمية
         </span>
       </div>
     )
@@ -129,10 +129,10 @@ export default function NuwaLogo({
         <span
           className={`${subSizes[size]} font-medium tracking-[0.18em] uppercase`}
           style={{
-            color: color === "white" ? "rgba(255,255,255,0.6)" : "#526579",
+            color: color === "white" ? "rgba(255,255,255,0.6)" : "#68766E",
           }}
         >
-          WAI
+          منصة تعليمية
         </span>
       </div>
     </div>

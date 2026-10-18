@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Clock3,
   ClipboardList,
+  CircleUserRound,
+  Trash2,
   GraduationCap,
   LayoutDashboard,
   LogOut,
@@ -25,7 +27,7 @@ import {
   X,
 } from "lucide-react"
 
-import { clearAuthToken } from "../api/client"
+import { ApiError, clearAuthToken } from "../api/client"
 
 import {
   adminApi,
@@ -41,17 +43,27 @@ import ApiQueryState from "../components/ApiQueryState"
 
 import NuwaLogo from "../components/NuwaLogo"
 
+import PersonAvatar from "../components/PersonAvatar"
+
 import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
 
 import RoleForms from "../components/dashboard/RoleForms"
 
 import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests"
 
+import MetricBarChart from "../components/dashboard/MetricBarChart"
+
 import { mockTeacherEnrollmentRequests } from "../mocks/teacherEnrollmentRequests"
 
 import { notifyError, notifySuccess } from "../utils/notifications"
 
 import { useApiQuery } from "../hooks/useApiQuery"
+
+import StudentDetailsCard, {
+  fieldLabels,
+  FormattedCardValue,
+  formatValue,
+} from "../components/dashboard/StudentDetailsCard"
 
 import type { NavigateFn } from "../types"
 
@@ -65,66 +77,6 @@ interface Section {
   load: () => Promise<unknown>
 }
 
-// قاموس لترجمة مفاتيح الـ API إلى العربية تلقائياً
-
-const fieldLabels: Record<string, string> = {
-  id: "المعرف",
-
-  title: "العنوان",
-
-  name: "الاسم",
-
-  fullName: "الاسم الكامل",
-
-  firstName: "الاسم الأول",
-
-  lastName: "اسم العائلة",
-
-  email: "البريد الإلكتروني",
-
-  phoneNumber: "رقم الهاتف",
-
-  parentPhoneNumber: "هاتف ولي الأمر",
-
-  studentNumber: "كود الطالب",
-
-  isApproved: "حالة الاعتماد",
-
-  registeredByTeacherName: "المعلم الذي استخدم الطالب كوده",
-
-  teacherCode: "كود المعلم",
-
-  teacherCodeUsed: "كود المعلم المستخدم",
-
-  registrationCode: "كود التسجيل",
-
-  referralCode: "كود الإحالة",
-
-  academicYear: "الصف الدراسي",
-
-  role: "الدور",
-
-  status: "الحالة",
-
-  createdAt: "تاريخ الإنشاء",
-
-  updatedAt: "تاريخ التحديث",
-
-  price: "السعر",
-
-  courseName: "اسم الدورة",
-
-  studentName: "اسم الطالب",
-
-  teacherName: "اسم المعلم",
-
-  description: "الوصف",
-
-  isRead: "حالة القراءة",
-
-  message: "الرسالة",
-}
-
 function getSections(
   role: string,
   query: PageQuery,
@@ -133,6 +85,12 @@ function getSections(
   if (role.includes("admin")) {
     return [
       { key: "stats", label: "الإحصاءات", load: adminApi.stats },
+
+      {
+        key: "profile",
+        label: "ملفي الشخصي",
+        load: adminApi.me,
+      },
 
       { key: "courses", label: "الدورات", load: () => adminApi.courses(query) },
 
@@ -175,6 +133,7 @@ function getSections(
 
         load: () => enrollmentsApi.adminList(query),
       },
+      { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
     ]
   }
 
@@ -209,6 +168,8 @@ function getSections(
           }
         },
       },
+
+      { key: "profile", label: "ملفي الشخصي", load: teachersApi.me },
 
       {
         key: "courses",
@@ -255,6 +216,7 @@ function getSections(
           }
         },
       },
+      { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
     ]
   }
 
@@ -263,12 +225,26 @@ function getSections(
       key: "overview",
       label: "نظرة عامة",
       load: async () => {
-        const [profile, enrollments] = await Promise.all([
+        const [profileResult, enrollmentsResult] = await Promise.allSettled([
           studentsApi.me(),
           studentsApi.enrollments({ page: 1, pageSize: 4 }),
         ])
 
-        return { profile, enrollments }
+        if (profileResult.status === "rejected") throw profileResult.reason
+
+        return {
+          profile: unwrapApiResponse(profileResult.value),
+          enrollments:
+            enrollmentsResult.status === "fulfilled"
+              ? unwrapApiResponse(enrollmentsResult.value)
+              : [],
+          enrollmentsError:
+            enrollmentsResult.status === "rejected"
+              ? enrollmentsResult.reason instanceof Error
+                ? enrollmentsResult.reason.message
+                : "تعذر تحميل دوراتك حاليًا."
+              : null,
+        }
       },
     },
     { key: "profile", label: "ملفي الشخصي", load: studentsApi.me },
@@ -285,11 +261,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
 
+function unwrapApiResponse(value: unknown): unknown {
+  let current = value
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    const response = current
+    if (!isRecord(response)) break
+    const keys = Object.keys(response)
+    const isEnvelope =
+      "data" in response &&
+      (keys.length <= 3 ||
+        ["success", "message", "status", "errors", "meta"].some(
+          (key) => key in response,
+        ))
+    if (!isEnvelope) break
+    current = response.data
+  }
+
+  return current
+}
+
 function profileDisplayName(value: unknown): string | null {
+  value = unwrapApiResponse(value)
   if (!isRecord(value)) return null
 
-  const candidates = [value, value.user, value.teacher, value.student]
-  for (const candidate of candidates) {
+  const candidates: unknown[] = [value]
+  const visited = new Set<object>()
+
+  while (candidates.length && visited.size < 8) {
+    const candidate = candidates.shift()
+    if (!isRecord(candidate) || visited.has(candidate)) continue
+    visited.add(candidate)
+    candidates.push(
+      candidate.profile,
+      candidate.data,
+      candidate.user,
+      candidate.teacher,
+      candidate.student,
+    )
+  }
+
+  for (const candidate of visited) {
     if (!isRecord(candidate)) continue
 
     const direct = candidate.fullName ?? candidate.displayName ?? candidate.name
@@ -310,28 +322,157 @@ function profileDisplayName(value: unknown): string | null {
   return null
 }
 
+function profileDisplayImage(value: unknown): string | null {
+  if (!isRecord(value)) return null
+  const candidates: unknown[] = [value]
+  const visited = new Set<object>()
+  while (candidates.length && visited.size < 8) {
+    const candidate = candidates.shift()
+    if (!isRecord(candidate) || visited.has(candidate)) continue
+    visited.add(candidate)
+    candidates.push(
+      candidate.profile,
+      candidate.data,
+      candidate.user,
+      candidate.teacher,
+      candidate.student,
+    )
+  }
+  for (const candidate of visited) {
+    if (!isRecord(candidate)) continue
+    const avatar = isRecord(candidate.avatar) ? candidate.avatar : {}
+    const image =
+      candidate.avatarUrl ??
+      candidate.avatar_url ??
+      candidate.profileImageUrl ??
+      candidate.profile_image_url ??
+      candidate.profileImage ??
+      candidate.profile_image ??
+      candidate.profilePictureUrl ??
+      candidate.imageUrl ??
+      candidate.image_url ??
+      avatar.url ??
+      (typeof candidate.avatar === "string" ? candidate.avatar : undefined)
+    if (typeof image === "string" && image.trim()) return image.trim()
+  }
+  return null
+}
+
 function getRecords(data: unknown): Record<string, unknown>[] {
+  data = unwrapApiResponse(data)
+
   if (Array.isArray(data)) return data.filter(isRecord)
 
-  if (isRecord(data) && Array.isArray(data.items))
-    return data.items.filter(isRecord)
+  if (isRecord(data)) {
+    for (const key of [
+      "items",
+      "notifications",
+      "records",
+      "students",
+      "teachers",
+      "courses",
+      "enrollments",
+      "requests",
+    ]) {
+      if (Array.isArray(data[key]))
+        return (data[key] as unknown[]).filter(isRecord)
+    }
+  }
 
   return isRecord(data) ? [data] : []
 }
 
+type CoursePublicationState = "published" | "unpublished" | "draft"
+
+function getCoursePublicationState(
+  course: Record<string, unknown>,
+): CoursePublicationState {
+  const nestedCourse = isRecord(course.course) ? course.course : null
+  if (nestedCourse) return getCoursePublicationState(nestedCourse)
+
+  // Prefer an explicit publication flag over a generic status field.
+  for (const key of ["isPublished", "published", "is_published"]) {
+    const value = course[key]
+    if (value === true || value === 1 || value === "1" || value === "true")
+      return "published"
+    if (value === false || value === 0 || value === "0" || value === "false")
+      return "unpublished"
+  }
+  for (const key of ["isDraft", "is_draft"]) {
+    const value = course[key]
+    if (value === true || value === 1 || value === "1" || value === "true")
+      return "draft"
+  }
+
+  const status = String(
+    course.publicationStatus ??
+      course.publishStatus ??
+      course.publication_status ??
+      course.publish_status ??
+      course.status ??
+      course.state ??
+      "",
+  ).toLowerCase()
+
+  // CourseStatus is an integer enum from the API: Draft=0 and Published=1.
+  if (status === "1") return "published"
+  if (status === "0") return "draft"
+  if (status === "2") return "unpublished"
+
+  if (/draft|مسودة/.test(status)) return "draft"
+  if (/unpublish|not.?publish|غير.?منشور/.test(status)) return "unpublished"
+  if (/publish|منشور/.test(status)) return "published"
+  return "unpublished"
+}
+
+function isUnreadNotification(notification: Record<string, unknown>): boolean {
+  if (typeof notification.isUnread === "boolean") return notification.isUnread
+  if (typeof notification.isRead === "boolean") return !notification.isRead
+  if (typeof notification.is_read === "boolean") return !notification.is_read
+  if (typeof notification.read === "boolean") return !notification.read
+  const status = String(
+    notification.readStatus ?? notification.status ?? "",
+  ).toLowerCase()
+  if (/unread|new|غير مقروء/.test(status)) return true
+  if (/^read$|مقروء/.test(status)) return false
+  if (notification.read_at !== undefined) return notification.read_at == null
+  if (notification.readAt !== undefined) return notification.readAt == null
+  return notification.readAt === null
+}
+
+function getNotificationRecords(data: unknown): Record<string, unknown>[] {
+  const payload = unwrapApiResponse(data)
+  if (Array.isArray(payload)) return payload.filter(isRecord)
+  if (!isRecord(payload)) return []
+  for (const key of ["items", "notifications", "records"]) {
+    if (Array.isArray(payload[key])) return (payload[key] as unknown[]).filter(isRecord)
+  }
+  return payload.id !== undefined || payload.notificationId !== undefined
+    ? [payload]
+    : []
+}
+
 function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
+  data = unwrapApiResponse(data)
+
   if (Array.isArray(data))
     return data.filter(
       (enrollment): enrollment is Record<string, unknown> =>
         isRecord(enrollment) &&
-        !isRejectedEnrollment(enrollment.status, enrollment.isRejected),
+        !isRejectedEnrollment(
+          enrollment.status ?? enrollment.enrollmentStatus,
+          enrollment.isRejected,
+        ),
     )
   if (!isRecord(data)) return []
   if (Array.isArray(data.items))
     return data.items.filter(
       (enrollment): enrollment is Record<string, unknown> =>
         isRecord(enrollment) &&
-        !isRejectedEnrollment(enrollment.status, enrollment.isRejected),
+        !isRejectedEnrollment(
+          enrollment.status ?? enrollment.enrollmentStatus,
+          enrollment.isRejected,
+        ),
     )
   if ("enrollments" in data) return getEnrollmentRecords(data.enrollments)
   return []
@@ -339,15 +480,39 @@ function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
 
 function isRejectedEnrollment(status: unknown, isRejected?: unknown): boolean {
   return (
-    isRejected === true || /reject|declin|cancel/i.test(String(status ?? ""))
+    isRejected === true ||
+    String(status ?? "").trim() === "2" ||
+    /reject|declin|cancel/i.test(String(status ?? ""))
   )
+}
+
+function enrollmentProgressPercent(
+  enrollment: Record<string, unknown>,
+): number | null {
+  const nestedProgress = isRecord(enrollment.progress)
+    ? enrollment.progress
+    : {}
+  const rawValue =
+    enrollment.progressPercentage ??
+    enrollment.progressPercent ??
+    enrollment.completionPercentage ??
+    nestedProgress.progressPercentage ??
+    nestedProgress.percentage
+  if (rawValue === undefined || rawValue === null || rawValue === "")
+    return null
+
+  const value = Number(rawValue)
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null
 }
 
 function enrollmentStatusLabel(status: unknown, isApproved?: unknown): string {
   const value = String(status ?? "").toLowerCase()
 
+  if (value === "0" || isApproved === false) return "بانتظار الموافقة"
+  if (value === "2") return "غير نشط"
+  if (value === "3") return "مكتملة"
+  if (value === "1" || isApproved === true) return "مشترك"
   if (/reject|declin|cancel/.test(value)) return "غير نشط"
-  if (isApproved === false) return "بانتظار الموافقة"
   if (/pending|await|review/.test(value)) return "بانتظار الموافقة"
   if (/complete|finish/.test(value)) return "مكتملة"
   if (/approv|active|accept|enroll/.test(value)) return "مشترك"
@@ -358,7 +523,12 @@ function enrollmentStatusLabel(status: unknown, isApproved?: unknown): string {
 function getAdminMetrics(data: unknown) {
   if (!isRecord(data)) return []
 
-  const entries: { key: string; value: number; parent: string }[] = []
+  type MetricEntry = {
+    key: string
+    value: number
+    parent: string
+  }
+  const entries: MetricEntry[] = []
 
   function collect(record: Record<string, unknown>, parent = "", depth = 0) {
     if (depth > 3) return
@@ -420,16 +590,6 @@ function cardFields(record: Record<string, unknown>) {
   )
 }
 
-function studentDetailFields(record: Record<string, unknown>) {
-  return Object.entries(record).filter(
-    ([key, value]) =>
-      !/(^id$|token|image|url|password)/i.test(key) &&
-      value !== null &&
-      (["string", "number", "boolean"].includes(typeof value) ||
-        key === "academicYear"),
-  )
-}
-
 function getStudentName(record: Record<string, unknown>) {
   const parts = [record.firstName, record.secondName, record.thirdName].filter(
     (part): part is string =>
@@ -437,129 +597,6 @@ function getStudentName(record: Record<string, unknown>) {
   )
 
   return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"))
-}
-
-function StudentDetailsCard({
-  record,
-
-  academicYears,
-}: {
-  record: Record<string, unknown>
-
-  academicYears: AcademicYearResponse[]
-}) {
-  const teacherName =
-    record.teacherName ??
-    record.registeredByTeacherName ??
-    record.referralTeacherName
-
-  const teacherCode =
-    record.teacherCodeUsed ?? record.teacherCode ?? record.referralCode
-
-  return (
-    <details className="mt-4 rounded-xl border border-stroke bg-white">
-      <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-nuwa-base">
-        عرض تفاصيل الطالب
-      </summary>
-      <dl className="grid gap-2 border-t border-stroke bg-canvas/50 p-4 sm:grid-cols-2">
-        {studentDetailFields(record).map(([key, value]) => {
-          const year =
-            typeof value === "object" && value !== null
-              ? value as Record<string, unknown>
-              : null
-
-          const namedYear = academicYears.find((item) => item.value === value)
-
-          const shownValue =
-            key === "academicYear"
-              ? (year?.arabicName ??
-                year?.name ??
-                namedYear?.arabicName ??
-                value)
-              : value
-
-          return (
-            <div key={key} className="rounded-lg bg-white p-3">
-              <dt className="text-xs font-semibold text-ink-muted">
-                {fieldLabels[key] ?? key}
-              </dt>
-              <dd className="mt-1 break-words text-sm text-ink">
-                <FormattedCardValue field={key} value={shownValue} />
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-      <div className="border-t border-stroke p-4">
-        <h4 className="text-sm font-bold text-ink">
-          المعلم المرتبط بكود التسجيل
-        </h4>
-        {teacherName ? (
-          <p className="mt-1 text-sm text-ink-muted">
-            {String(teacherName)}
-            {teacherCode ? ` · كود ${String(teacherCode)}` : ""}
-          </p>
-        ) : (
-          <p className="mt-1 text-sm leading-6 text-ink-muted">
-            بيانات الـ API الحالية لا تتضمن كود المعلم الذي استخدمه الطالب عند
-            التسجيل.
-          </p>
-        )}
-      </div>
-    </details>
-  )
-}
-
-function formatValue(key: string, value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—"
-
-  if (typeof value === "boolean") return value ? "نعم" : "لا"
-
-  if (key.toLowerCase().includes("date") || key.toLowerCase().includes("at")) {
-    const date = new Date(String(value))
-
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString("ar-EG", {
-        year: "numeric",
-
-        month: "short",
-
-        day: "numeric",
-      })
-    }
-  }
-
-  if (typeof value === "object") return JSON.stringify(value)
-
-  return String(value)
-}
-
-function FormattedCardValue({
-  field,
-
-  value,
-}: {
-  field: string
-
-  value: unknown
-}) {
-  const formatted = formatValue(field, value)
-
-  if (typeof value !== "string" || value.length <= 140) return formatted
-
-  return (
-    <>
-      <span className="line-clamp-2">{formatted}</span>
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs font-semibold text-nuwa-base">
-          قراءة النص كاملاً
-        </summary>
-        <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">
-          {formatted}
-        </p>
-      </details>
-    </>
-  )
 }
 
 export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
@@ -588,12 +625,26 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const [reloadKey, setReloadKey] = useState(0)
 
+  const [notificationReloadKey, setNotificationReloadKey] = useState(0)
+
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const [focusStudentCourseId, setFocusStudentCourseId] =
     useState<string | null>(null)
 
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const [courseStatusFilter, setCourseStatusFilter] = useState<
+    "all" | CoursePublicationState
+  >( "all")
+
+  const [coursePublicationOverrides, setCoursePublicationOverrides] = useState<
+    Record<string, CoursePublicationState>
+  >({})
+
+  const [approvedStudentIds, setApprovedStudentIds] = useState<Set<string>>(
+    () => new Set(),
+  )
 
   const [, setActionFeedbackState] = useState("")
 
@@ -645,18 +696,72 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const { data, error, loading } = useApiQuery(section.load, reloadKey)
 
+  const loadNotifications = useCallback(() => notificationsApi.list(), [])
+  const { data: notificationData } = useApiQuery(
+    loadNotifications,
+    notificationReloadKey,
+  )
+  const unreadNotifications = useMemo(() => {
+    const payload = unwrapApiResponse(notificationData)
+    if (isRecord(payload)) {
+      const summary = isRecord(payload.summary) ? payload.summary : payload
+      const count = Number(
+        summary.unreadCount ?? summary.unreadNotificationsCount,
+      )
+      if (Number.isFinite(count) && count >= 0) return Math.floor(count)
+    }
+    return getNotificationRecords(payload).filter(isUnreadNotification).length
+  }, [notificationData])
+
+  useEffect(() => {
+    const refresh = () => {
+      setNotificationReloadKey((key) => key + 1)
+      if (activeKey === "notifications") setReloadKey((key) => key + 1)
+    }
+    const interval = window.setInterval(refresh, 30_000)
+    window.addEventListener("focus", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [activeKey])
+
   const [accountName, setAccountName] = useState(
     () => window.sessionStorage.getItem("eduhub.auth.name") ?? "",
   )
+  const [accountImage, setAccountImage] = useState(
+    () => window.sessionStorage.getItem("eduhub.auth.image") ?? "",
+  )
 
   useEffect(() => {
-    const profile = isRecord(data) ? (data.profile ?? data) : data
+    const response = unwrapApiResponse(data)
+    const profile = isRecord(response)
+      ? (response.profile ?? response)
+      : response
     const name = profileDisplayName(profile)
-    if (!name) return
-
-    window.sessionStorage.setItem("eduhub.auth.name", name)
-    setAccountName(name)
+    const image = profileDisplayImage(profile)
+    if (name) {
+      window.sessionStorage.setItem("eduhub.auth.name", name)
+      setAccountName(name)
+    }
+    if (image) {
+      window.sessionStorage.setItem("eduhub.auth.image", image)
+      setAccountImage(image)
+    }
   }, [data])
+
+  useEffect(() => {
+    const updateImage = (event: Event) => {
+      const image = (event as CustomEvent<string>).detail
+      const nextImage = typeof image === "string" ? image : ""
+      setAccountImage(nextImage)
+      if (nextImage) window.sessionStorage.setItem("eduhub.auth.image", nextImage)
+      else window.sessionStorage.removeItem("eduhub.auth.image")
+    }
+    window.addEventListener("eduhub:profile-image-updated", updateImage)
+    return () =>
+      window.removeEventListener("eduhub:profile-image-updated", updateImage)
+  }, [])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -675,14 +780,46 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     }
   }, [mobileNavOpen])
 
-  const records = getRecords(data)
+  const responseData = unwrapApiResponse(data)
+  const rawRecords = getRecords(responseData)
+  const publicationStateOf = (course: Record<string, unknown>) => {
+    const id = String(course.courseId ?? course.id ?? "")
+    return coursePublicationOverrides[id] ?? getCoursePublicationState(course)
+  }
+  const records = activeKey === "pending"
+    ? rawRecords.filter((record) => {
+        const studentId = String(record.studentId ?? record.userId ?? record.id ?? "")
+        return !approvedStudentIds.has(studentId)
+      })
+    : rawRecords
+
+  const isAdminCourseSection = role.includes("admin") && activeKey === "courses"
+  const displayedRecords = isAdminCourseSection
+    ? records.filter(
+        (record) =>
+          courseStatusFilter === "all" ||
+          publicationStateOf(record) === courseStatusFilter,
+      )
+    : records
+  const courseStatusCounts = {
+    all: records.length,
+    published: records.filter(
+      (record) => publicationStateOf(record) === "published",
+    ).length,
+    unpublished: records.filter(
+      (record) => publicationStateOf(record) === "unpublished",
+    ).length,
+    draft: records.filter(
+      (record) => publicationStateOf(record) === "draft",
+    ).length,
+  }
 
   const teacherStats =
     role.includes("teacher") &&
     activeKey === "overview" &&
-    isRecord(data) &&
-    isRecord(data.stats)
-      ? Object.entries(data.stats).filter(
+    isRecord(responseData) &&
+    isRecord(responseData.stats)
+      ? Object.entries(responseData.stats).filter(
           ([key, value]) =>
             !/(id|token|password)/i.test(key) &&
             (typeof value === "number" || typeof value === "boolean"),
@@ -690,14 +827,16 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       : []
 
   const adminMetrics =
-    role.includes("admin") && activeKey === "stats" ? getAdminMetrics(data) : []
+    role.includes("admin") && activeKey === "stats"
+      ? getAdminMetrics(responseData)
+      : []
 
   const studentOverview =
     !role.includes("admin") &&
     !role.includes("teacher") &&
     activeKey === "overview" &&
-    isRecord(data)
-      ? data
+    isRecord(responseData)
+      ? responseData
       : null
   const studentOverviewCourses = getEnrollmentRecords(
     studentOverview?.enrollments,
@@ -707,10 +846,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const paginationData =
     role.includes("teacher") &&
     activeKey === "enrollments" &&
-    isRecord(data) &&
-    isRecord(data.requests)
-      ? data.requests
-      : data
+    isRecord(responseData) &&
+    isRecord(responseData.requests)
+      ? responseData.requests
+      : responseData
 
   const pagination =
     isRecord(paginationData) && typeof paginationData.totalPages === "number"
@@ -719,6 +858,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const showGenericRecords =
     !(role.includes("admin") && activeKey === "stats") &&
+    activeKey !== "profile" &&
     !(
       role.includes("teacher") && ["overview", "courses"].includes(activeKey)
     ) &&
@@ -780,10 +920,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         await (approve
           ? enrollmentsApi.adminApprove(id)
           : enrollmentsApi.adminReject(id))
-      } else {
+      } else if (role.includes("teacher")) {
         await (approve
           ? teachersApi.approveEnrollment(id)
           : teachersApi.rejectEnrollment(id))
+      } else {
+        setActionFeedback("هذا الإجراء متاح للأدمن والمدرّس فقط.")
+        return false
       }
 
       setActionFeedback(approve ? "تمت الموافقة على الطلب." : "تم رفض الطلب.")
@@ -792,6 +935,15 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
       return true
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : ""
+      const alreadyHandled =
+        (cause instanceof ApiError && cause.status === 409) ||
+        /already|approved|accepted|processed|مقبول|تمت الموافقة|سبق/i.test(message)
+      if (approve && alreadyHandled) {
+        setActionFeedback("الطلب تمت الموافقة عليه بالفعل.")
+        setReloadKey((key) => key + 1)
+        return true
+      }
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الطلب.",
       )
@@ -814,6 +966,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       setActionFeedback("تم تحديث حالة الإشعارات.")
 
       setReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1)
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الإشعارات.",
@@ -823,7 +976,60 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     }
   }
 
+  async function handleNotificationDelete(id: string) {
+    setActionFeedback("")
+    setActionLoading(`delete-notification-${id}`)
+    try {
+      await notificationsApi.remove(id)
+      const remaining = getNotificationRecords(await notificationsApi.list())
+      const stillExists = remaining.some(
+        (notification) =>
+          String(notification.id ?? notification.notificationId ?? "") === id,
+      )
+      if (stillExists) {
+        throw new Error("الخادم استقبل طلب الحذف لكن الإشعار ما زال موجودًا.")
+      }
+      setActionFeedback("تم حذف الإشعار.")
+      setReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1)
+    } catch (cause) {
+      setActionFeedback(
+        cause instanceof Error ? cause.message : "تعذر حذف الإشعار.",
+      )
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleDeleteAllNotifications() {
+    if (!window.confirm("سيتم حذف جميع الإشعارات نهائيًا. هل تريد المتابعة؟"))
+      return
+    setActionFeedback("")
+    setActionLoading("delete-all-notifications")
+    try {
+      await notificationsApi.removeAll()
+      const remaining = getNotificationRecords(await notificationsApi.list())
+      if (remaining.length > 0) {
+        throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.")
+      }
+      setActionFeedback("تم حذف جميع الإشعارات.")
+      setReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1)
+    } catch (cause) {
+      setActionFeedback(
+        cause instanceof Error ? cause.message : "تعذر حذف الإشعارات.",
+      )
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   async function handlePendingStudent(id: string, approve: boolean) {
+    if (!role.includes("admin")) {
+      setActionFeedback("اعتماد حسابات الطلاب متاح للأدمن فقط.")
+      return
+    }
+
     if (
       !approve &&
       !window.confirm("سيتم رفض طلب الطالب وحذفه. هل تريد المتابعة؟")
@@ -838,10 +1044,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       if (approve) await adminApi.approveStudent(id)
       else await adminApi.rejectStudent(id)
 
+      if (approve) {
+        setApprovedStudentIds((current) => new Set(current).add(id))
+      }
       setActionFeedback(approve ? "تم اعتماد حساب الطالب." : "تم رفض الطلب.")
 
       setReloadKey((key) => key + 1)
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : ""
+      const alreadyApproved =
+        approve &&
+        ((cause instanceof ApiError && cause.status === 409) ||
+          /already|approved|accepted|مقبول|تم اعتماده|تمت الموافقة|سبق/i.test(message))
+      if (alreadyApproved) {
+        setApprovedStudentIds((current) => new Set(current).add(id))
+        setActionFeedback("حساب الطالب معتمد بالفعل.")
+        setReloadKey((key) => key + 1)
+        return
+      }
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث طلب الطالب.",
       )
@@ -851,6 +1071,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   }
 
   async function handleCoursePublish(id: string, publish: boolean) {
+    const currentCourse = rawRecords.find(
+      (course) => String(course.id ?? course.courseId ?? "") === id,
+    )
+    if (
+      currentCourse &&
+      (publicationStateOf(currentCourse) === "published") === publish
+    ) {
+      setActionFeedback(
+        publish ? "الدورة منشورة بالفعل." : "الدورة غير منشورة بالفعل.",
+      )
+      return
+    }
+
     setActionFeedback("")
 
     setActionLoading(`${id}-publish`)
@@ -859,13 +1092,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       if (role.includes("admin")) {
         if (publish) await adminApi.publishCourse(id)
         else await adminApi.unpublishCourse(id)
-      } else {
+      } else if (role.includes("teacher")) {
         if (publish) await teachersApi.publishCourse(id)
         else await teachersApi.unpublishCourse(id)
+      } else {
+        setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.")
+        return
       }
 
+      setCoursePublicationOverrides((current) => ({
+        ...current,
+        [id]: publish ? "published" : "unpublished",
+      }))
       setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.")
-
       setReloadKey((key) => key + 1)
     } catch (cause) {
       setActionFeedback(
@@ -948,21 +1187,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     window.sessionStorage.removeItem("eduhub.auth.role")
     window.sessionStorage.removeItem("eduhub.auth.name")
+    window.sessionStorage.removeItem("eduhub.auth.image")
 
     navigate("landing")
   }
 
-  const roleCardTone = role.includes("admin")
-    ? "border-nuwa-base/15 bg-white"
-    : role.includes("teacher")
-      ? "border-blue-100 bg-blue-50/70"
-      : "border-emerald-100 bg-emerald-50/70"
+  const roleCardTone = "border-emerald-900/10 bg-surface"
 
-  const roleCellTone = role.includes("admin")
-    ? "bg-nuwa-soft"
-    : role.includes("teacher")
-      ? "bg-blue-100/45"
-      : "bg-emerald-100/45"
+  const roleCellTone = "bg-nuwa-soft/70"
 
   const roleBadge = role.includes("admin")
     ? {
@@ -978,14 +1210,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
           badge: "معلم",
 
-          color: "bg-blue-100 text-blue-700",
+          color: "bg-nuwa-soft text-nuwa-base",
         }
       : {
           title: "مساحة الطالب",
 
           badge: "طالب",
 
-          color: "bg-emerald-100 text-emerald-700",
+          color: "bg-nuwa-soft text-nuwa-base",
         }
 
   const sectionLabels: Record<string, string> = {
@@ -1015,20 +1247,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   }
 
   return (
-    <div className="min-h-dvh bg-canvas pb-10 dir-rtl sm:pb-16">
+    <div className="dashboard-shell min-h-dvh bg-canvas pb-10 dir-rtl sm:pb-16">
       {/* Top Header Navigation */}
-      <header
-        className={`relative z-30 border-b-2 bg-surface/95 backdrop-blur-md lg:sticky lg:top-0 ${
-          role.includes("admin")
-            ? "border-nuwa-base"
-            : role.includes("teacher")
-              ? "border-blue-400"
-              : "border-emerald-400"
-        }`}
-      >
+      <header className="relative z-30 border-b border-emerald-900/10 bg-surface/90 backdrop-blur-xl lg:sticky lg:top-0 lg:mr-[300px] lg:ml-4 lg:mt-4 lg:rounded-[28px] lg:border-0 lg:shadow-sm">
         <div
           dir="ltr"
-          className="mx-auto flex min-h-[68px] max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 lg:px-8"
+          className="mx-auto flex min-h-[68px] max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 lg:px-6"
         >
           <button
             type="button"
@@ -1044,7 +1268,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             dir="rtl"
             className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3"
           >
-            <NuwaLogo size="sm" className="shrink-0" />
+            <NuwaLogo size="sm" className="shrink-0 lg:hidden" />
             <div className="hidden">
               <svg
                 className="h-6 w-6"
@@ -1060,16 +1284,18 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 />
               </svg>
             </div>
-            <div className="hidden">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate text-base font-bold text-ink sm:text-xl">
-                  {roleBadge.title}
-                </h1>
+            <div className="hidden min-w-0 flex-1 items-center justify-end gap-3 md:flex">
+              <div className="min-w-0 text-end">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {accountName || roleBadge.title}
+                </p>
+                <p className="text-xs text-ink-muted">{roleBadge.badge}</p>
               </div>
-              <p className="max-w-[42vw] truncate text-[10px] text-ink-muted sm:max-w-none sm:text-xs">
-                {accountName ? `أهلًا ${accountName} · ` : ""}مرحبًا بك في منصة
-                وَعي
-              </p>
+              <PersonAvatar
+                name={accountName || roleBadge.badge}
+                imageUrl={accountImage}
+                size="sm"
+              />
             </div>
           </div>
 
@@ -1100,16 +1326,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             type="button"
             aria-label="إغلاق القائمة"
             onClick={() => setMobileNavOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+            className="fixed inset-0 z-40 bg-neutral-950/45 backdrop-blur-[2px] lg:hidden"
           />
         )}
         <aside
           id="dashboard-sidebar"
           aria-label="القائمة الرئيسية"
-          className={`fixed inset-y-0 right-0 left-auto z-50 h-dvh w-[min(86vw,320px)] overflow-y-auto overscroll-contain border-l border-stroke bg-white p-4 shadow-2xl transition-transform duration-200 lg:fixed lg:inset-y-auto lg:right-0 lg:left-auto lg:top-[68px] lg:z-20 lg:h-[calc(100dvh-68px)] lg:w-64 lg:translate-x-0 lg:shadow-none ${
+          className={`fixed inset-y-0 right-0 left-auto z-50 h-dvh w-[min(86vw,320px)] overflow-y-auto overscroll-contain border-l border-stroke bg-white p-4 shadow-2xl transition-transform duration-200 lg:fixed lg:inset-y-4 lg:right-4 lg:left-auto lg:top-4 lg:z-20 lg:h-[calc(100dvh-2rem)] lg:w-[280px] lg:rounded-[28px] lg:border-0 lg:shadow-nuwa-md lg:translate-x-0 ${
             mobileNavOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
+          <div className="mb-6 hidden items-center justify-between lg:flex">
+            <NuwaLogo size="sm" />
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadge.color}`}
+            >
+              {roleBadge.badge}
+            </span>
+          </div>
           <div className="mb-5 flex items-center justify-between lg:hidden">
             <span className="font-bold text-ink">القائمة الرئيسية</span>
             <button
@@ -1129,7 +1363,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
               <p className="mt-1 truncate text-sm font-bold">{accountName}</p>
             )}
           </div>
-          <p className="mb-2 px-3 text-[11px] font-bold text-slate-400">
+          <p className="mb-2 px-3 text-[11px] font-bold text-neutral-400">
             القائمة الرئيسية
           </p>
           <nav className="grid gap-1" aria-label="أقسام لوحة التحكم">
@@ -1141,7 +1375,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
                 overview: LayoutDashboard,
 
-                profile: GraduationCap,
+                profile: CircleUserRound,
 
                 courses: BookOpen,
 
@@ -1177,18 +1411,31 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     setMobileNavOpen(false)
                   }}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition ${
+                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition ${
                     isActive
                       ? "bg-nuwa-soft text-nuwa-base"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-ink"
+                      : "text-neutral-600 hover:bg-neutral-50 hover:text-ink"
                   }`}
                 >
-                  <Icon size={18} />
+                  <span className="relative grid size-5 shrink-0 place-items-center">
+                    <Icon size={18} />
+                    {item.key === "notifications" &&
+                      unreadNotifications > 0 && (
+                        <span
+                          aria-label={`${unreadNotifications} إشعار غير مقروء`}
+                          className="absolute -right-3 -top-2 grid min-h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+                        >
+                          {unreadNotifications > 99
+                            ? "99+"
+                            : unreadNotifications}
+                        </span>
+                      )}
+                  </span>
                   <span className="min-w-0 flex-1">
                     {sectionLabels[item.key] ?? item.label}
                   </span>
                   {isActive && (
-                    <span className="size-1.5 rounded-full bg-nuwa-base" />
+                    <span className="absolute bottom-2 right-0 top-2 w-1 rounded-l-full bg-nuwa-base" />
                   )}
                 </button>
               )
@@ -1196,7 +1443,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
           </nav>
           <button
             onClick={() => navigate("landing")}
-            className="mt-6 flex w-full items-center gap-3 border-t border-slate-100 px-3 pt-5 text-sm font-semibold text-slate-500 hover:text-nuwa-base"
+            className="mt-6 flex w-full items-center gap-3 border-t border-neutral-100 px-3 pt-5 text-sm font-semibold text-neutral-500 hover:text-nuwa-base"
           >
             <GraduationCap size={18} />
             العودة للمنصة
@@ -1209,11 +1456,22 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             <LogOut size={18} />
             تسجيل الخروج
           </button>
+          <div
+            aria-hidden="true"
+            className="relative mt-5 hidden h-40 overflow-hidden rounded-2xl bg-[#0b3b25] lg:block"
+            style={{
+              backgroundImage:
+                "repeating-radial-gradient(circle at 100% 100%, transparent 0 10px, rgb(66 168 121 / 25%) 11px 12px), linear-gradient(135deg, #0b3b25, #176b43)",
+            }}
+          >
+            <span className="absolute -bottom-10 -left-8 size-28 rounded-full border-[14px] border-white/10" />
+            <span className="absolute bottom-5 left-5 size-3 rounded-full bg-emerald-300 shadow-[0_0_20px_rgb(110_231_183_/_80%)]" />
+          </div>
         </aside>
-        <main className="min-w-0 flex-1 px-3 pb-8 pt-4 sm:px-6 sm:pt-6 lg:mr-64 lg:px-8">
-          <div className="mx-auto max-w-7xl">
+        <main className="min-w-0 flex-1 px-3 pb-8 pt-4 sm:px-6 sm:pt-6 lg:mr-[300px] lg:ml-4 lg:px-0 lg:pt-4">
+          <div className="mx-auto max-w-[1600px]">
             {/* Action Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:gap-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-stroke/70 bg-surface p-4 shadow-nuwa sm:gap-4 sm:p-6">
               <div>
                 <h1 className="text-lg font-bold text-ink sm:text-xl">
                   {roleBadge.title}
@@ -1226,13 +1484,22 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 {activeKey === "notifications" && (
-                  <button
-                    onClick={() => void handleMarkRead()}
-                    disabled={actionLoading === "read-all"}
-                    className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-stroke bg-canvas px-3 py-2 text-xs font-semibold text-ink transition-all hover:bg-surface active:scale-95 disabled:opacity-50 sm:flex-none"
-                  >
-                    قراءة الكل
-                  </button>
+                  <>
+                    <button
+                      onClick={() => void handleMarkRead()}
+                      disabled={actionLoading === "read-all"}
+                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-stroke bg-canvas px-3 py-2 text-xs font-semibold text-ink transition-all hover:bg-surface active:scale-95 disabled:opacity-50 sm:flex-none"
+                    >
+                      قراءة الكل
+                    </button>
+                    <button
+                      onClick={() => void handleDeleteAllNotifications()}
+                      disabled={actionLoading === "delete-all-notifications"}
+                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50 sm:flex-none"
+                    >
+                      <Trash2 size={14} /> حذف الكل
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setReloadKey((key) => key + 1)}
@@ -1298,24 +1565,63 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
               </form>
             )}
 
+            {isAdminCourseSection && (
+              <div
+                role="group"
+                aria-label="تصفية الدورات حسب حالة النشر"
+                className="mt-5 flex flex-wrap gap-2 rounded-2xl border border-stroke bg-surface p-3"
+              >
+                {([
+                  ["all", "كل الدورات"],
+                  ["published", "منشورة"],
+                  ["unpublished", "غير منشورة"],
+                  ["draft", "مسودات"],
+                ] as const).map(([status, label]) => (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={courseStatusFilter === status}
+                    onClick={() => setCourseStatusFilter(status)}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${courseStatusFilter === status ? "bg-nuwa-base text-white shadow-sm" : "bg-white text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"}`}
+                  >
+                    {label}
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${courseStatusFilter === status ? "bg-white/15 text-white" : "bg-canvas text-ink-muted"}`}>
+                      {courseStatusCounts[status]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Data Cards Section */}
             <div className="mt-6">
               {teacherStats.length > 0 && (
-                <dl className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {teacherStats.map(([key, value]) => (
-                    <div
-                      key={key}
-                      className={`rounded-xl border p-4 shadow-sm ${roleCardTone}`}
-                    >
-                      <dt className="text-sm font-medium text-ink-muted">
-                        {fieldLabels[key] ?? key}
-                      </dt>
-                      <dd className="mt-2 text-2xl font-bold text-nuwa-deep">
-                        {formatValue(key, value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                <>
+                  <dl className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {teacherStats.map(([key, value]) => (
+                      <div
+                        key={key}
+                        className={`rounded-xl border p-4 shadow-sm ${roleCardTone}`}
+                      >
+                        <dt className="text-sm font-medium text-ink-muted">
+                          {fieldLabels[key] ?? key}
+                        </dt>
+                        <dd className="mt-2 text-2xl font-bold text-nuwa-deep">
+                          {formatValue(key, value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <MetricBarChart
+                    title="تحليل مؤشرات المعلم"
+                    description="مقارنة القيم الحالية لأبرز المؤشرات"
+                    metrics={teacherStats.map(([key, value]) => ({
+                      key,
+                      label: fieldLabels[key] ?? key,
+                      value: Number(value),
+                    }))}
+                  />
+                </>
               )}
               {role.includes("admin") &&
                 activeKey === "stats" &&
@@ -1355,30 +1661,61 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     <div className="p-4 sm:p-6">
                       {adminMetrics.length ? (
                         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                          {adminMetrics.map(({ key, label, value, Icon }) => (
-                            <div
-                              key={key}
-                              className="flex items-center gap-4 rounded-xl border border-stroke bg-canvas/70 p-4"
-                            >
-                              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
-                                <Icon size={20} />
-                              </span>
-                              <div className="min-w-0">
-                                <dt className="truncate text-sm font-medium text-ink-muted">
-                                  {label}
-                                </dt>
-                                <dd className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                                  {formatValue(key, value)}
-                                </dd>
+                          {adminMetrics.map(
+                            ({ key, label, value, Icon }, index) => (
+                              <div
+                                key={key}
+                                className={`flex items-center gap-4 rounded-[22px] border p-4 ${
+                                  index === 0
+                                    ? "border-nuwa-deep bg-nuwa-deep text-white shadow-nuwa-md"
+                                    : "border-stroke bg-canvas/70"
+                                }`}
+                              >
+                                <span
+                                  className={`grid size-11 shrink-0 place-items-center rounded-xl ${
+                                    index === 0
+                                      ? "bg-white/15 text-white"
+                                      : "bg-nuwa-soft text-nuwa-base"
+                                  }`}
+                                >
+                                  <Icon size={20} />
+                                </span>
+                                <div className="min-w-0">
+                                  <dt
+                                    className={`truncate text-sm font-medium ${
+                                      index === 0
+                                        ? "text-white/75"
+                                        : "text-ink-muted"
+                                    }`}
+                                  >
+                                    {label}
+                                  </dt>
+                                  <dd
+                                    className={`mt-1 text-2xl font-bold tabular-nums ${
+                                      index === 0 ? "text-white" : "text-ink"
+                                    }`}
+                                  >
+                                    {formatValue(key, value)}
+                                  </dd>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ),
+                          )}
                         </dl>
                       ) : (
                         <p className="rounded-xl border border-dashed border-stroke-strong px-4 py-6 text-center text-sm text-ink-muted">
                           لا تتوفر مؤشرات رقمية لعرضها حالياً.
                         </p>
                       )}
+                      <MetricBarChart
+                        title="تحليل مؤشرات المنصة"
+                        description="مقارنة القيم الحالية لأبرز المؤشرات"
+                        metrics={adminMetrics.map(({ key, label, value }) => ({
+                          key,
+                          label,
+                          value,
+                        }))}
+                      />
                       <div className="mt-6">
                         <h4 className="text-sm font-bold text-ink">
                           الوصول السريع
@@ -1474,12 +1811,25 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     </p>
                   </div>
                   <div className="p-4 sm:p-6">
+                    {typeof studentOverview.enrollmentsError === "string" && (
+                      <p
+                        role="status"
+                        className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                      >
+                        تعذر تحميل ملخص الدورات الآن. يمكنك فتح قسم الدورات
+                        والمحاولة مرة أخرى.
+                      </p>
+                    )}
                     {(() => {
                       const pendingCount = studentOverviewCourses.filter(
                         (enrollment) =>
                           enrollment.isApproved === false ||
                           /pending|await|review/i.test(
-                            String(enrollment.status ?? ""),
+                            String(
+                              enrollment.status ??
+                                enrollment.enrollmentStatus ??
+                                "",
+                            ),
                           ),
                       ).length
                       const progressValues = studentOverviewCourses
@@ -1487,18 +1837,15 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                           (enrollment) =>
                             enrollment.isApproved !== false &&
                             !/pending|await|review|reject|declin|cancel/i.test(
-                              String(enrollment.status ?? ""),
+                              String(
+                                enrollment.status ??
+                                  enrollment.enrollmentStatus ??
+                                  "",
+                              ),
                             ),
                         )
-                        .map((enrollment) =>
-                          Number(enrollment.progressPercentage),
-                        )
-                        .filter(
-                          (value) =>
-                            Number.isFinite(value) &&
-                            value >= 0 &&
-                            value <= 100,
-                        )
+                        .map(enrollmentProgressPercent)
+                        .filter((value): value is number => value !== null)
                       const averageProgress = progressValues.length
                         ? Math.round(
                             progressValues.reduce(
@@ -1546,6 +1893,35 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               </div>
                             ))}
                           </dl>
+                          <MetricBarChart
+                            title="مخطط تقدم الدورات"
+                            description="نسبة الإنجاز في الدورات المسجل بها"
+                            metrics={studentOverviewCourses.map(
+                              (enrollment, index) => {
+                                const course = isRecord(enrollment.course)
+                                  ? enrollment.course
+                                  : {}
+                                const progress =
+                                  enrollmentProgressPercent(enrollment) ?? 0
+
+                                return {
+                                  key: String(
+                                    enrollment.id ??
+                                      enrollment.courseId ??
+                                      index,
+                                  ),
+                                  label: String(
+                                    enrollment.courseTitle ??
+                                      enrollment.courseName ??
+                                      course.title ??
+                                      course.name ??
+                                      `دورة ${index + 1}`,
+                                  ),
+                                  value: Math.round(progress),
+                                }
+                              },
+                            )}
+                          />
                           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <h4 className="text-base font-bold text-ink">
@@ -1586,14 +1962,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                     course.title ??
                                     course.name ??
                                     `دورة ${index + 1}`
-                                  const progressValue = Number(
-                                    enrollment.progressPercentage ?? 0,
-                                  )
-                                  const progressPercent = Number.isFinite(
-                                    progressValue,
-                                  )
-                                    ? Math.max(0, Math.min(100, progressValue))
-                                    : 0
+                                  const progressPercent =
+                                    enrollmentProgressPercent(enrollment) ?? 0
                                   const teacher = isRecord(enrollment.teacher)
                                     ? enrollment.teacher
                                     : isRecord(course.teacher)
@@ -1607,7 +1977,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   const canOpenCourse =
                                     enrollment.isApproved !== false &&
                                     !/pending|await|review|reject|declin|cancel/i.test(
-                                      String(enrollment.status ?? ""),
+                                      String(
+                                        enrollment.status ??
+                                          enrollment.enrollmentStatus ??
+                                          "",
+                                      ),
                                     )
 
                                   return (
@@ -1623,7 +1997,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                         </h5>
                                         <span className="shrink-0 rounded-full bg-nuwa-soft px-2.5 py-1 text-[11px] font-semibold text-nuwa-base">
                                           {enrollmentStatusLabel(
-                                            enrollment.status,
+                                            enrollment.status ??
+                                              enrollment.enrollmentStatus,
                                             enrollment.isApproved,
                                           )}
                                         </span>
@@ -1795,7 +2170,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   </div>
                 </form>
               )}
-              {role.includes("teacher") && activeKey === "enrollments" ? (
+              {(role.includes("teacher") || role.includes("admin")) &&
+              activeKey === "enrollments" ? (
                 <TeacherEnrollmentRequests
                   data={
                     useTeacherEnrollmentMock
@@ -1815,14 +2191,38 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 <ApiQueryState
                   loading={loading}
                   error={error}
-                  isEmpty={Boolean(data && records.length === 0)}
+                  isEmpty={Boolean(
+                    data && displayedRecords.length === 0 && showGenericRecords,
+                  )}
                   emptyMessage="لا توجد بيانات متاحة لعرضها في هذا القسم حالياً."
                   onRetry={() => setReloadKey((key) => key + 1)}
                 >
                   {showGenericRecords && (
-                    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2">
-                      {records.map((record, index) => {
-                        const id = formatValue("id", record.id)
+                    <div
+                      className={
+                        activeKey === "notifications"
+                          ? "grid gap-3"
+                          : "grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
+                      }
+                    >
+                      {displayedRecords.map((record, index) => {
+                        const recordId = activeKey === "notifications"
+                          ? (record.id ?? record.notificationId)
+                          : activeKey === "pending"
+                            ? (record.studentId ?? record.userId ?? record.id)
+                            : activeKey === "enrollments"
+                              ? (record.enrollmentId ?? record.requestId ?? record.id)
+                              : activeKey === "courses"
+                                ? (record.courseId ?? record.id)
+                                : record.id
+                        const id = formatValue("id", recordId)
+                        const unread =
+                          activeKey === "notifications" &&
+                          isUnreadNotification(record)
+                        const publicationState =
+                          activeKey === "courses"
+                            ? publicationStateOf(record)
+                            : null
 
                         const title = formatValue(
                           "title",
@@ -1834,19 +2234,210 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             `عنصر #${index + 1}`,
                         )
 
+                        if (activeKey === "notifications") {
+                          const sender = isRecord(record.sender)
+                            ? record.sender
+                            : isRecord(record.actor)
+                              ? record.actor
+                              : {}
+                          const senderName = String(
+                            record.senderName ??
+                              record.actorName ??
+                              sender.fullName ??
+                              sender.name ??
+                              "إشعار من المنصة",
+                          )
+                          const message =
+                            record.message ??
+                            record.body ??
+                            record.description ??
+                            record.content ??
+                            record.text ??
+                            record.details
+                          const createdAt =
+                            record.createdAt ??
+                            record.sentAt ??
+                            record.createdOn ??
+                            record.date
+                          const details = Object.entries(record).filter(
+                            ([key, value]) =>
+                              !/(^id$|id$|token|password|image|url|isread|isunread|readat|message|body|description|content|text|details|title|subject|sender|actor|createdat|sentat|createdon|date)/i.test(
+                                key,
+                              ) &&
+                              value !== null &&
+                              ["string", "number", "boolean"].includes(
+                                typeof value,
+                              ),
+                          )
+
+                          return (
+                            <article
+                              key={id === "—" ? index : id}
+                              className={`rounded-2xl border p-4 shadow-sm transition-colors sm:p-5 ${
+                                unread
+                                  ? "border-emerald-200 bg-emerald-50/80"
+                                  : "border-stroke bg-white"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <PersonAvatar
+                                  name={senderName}
+                                  imageUrl={String(
+                                    sender.avatarUrl ??
+                                      sender.profileImageUrl ??
+                                      "",
+                                  )}
+                                  size="sm"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <h3 className="font-bold text-ink">
+                                        {String(
+                                          record.title ??
+                                            record.subject ??
+                                            record.eventName ??
+                                            title,
+                                        )}
+                                      </h3>
+                                      <span
+                                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                          unread
+                                            ? "bg-emerald-700 text-white"
+                                            : "bg-neutral-200 text-neutral-600"
+                                        }`}
+                                      >
+                                        {unread ? "غير مقروء" : "مقروء"}
+                                      </span>
+                                    </div>
+                                    {createdAt != null && (
+                                      <time className="text-xs text-ink-muted">
+                                        <FormattedCardValue
+                                          field="createdAt"
+                                          value={createdAt}
+                                        />
+                                      </time>
+                                    )}
+                                  </div>
+                                  <p className="mt-1 text-xs text-ink-muted">
+                                    {senderName}
+                                  </p>
+                                  {message != null && (
+                                    <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-ink">
+                                      <FormattedCardValue
+                                        field="message"
+                                        value={message}
+                                      />
+                                    </p>
+                                  )}
+                                  {details.length > 0 && (
+                                    <dl className="mt-3 grid gap-2 border-t border-emerald-900/10 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+                                      {details.map(([key, value]) => (
+                                        <div key={key} className="min-w-0">
+                                          <dt className="text-[11px] font-medium text-ink-muted">
+                                            {fieldLabels[key] ?? key}
+                                          </dt>
+                                          <dd className="mt-0.5 break-words text-xs font-medium text-ink">
+                                            <FormattedCardValue
+                                              field={key}
+                                              value={value}
+                                            />
+                                          </dd>
+                                        </div>
+                                      ))}
+                                    </dl>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-emerald-900/10 pt-3">
+                                {unread ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleMarkRead(id)}
+                                    disabled={actionLoading === `read-${id}`}
+                                    className="rounded-lg px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+                                  >
+                                    تحديد كمقروء
+                                  </button>
+                                ) : (
+                                  <span className="px-3 py-2 text-xs text-ink-muted">
+                                    تم الاطلاع على هذا الإشعار
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void handleNotificationDelete(id)}
+                                  disabled={
+                                    actionLoading === `delete-notification-${id}`
+                                  }
+                                  aria-label={`حذف الإشعار: ${title}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                                >
+                                  <Trash2 size={14} /> حذف الإشعار
+                                </button>
+                              </div>
+                            </article>
+                          )
+                        }
+
                         return (
                           <article
                             key={id === "—" ? index : id}
-                            className={`flex flex-col justify-between rounded-2xl border p-5 shadow-nuwa transition-all hover:-translate-y-0.5 hover:shadow-nuwa-md ${roleCardTone}`}
+                            className={`flex flex-col justify-between rounded-2xl border p-5 shadow-nuwa transition-all hover:-translate-y-0.5 hover:shadow-nuwa-md ${roleCardTone} ${
+                              unread ? "border-emerald-200 bg-emerald-50/50" : ""
+                            }`}
                           >
                             <div>
                               {/* Card Header */}
-                              <div className="flex items-start justify-between gap-3 border-b border-stroke/60 pb-3">
-                                <h3 className="font-bold text-ink sm:text-base">
-                                  {activeKey === "students"
-                                    ? getStudentName(record)
-                                    : title}
-                                </h3>
+                              <div className="flex items-center justify-between gap-3 border-b border-stroke/60 pb-4">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  {["students", "teachers"].includes(
+                                    activeKey,
+                                  ) && (
+                                    <PersonAvatar
+                                      name={
+                                        activeKey === "students"
+                                          ? getStudentName(record)
+                                          : title
+                                      }
+                                      imageUrl={String(
+                                        record.avatarUrl ??
+                                          record.profileImageUrl ??
+                                          record.imageUrl ??
+                                          "",
+                                      )}
+                                      size="md"
+                                      status={
+                                        record.isApproved === true ||
+                                        record.isActive === true
+                                          ? "active"
+                                          : record.isApproved === false
+                                            ? "pending"
+                                            : undefined
+                                      }
+                                    />
+                                  )}
+                                  <div className="min-w-0">
+                                    <h3 className="truncate font-bold text-ink sm:text-base">
+                                      {activeKey === "students"
+                                        ? getStudentName(record)
+                                        : title}
+                                    </h3>
+                                    {["students", "teachers"].includes(
+                                      activeKey,
+                                    ) && (
+                                      <p className="mt-1 truncate text-xs text-ink-muted">
+                                        {String(
+                                          record.email ??
+                                            record.phoneNumber ??
+                                            (activeKey === "students"
+                                              ? "طالب"
+                                              : "مدرس"),
+                                        )}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                                 {activeKey !== "students" && id !== "—" && (
                                   <span className="rounded-md bg-canvas px-2 py-1 font-mono text-[10px] text-ink-muted">
                                     #{id.slice(-6)}
@@ -1854,6 +2445,23 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 )}
                               </div>
 
+                              {publicationState && (
+                                <span
+                                  className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                    publicationState === "published"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : publicationState === "draft"
+                                        ? "bg-amber-100 text-amber-900"
+                                        : "bg-neutral-100 text-neutral-600"
+                                  }`}
+                                >
+                                  {publicationState === "published"
+                                    ? "منشورة"
+                                    : publicationState === "draft"
+                                      ? "مسودة"
+                                      : "غير منشورة"}
+                                </span>
+                              )}
                               {/* Card Key-Value Grid */}
                               <dl
                                 className={`mt-4 grid grid-cols-1 gap-x-4 gap-y-3 text-xs sm:grid-cols-2 ${
@@ -1893,12 +2501,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 />
                               ) : (
                                 cardFields(record).length > 4 && (
-                                  <details className="mt-3 rounded-xl border border-slate-200 bg-white">
+                                  <details className="mt-3 rounded-xl border border-neutral-200 bg-white">
                                     <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-nuwa-base">
                                       عرض تفاصيل أكثر (
                                       {cardFields(record).length - 4})
                                     </summary>
-                                    <dl className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2">
+                                    <dl className="grid gap-2 border-t border-neutral-100 p-3 sm:grid-cols-2">
                                       {cardFields(record)
 
                                         .slice(4)
@@ -1968,7 +2576,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                       void handleCoursePublish(id, true)
                                     }
                                     disabled={actionLoading === `${id}-publish`}
-                                    className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                    className={`${publicationState === "published" ? "hidden" : ""} rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50`}
                                   >
                                     نشر الدورة
                                   </button>
@@ -1978,7 +2586,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                       void handleCoursePublish(id, false)
                                     }
                                     disabled={actionLoading === `${id}-publish`}
-                                    className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                    className={`${publicationState !== "published" ? "hidden" : ""} rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50`}
                                   >
                                     إلغاء النشر
                                   </button>
@@ -2035,13 +2643,33 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               )}
 
                             {activeKey === "notifications" && id !== "—" && (
-                              <div className="mt-4 border-t border-stroke/60 pt-3">
+                              <div className="mt-4 flex items-center justify-between gap-3 border-t border-stroke/60 pt-3">
+                                {unread ? (
+                                  <button
+                                    onClick={() => void handleMarkRead(id)}
+                                    disabled={actionLoading === `read-${id}`}
+                                    className="text-xs font-semibold text-nuwa-base transition-colors hover:underline disabled:opacity-50"
+                                  >
+                                    تحديد كمقروء ✓
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-ink-muted">
+                                    مقروء
+                                  </span>
+                                )}
                                 <button
-                                  onClick={() => void handleMarkRead(id)}
-                                  disabled={actionLoading === `read-${id}`}
-                                  className="text-xs font-semibold text-nuwa-base transition-colors hover:underline"
+                                  type="button"
+                                  onClick={() =>
+                                    void handleNotificationDelete(id)
+                                  }
+                                  disabled={
+                                    actionLoading ===
+                                    `delete-notification-${id}`
+                                  }
+                                  aria-label={`حذف الإشعار: ${title}`}
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                                 >
-                                  تحديد كمقروء ✓
+                                  <Trash2 size={14} /> حذف
                                 </button>
                               </div>
                             )}

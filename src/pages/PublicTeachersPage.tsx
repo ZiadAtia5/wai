@@ -13,6 +13,7 @@ export default function PublicTeachersPage() {
       load={getPublicTeachers}
       loadDetail={teachersApi.byId}
       loadRelated={(id) => teachersApi.courses(id)}
+      personCards
     />
   )
 }

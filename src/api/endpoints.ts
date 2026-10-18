@@ -47,13 +47,14 @@ function upload<T>(
 
   fields: Record<string, string> = {},
 ): Promise<T> {
+  const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000
   const form = new FormData()
 
   form.append("file", file)
 
   Object.entries(fields).forEach(([key, value]) => form.append(key, value))
 
-  return apiRequest<T>(path, { method: "POST", body: form })
+  return apiRequest<T>(path, { method: "POST", body: form }, UPLOAD_TIMEOUT_MS)
 }
 
 const get = <T>(path: string) => send<T>("GET", path)
@@ -74,6 +75,13 @@ export const authApi = {
 }
 
 export const adminApi = {
+  me: () => get<unknown>("/admin/me"),
+
+  uploadProfileImage: (file: File) =>
+    upload<unknown>("/admin/me/profile-image", file),
+
+  deleteProfileImage: () => del<unknown>("/admin/me/profile-image"),
+
   createTeacher: (body: ApiObject) => post<unknown>("/admin/teachers", body),
 
   teachers: (query: PageQuery = {}) =>
@@ -124,6 +132,11 @@ export const studentsApi = {
   me: () => get<unknown>("/students/me"),
 
   updateMe: (body: ApiObject) => put<unknown>("/students/me", body),
+
+  uploadProfileImage: (file: File) =>
+    upload<unknown>("/students/me/profile-image", file),
+
+  deleteProfileImage: () => del<unknown>("/students/me/profile-image"),
 
   list: (query: PageQuery = {}) =>
     get<unknown>(`/students${queryString(query)}`),
@@ -275,6 +288,12 @@ export const coursesApi = {
   list: (query: PageQuery = {}) =>
     get<unknown>(`/courses${queryString(query)}`),
 
+  publicDetail: (courseId: string | number) =>
+    apiRequest<unknown>(`/courses/${idPath(courseId)}`, {
+      method: "GET",
+      skipAuth: true,
+    }),
+
   detail: (courseId: string | number) =>
     get<unknown>(`/courses/${idPath(courseId)}`),
 
@@ -300,6 +319,10 @@ export const notificationsApi = {
     put<void>(`/notifications/${idPath(id)}/read`),
 
   markAllRead: () => put<void>("/notifications/read-all"),
+
+  remove: (id: string | number) => del<void>(`/notifications/${idPath(id)}`),
+
+  removeAll: () => del<void>("/notifications"),
 }
 
 export const quizzesApi = {

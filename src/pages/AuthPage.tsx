@@ -1,11 +1,9 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 
 import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
-  Eye,
-  EyeOff,
   GraduationCap,
   ShieldCheck,
   Sparkles,
@@ -19,6 +17,16 @@ import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
 
 import { notifyError, notifySuccess } from "../utils/notifications"
 
+import {
+  FieldGroup,
+  inputClass,
+  PASSWORD_POLICY_PATTERN,
+  passwordRequirementMessage,
+  PasswordField,
+  PasswordRequirements,
+  TextField,
+} from "../components/auth/AuthFields"
+
 import type { NavigateFn } from "../types"
 
 interface AuthPageProps {
@@ -27,12 +35,35 @@ interface AuthPageProps {
   navigate: NavigateFn
 }
 
+function comparablePhone(value: string): string {
+  let digits = value
+    .replace(/[٠-٩۰-۹]/g, (digit) =>
+      String("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹".indexOf(digit) % 10),
+    )
+    .replace(/\D/g, "")
+
+  if (digits.startsWith("0020")) digits = digits.slice(4)
+  else if (digits.startsWith("20") && digits.length >= 12) digits = digits.slice(2)
+
+  return digits.startsWith("0") ? digits.slice(1) : digits
+}
+
 export default function AuthPage({ mode, navigate }: AuthPageProps) {
   const isLogin = mode === "login"
 
   const [busy, setBusy] = useState(false)
 
   const [showPassword, setShowPassword] = useState(false)
+
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const [passwordValue, setPasswordValue] = useState("")
+
+  const [confirmPasswordValue, setConfirmPasswordValue] = useState("")
+
+  const [studentPhoneValue, setStudentPhoneValue] = useState("")
+
+  const [parentPhoneValue, setParentPhoneValue] = useState("")
 
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
 
@@ -61,13 +92,70 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.querySelector<HTMLElement>(":invalid")?.focus()
+    const form = event.currentTarget
+    const firstInvalidField = form.querySelector<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >(":invalid")
+
+    if (
+      !isLogin &&
+      (!firstInvalidField ||
+        firstInvalidField.name === "password" ||
+        firstInvalidField.name === "confirmPassword")
+    ) {
+      const passwordMessage = passwordRequirementMessage(
+        passwordValue,
+        confirmPasswordValue,
+      )
+      if (passwordMessage) {
+        const fieldName = passwordMessage.includes("تأكيد")
+          ? "confirmPassword"
+          : "password"
+        const field = form.elements.namedItem(fieldName)
+        if (field instanceof HTMLInputElement) field.focus()
+        notifyError(new Error(passwordMessage))
+        return
+      }
+    }
+
+    if (!form.checkValidity()) {
+      firstInvalidField?.focus()
+
+      if (firstInvalidField) {
+        let validationMessage = "تحقق من الحقل المحدد ثم حاول مرة أخرى."
+        if (firstInvalidField.validity.customError) {
+          validationMessage = firstInvalidField.validationMessage
+        } else if (firstInvalidField.validity.valueMissing) {
+          const fieldLabel = firstInvalidField.labels?.[0]?.textContent
+            ?.replace(/\s+/g, " ")
+            .trim()
+          validationMessage = fieldLabel
+            ? `أكمل حقل ${fieldLabel}.`
+            : "أكمل الحقل المطلوب."
+        } else if (firstInvalidField.validity.typeMismatch) {
+          validationMessage = "أدخل البريد الإلكتروني بالتنسيق الصحيح."
+        } else if (firstInvalidField.validity.tooShort) {
+          validationMessage = "كلمة المرور يجب ألا تقل عن 8 أحرف."
+        }
+        notifyError(new Error(validationMessage))
+        return
+      }
 
       notifyError(
         new Error("تحقق من الحقول المطلوبة وتنسيق البريد وكلمة المرور."),
       )
 
+      return
+    }
+
+    if (
+      !isLogin &&
+      comparablePhone(studentPhoneValue) &&
+      comparablePhone(studentPhoneValue) === comparablePhone(parentPhoneValue)
+    ) {
+      const parentPhoneField = form.elements.namedItem("parentPhoneNumber")
+      if (parentPhoneField instanceof HTMLInputElement) parentPhoneField.focus()
+      notifyError(new Error("رقم هاتف الطالب ورقم ولي الأمر لازم يكونوا مختلفين."))
       return
     }
 
@@ -187,6 +275,27 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         window.sessionStorage.setItem("eduhub.auth.name", accountName.trim())
       }
 
+      const profileImage =
+        user.avatarUrl ??
+        user.avatar_url ??
+        user.profileImageUrl ??
+        user.profile_image_url ??
+        user.profileImage ??
+        user.profile_image ??
+        user.profilePictureUrl ??
+        user.imageUrl ??
+        nested.avatarUrl ??
+        nested.avatar_url ??
+        nested.profileImageUrl ??
+        nested.profile_image_url ??
+        nested.profileImage ??
+        nested.profile_image ??
+        nested.profilePictureUrl ??
+        nested.imageUrl
+      if (typeof profileImage === "string" && profileImage.trim()) {
+        window.sessionStorage.setItem("eduhub.auth.image", profileImage.trim())
+      }
+
       notifySuccess(
         isLogin ? "تم تسجيل الدخول بنجاح." : "تم إنشاء الحساب بنجاح.",
       )
@@ -206,10 +315,14 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
   }
 
   return (
-    <main className="min-h-[calc(100vh-64px)] bg-[#f3f7fb] px-4 py-8 sm:px-6 sm:py-12">
-      <div className="mx-auto grid min-h-[680px] max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_80px_-32px_rgba(18,59,102,.28)] lg:grid-cols-[.85fr_1.15fr]">
-        <aside className="relative hidden overflow-hidden bg-[#0b2742] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_15%,rgba(56,189,248,.28),transparent_38%),radial-gradient(ellipse_at_90%_90%,rgba(37,99,235,.26),transparent_42%)]" />
+    <main className="relative isolate min-h-[calc(100vh-64px)] overflow-hidden bg-[#edf2ef] px-3 py-5 sm:px-6 sm:py-9 lg:px-8 lg:py-12">
+      <div className="pointer-events-none absolute -right-28 top-10 size-80 rounded-full bg-emerald-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 left-0 size-96 rounded-full bg-teal-100/70 blur-3xl" />
+      <div className="relative mx-auto grid min-h-[min(780px,calc(100svh-6rem))] max-w-6xl overflow-hidden rounded-[1.75rem] border border-white/80 bg-white shadow-[0_30px_100px_-42px_rgba(11,59,37,.35)] sm:rounded-[2rem] lg:grid-cols-[.92fr_1.08fr]">
+        <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#0b3b25] via-[#105b3a] to-[#0a3020] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_15%,rgba(66,168,121,.35),transparent_38%),radial-gradient(ellipse_at_90%_90%,rgba(23,107,67,.38),transparent_42%)]" />
+          <div className="pointer-events-none absolute -left-24 top-1/3 size-72 rounded-full border border-white/10" />
+          <div className="pointer-events-none absolute -left-12 top-[38%] size-48 rounded-full border border-white/10" />
           <div className="relative">
             <button
               onClick={() => navigate("landing")}
@@ -220,7 +333,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
               </span>
               وَعي
             </button>
-            <p className="mt-20 text-sm font-semibold text-sky-200">
+            <p className="mt-16 text-sm font-semibold tracking-wide text-emerald-200 xl:mt-24">
               رحلتك التعليمية تبدأ هنا
             </p>
             <h1 className="mt-4 text-4xl font-bold leading-[1.5]">
@@ -228,7 +341,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
               <br />
               وتقدّم كل يوم.
             </h1>
-            <p className="mt-5 max-w-sm leading-8 text-slate-300">
+            <p className="mt-5 max-w-sm text-[15px] leading-8 text-emerald-50/75">
               مكان واحد يجمع الدورات، الدروس، والمعلمين لمساعدتك على الوصول
               لهدفك.
             </p>
@@ -246,9 +359,9 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
               return (
                 <div
                   key={String(label)}
-                  className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.06] p-3 text-sm text-slate-200"
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.07] p-3.5 text-sm text-emerald-50/90 shadow-lg shadow-black/5 backdrop-blur-sm"
                 >
-                  <ItemIcon size={18} className="text-sky-300" />
+                  <ItemIcon size={18} className="text-emerald-300" />
                   {String(label)}
                 </div>
               )
@@ -257,18 +370,18 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         </aside>
 
         <section className="flex items-center justify-center p-5 sm:p-9 lg:p-12 xl:p-16">
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-[540px]">
             <button
               onClick={() => navigate("landing")}
               className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-ink-muted transition hover:text-nuwa-base lg:hidden"
             >
               <ArrowRight size={17} /> العودة للرئيسية
             </button>
-            <div className="mb-7">
+            <div className="mb-7 sm:mb-9">
               <span className="inline-flex items-center gap-2 rounded-full bg-nuwa-soft px-3 py-1.5 text-xs font-bold text-nuwa-base">
                 <GraduationCap size={15} /> منصة وَعي التعليمية
               </span>
-              <h2 className="mt-5 text-3xl font-bold tracking-tight text-ink">
+              <h2 className="mt-5 text-3xl font-bold tracking-tight text-ink sm:text-[2.15rem]">
                 {isLogin ? "أهلاً بعودتك" : "أنشئ حسابك الجديد"}
               </h2>
               <p className="mt-2 text-sm leading-6 text-ink-muted">
@@ -291,7 +404,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                 </button>
               </div>
             ) : (
-              <form noValidate onSubmit={handleSubmit} className="space-y-5">
+              <form noValidate onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
                 {!isLogin && (
                   <>
                     <FieldGroup title="بيانات الطالب">
@@ -341,6 +454,8 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                           type="tel"
                           placeholder="01000000000"
                           dir="ltr"
+                          autoComplete="tel"
+                          onChange={setStudentPhoneValue}
                         />
                         <TextField
                           label="رقم ولي الأمر"
@@ -348,6 +463,14 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                           type="tel"
                           placeholder="01000000000"
                           dir="ltr"
+                          onChange={setParentPhoneValue}
+                          errorText={
+                            comparablePhone(studentPhoneValue) &&
+                            comparablePhone(studentPhoneValue) ===
+                              comparablePhone(parentPhoneValue)
+                              ? "رقم ولي الأمر يجب أن يختلف عن رقم الطالب."
+                              : undefined
+                          }
                         />
                       </>
                     )}
@@ -385,6 +508,13 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                       name="password"
                       visible={showPassword}
                       toggle={() => setShowPassword((value) => !value)}
+                      onChange={setPasswordValue}
+                      pattern={!isLogin ? PASSWORD_POLICY_PATTERN : undefined}
+                      title={
+                        !isLogin
+                          ? "كلمة المرور تتطلب حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا، وبطول 8 أحرف على الأقل."
+                          : undefined
+                      }
                       autoComplete={
                         isLogin ? "current-password" : "new-password"
                       }
@@ -394,21 +524,28 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                         <PasswordField
                           label="تأكيد كلمة المرور"
                           name="confirmPassword"
-                          visible={showPassword}
-                          toggle={() => setShowPassword((value) => !value)}
+                          visible={showConfirmPassword}
+                          toggle={() => setShowConfirmPassword((value) => !value)}
+                          onChange={setConfirmPasswordValue}
                           autoComplete="new-password"
                         />
                       )}
                     </>
                   </div>
-                  <p className="mt-2 text-xs text-ink-muted">
+                  {isLogin ? null : (
+                    <PasswordRequirements
+                      password={passwordValue}
+                      confirmation={confirmPasswordValue}
+                    />
+                  )}
+                  {isLogin && <p className="mt-2 text-xs text-ink-muted">
                     يجب ألا تقل كلمة المرور عن 8 أحرف.
-                  </p>
+                  </p>}
                 </FieldGroup>
                 <button
                   type="submit"
                   disabled={busy || (!isLogin && !academicYears.length)}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-nuwa-base px-5 text-sm font-bold text-white shadow-lg shadow-nuwa-base/20 transition hover:bg-nuwa-deep disabled:cursor-wait disabled:opacity-60"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#176b43] to-[#0b3b25] px-5 text-sm font-bold text-white shadow-lg shadow-nuwa-base/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-nuwa-base/20 active:translate-y-0 disabled:cursor-wait disabled:opacity-60"
                 >
                   {busy ? (
                     <>
@@ -439,118 +576,5 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         </section>
       </div>
     </main>
-  )
-}
-
-const inputClass =
-  "h-11 w-full rounded-xl border border-stroke bg-white px-3.5 text-sm text-ink transition placeholder:text-slate-400 focus:border-nuwa-base focus:outline-none focus:ring-4 focus:ring-nuwa-base/10 disabled:bg-slate-50"
-
-function FieldGroup({
-  title,
-
-  children,
-}: {
-  title: string
-
-  children: ReactNode
-}) {
-  return (
-    <fieldset className="rounded-2xl border border-slate-200 p-4 sm:p-5">
-      <legend className="px-2 text-sm font-bold text-ink">{title}</legend>
-      {children}
-    </fieldset>
-  )
-}
-
-function TextField({
-  label,
-
-  name,
-
-  type = "text",
-
-  placeholder,
-
-  autoComplete,
-
-  dir,
-
-  className = "",
-}: {
-  label: string
-
-  name: string
-
-  type?: string
-
-  placeholder?: string
-
-  autoComplete?: string
-
-  dir?: "ltr" | "rtl"
-
-  className?: string
-}) {
-  return (
-    <label
-      className={`grid min-w-0 gap-1.5 text-sm font-semibold text-ink ${className}`}
-    >
-      {label}
-      <input
-        name={name}
-        type={type}
-        required
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        dir={dir}
-        className={`${inputClass} ${dir === "ltr" ? "text-left" : ""}`}
-      />
-    </label>
-  )
-}
-
-function PasswordField({
-  label,
-
-  name,
-
-  visible,
-
-  toggle,
-
-  autoComplete,
-}: {
-  label: string
-
-  name: string
-
-  visible: boolean
-
-  toggle: () => void
-
-  autoComplete: string
-}) {
-  return (
-    <label className="grid min-w-0 gap-1.5 text-sm font-semibold text-ink">
-      {label}
-      <span className="relative">
-        <input
-          name={name}
-          type={visible ? "text" : "password"}
-          required
-          minLength={8}
-          autoComplete={autoComplete}
-          className={`${inputClass} pe-11`}
-        />
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={visible ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-nuwa-base"
-        >
-          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
-        </button>
-      </span>
-    </label>
   )
 }

@@ -20,6 +20,7 @@ export default function PublicCoursesPage({
       loadDetail={coursesApi.detail}
       action={coursesApi.enroll}
       actionLabel="طلب الالتحاق بالدورة"
+      courseCatalog
       navigate={navigate}
     />
   )

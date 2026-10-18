@@ -1,5 +1,5 @@
-export type View = "landing" | "login" | "register" | "public:courses" | "public:teachers" | "dashboard"
+export type View = "landing" | "login" | "register" | "public:courses" | "public:course-detail" | "public:teachers" | "dashboard"
 
 export interface NavigateFn {
-  (view: View): void
+  (view: View, params?: { courseId?: string }): void
 }

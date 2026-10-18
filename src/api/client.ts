@@ -14,6 +14,8 @@ const REQUEST_TIMEOUT_MS = 15_000
 
 const AUTH_TOKEN_KEY = "eduhub.auth.token"
 
+type ApiRequestOptions = RequestInit & { skipAuth?: boolean }
+
 export function getAuthToken(): string | null {
   return window.sessionStorage.getItem(AUTH_TOKEN_KEY)
 }
@@ -59,11 +61,13 @@ export function isSecureApiConfigured(): boolean {
 export async function apiRequest<T>(
   path: string,
 
-  options: RequestInit = {},
+  options: ApiRequestOptions = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<T> {
+  const { skipAuth = false, ...requestOptions } = options
   const baseUrl = getApiBaseUrl()
 
-  const method = (options.method || "GET").toUpperCase()
+  const method = (requestOptions.method || "GET").toUpperCase()
 
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new ApiError("مسار الطلب غير صالح.")
@@ -92,20 +96,20 @@ export async function apiRequest<T>(
   const timeout = window.setTimeout(
     () => controller.abort(),
 
-    REQUEST_TIMEOUT_MS,
+    timeoutMs,
   )
 
-  const headers = new Headers(options.headers)
+  const headers = new Headers(requestOptions.headers)
 
   const token = getAuthToken()
 
-  if (token && !headers.has("Authorization")) {
+  if (!skipAuth && token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`)
   }
 
   if (
-    options.body &&
-    !(options.body instanceof FormData) &&
+    requestOptions.body &&
+    !(requestOptions.body instanceof FormData) &&
     !headers.has("Content-Type")
   ) {
     headers.set("Content-Type", "application/json")
@@ -115,7 +119,7 @@ export async function apiRequest<T>(
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      ...options,
+      ...requestOptions,
 
       headers,
 
