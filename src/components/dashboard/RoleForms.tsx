@@ -653,6 +653,14 @@ export default function RoleForms({
 
   const profileFormRef = useRef<HTMLFormElement>(null)
 
+  const teacherEditorRef = useRef<HTMLFormElement>(null)
+
+  const courseEditorRef = useRef<HTMLFormElement>(null)
+
+  const adminNameEditorRef = useRef<HTMLFormElement>(null)
+
+  const profileEditorRef = useRef<HTMLDivElement>(null)
+
   const [editingProfile, setEditingProfile] = useState(false)
 
   const [editingAdminName, setEditingAdminName] = useState(false)
@@ -692,6 +700,26 @@ export default function RoleForms({
   const [isCreatingCourse, setIsCreatingCourse] = useState(false)
 
   const [editingTeacher, setEditingTeacher] = useState<RecordValue | null>(null)
+
+  useEffect(() => {
+    const target = editingTeacher
+      ? teacherEditorRef.current
+      : editingCourse
+        ? courseEditorRef.current
+        : editingAdminName
+          ? adminNameEditorRef.current
+          : editingProfile
+            ? profileEditorRef.current
+            : null
+
+    if (!target) return
+
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [editingTeacher, editingCourse, editingAdminName, editingProfile])
 
   const [contentCourseId, setContentCourseId] = useState<string | null>(null)
 
@@ -1493,8 +1521,9 @@ export default function RoleForms({
             >
               {isEditingTeacher && editingTeacher && (
                   <form
+                    ref={teacherEditorRef}
                     onSubmit={(event) => void updateTeacher(event)}
-                    className="mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
+                    className="scroll-mt-6 mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
                   >
                     <h3 className="sm:col-span-2 font-bold text-ink">
                       تعديل بيانات المعلم
@@ -2157,9 +2186,10 @@ export default function RoleForms({
 
                     {isEditing && (
                       <form
+                        ref={courseEditorRef}
                         key={`edit-${id}`}
                         onSubmit={(event) => void updateCourse(event)}
-                        className="min-w-0 space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-3 sm:p-4"
+                        className="scroll-mt-6 min-w-0 space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-3 sm:p-4"
                       >
                         <div>
                           <h5 className="text-sm font-bold text-nuwa-deep">
@@ -2880,8 +2910,9 @@ export default function RoleForms({
         </div>
         {editingAdminName && (
           <form
+            ref={adminNameEditorRef}
             onSubmit={(event) => void updateAdminName(event)}
-            className="grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end sm:p-7"
+            className="scroll-mt-6 grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end sm:p-7"
           >
             <label className={labelClass}>
               الاسم الظاهر
@@ -2911,7 +2942,7 @@ export default function RoleForms({
           </form>
         )}
         {editingProfile && (
-          <div className="min-w-0 p-4 pt-0 sm:px-7 sm:pb-7">
+          <div ref={profileEditorRef} className="scroll-mt-6 min-w-0 p-4 pt-0 sm:px-7 sm:pb-7">
             <ProfileImageEditor
               role="admin"
               name={adminName}
@@ -3038,7 +3069,7 @@ export default function RoleForms({
           </div>
         </section>
         {editingProfile && (
-          <section className="min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7">
+          <section ref={profileEditorRef} className="scroll-mt-6 min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7">
             <div className="mb-5">
               <h3 className="text-xl font-bold text-ink">الملف الشخصي</h3>
               <p className="mt-1 text-sm text-ink-muted">

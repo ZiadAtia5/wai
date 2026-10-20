@@ -750,8 +750,20 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const [subjectYear, setSubjectYear] = useState("1")
 
   const [subjectId, setSubjectId] = useState("")
+  const subjectEditorRef = useRef<HTMLFormElement>(null)
 
   const [subjectIsActive, setSubjectIsActive] = useState(true)
+
+  useEffect(() => {
+    if (!subjectId) return
+    const frame = window.requestAnimationFrame(() => {
+      subjectEditorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [subjectId])
 
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
 
@@ -2315,8 +2327,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
               />
               {role.includes("admin") && activeKey === "subjects" && (
                 <form
+                  ref={subjectEditorRef}
                   onSubmit={handleSubjectSubmit}
-                  className="mb-5 grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-[1fr_180px_auto_auto] sm:items-end"
+                  className="scroll-mt-6 mb-5 grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-[1fr_180px_auto_auto] sm:items-end"
                 >
                   <input
                     name="subjectId"
