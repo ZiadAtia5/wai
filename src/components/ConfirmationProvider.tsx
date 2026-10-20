@@ -147,8 +147,6 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
       setIsClosing(true)
 
       window.setTimeout(() => {
-        current.resolve(confirmed)
-
         const nextRequest = queueRef.current.shift() ?? null
 
         activeRef.current = nextRequest
@@ -162,6 +160,10 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
         closingRef.current = false
 
         setActiveRequest(nextRequest)
+
+        // Let React commit the closed dialog first so its effect cleanup
+        // restores body scrolling before callers navigate (notably on iOS).
+        window.requestAnimationFrame(() => current.resolve(confirmed))
 
         if (!nextRequest) {
           window.setTimeout(() => restoreFocusRef.current?.focus(), 0)
