@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
   type FormEvent,
-} from "react"
+} from "react";
 
 import {
   ArrowUpLeft,
@@ -27,11 +27,11 @@ import {
   UsersRound,
   Users,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { domMax, LazyMotion, m } from "framer-motion"
+import { domMax, LazyMotion, m } from "framer-motion";
 
-import { ApiError, clearAuthToken } from "../api/client"
+import { ApiError, clearAuthToken } from "../api/client";
 
 import {
   adminApi,
@@ -41,46 +41,46 @@ import {
   subjectsApi,
   teachersApi,
   type PageQuery,
-} from "../api/endpoints"
+} from "../api/endpoints";
 
-import ApiQueryState from "../components/ApiQueryState"
+import ApiQueryState from "../components/ApiQueryState";
 
-import { useConfirmation } from "../components/ConfirmationProvider"
+import { useConfirmation } from "../components/ConfirmationProvider";
 
-import NuwaLogo from "../components/NuwaLogo"
+import NuwaLogo from "../components/NuwaLogo";
 
-import PersonAvatar from "../components/PersonAvatar"
+import PersonAvatar from "../components/PersonAvatar";
 
-import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
+import { getAcademicYears, type AcademicYearResponse } from "../api/catalog";
 
-import RoleForms from "../components/dashboard/RoleForms"
+import RoleForms from "../components/dashboard/RoleForms";
 
-import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests"
+import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests";
 
-import MetricBarChart from "../components/dashboard/MetricBarChart"
+import MetricBarChart from "../components/dashboard/MetricBarChart";
 
-import { mockTeacherEnrollmentRequests } from "../mocks/teacherEnrollmentRequests"
+import { mockTeacherEnrollmentRequests } from "../mocks/teacherEnrollmentRequests";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { notifyError, notifySuccess } from "../utils/notifications";
 
-import { useApiQuery } from "../hooks/useApiQuery"
+import { useApiQuery } from "../hooks/useApiQuery";
 
 import StudentDetailsCard, {
   fieldLabels,
   FormattedCardValue,
   formatValue,
-} from "../components/dashboard/StudentDetailsCard"
+} from "../components/dashboard/StudentDetailsCard";
 
-import type { NavigateFn } from "../types"
+import type { NavigateFn } from "../types";
 
 interface Section {
-  key: string
+  key: string;
 
-  label: string
+  label: string;
 
-  icon?: string
+  icon?: string;
 
-  load: () => Promise<unknown>
+  load: () => Promise<unknown>;
 }
 
 function getSections(
@@ -97,7 +97,7 @@ function getSections(
         label: "ملفي الشخصي",
         load: async () => {
           try {
-            return await adminApi.me()
+            return await adminApi.me();
           } catch {
             return {
               name:
@@ -105,7 +105,7 @@ function getSections(
                 "مدير النظام",
               profileImageUrl:
                 window.sessionStorage.getItem("eduhub.auth.image") || "",
-            }
+            };
           }
         },
       },
@@ -152,7 +152,7 @@ function getSections(
         load: () => enrollmentsApi.adminList(query),
       },
       { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-    ]
+    ];
   }
 
   if (role.includes("teacher")) {
@@ -167,23 +167,23 @@ function getSections(
             return {
               profile: { firstName: "Ahmed", lastName: "Hassan" },
               stats: { totalCourses: 4, totalStudents: 86, pendingRequests: 3 },
-            }
+            };
           }
 
           const [profileResult, statsResult] = await Promise.allSettled([
             teachersApi.me(),
 
             teachersApi.stats(),
-          ])
+          ]);
 
-          if (profileResult.status === "rejected") throw profileResult.reason
+          if (profileResult.status === "rejected") throw profileResult.reason;
 
           return {
             profile: profileResult.value,
 
             stats:
               statsResult.status === "fulfilled" ? statsResult.value : null,
-          }
+          };
         },
       },
 
@@ -215,27 +215,27 @@ function getSections(
 
         load: async () => {
           if (enrollmentPreview) {
-            return { requests: mockTeacherEnrollmentRequests, courses: [] }
+            return { requests: mockTeacherEnrollmentRequests, courses: [] };
           }
 
           const [requestsResult, coursesResult] = await Promise.allSettled([
             teachersApi.enrollmentRequests(query),
 
             teachersApi.coursesMine({ page: 1, pageSize: 100 }),
-          ])
+          ]);
 
-          if (requestsResult.status === "rejected") throw requestsResult.reason
+          if (requestsResult.status === "rejected") throw requestsResult.reason;
 
           return {
             requests: requestsResult.value,
 
             courses:
               coursesResult.status === "fulfilled" ? coursesResult.value : null,
-          }
+          };
         },
       },
       { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-    ]
+    ];
   }
 
   return [
@@ -246,9 +246,9 @@ function getSections(
         const [profileResult, enrollmentsResult] = await Promise.allSettled([
           studentsApi.me(),
           studentsApi.enrollments({ page: 1, pageSize: 4 }),
-        ])
+        ]);
 
-        if (profileResult.status === "rejected") throw profileResult.reason
+        if (profileResult.status === "rejected") throw profileResult.reason;
 
         return {
           profile: unwrapApiResponse(profileResult.value),
@@ -262,7 +262,7 @@ function getSections(
                 ? enrollmentsResult.reason.message
                 : "تعذر تحميل دوراتك حاليًا."
               : null,
-        }
+        };
       },
     },
     { key: "profile", label: "ملفي الشخصي", load: studentsApi.me },
@@ -272,58 +272,59 @@ function getSections(
       load: () => studentsApi.enrollments(query),
     },
     { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-  ]
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function unwrapApiResponse(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const response = current
-    if (!isRecord(response)) break
-    const keys = Object.keys(response)
+    const response = current;
+    if (!isRecord(response)) break;
+    const keys = Object.keys(response);
     const isEnvelope =
       "data" in response &&
       (keys.length <= 3 ||
         ["success", "message", "status", "errors", "meta"].some(
           (key) => key in response,
-        ))
-    if (!isEnvelope) break
-    current = response.data
+        ));
+    if (!isEnvelope) break;
+    current = response.data;
   }
 
-  return current
+  return current;
 }
 
 function profileDisplayName(value: unknown): string | null {
-  value = unwrapApiResponse(value)
-  if (!isRecord(value)) return null
+  value = unwrapApiResponse(value);
+  if (!isRecord(value)) return null;
 
-  const candidates: unknown[] = [value]
-  const visited = new Set<object>()
+  const candidates: unknown[] = [value];
+  const visited = new Set<object>();
 
   while (candidates.length && visited.size < 8) {
-    const candidate = candidates.shift()
-    if (!isRecord(candidate) || visited.has(candidate)) continue
-    visited.add(candidate)
+    const candidate = candidates.shift();
+    if (!isRecord(candidate) || visited.has(candidate)) continue;
+    visited.add(candidate);
     candidates.push(
       candidate.profile,
       candidate.data,
       candidate.user,
       candidate.teacher,
       candidate.student,
-    )
+    );
   }
 
   for (const candidate of visited) {
-    if (!isRecord(candidate)) continue
+    if (!isRecord(candidate)) continue;
 
-    const direct = candidate.fullName ?? candidate.displayName ?? candidate.name
-    if (typeof direct === "string" && direct.trim()) return direct.trim()
+    const direct =
+      candidate.fullName ?? candidate.displayName ?? candidate.name;
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
 
     const parts = [
       candidate.firstName,
@@ -333,32 +334,32 @@ function profileDisplayName(value: unknown): string | null {
     ].filter(
       (part): part is string =>
         typeof part === "string" && part.trim().length > 0,
-    )
-    if (parts.length) return parts.join(" ")
+    );
+    if (parts.length) return parts.join(" ");
   }
 
-  return null
+  return null;
 }
 
 function profileDisplayImage(value: unknown): string | null {
-  if (!isRecord(value)) return null
-  const candidates: unknown[] = [value]
-  const visited = new Set<object>()
+  if (!isRecord(value)) return null;
+  const candidates: unknown[] = [value];
+  const visited = new Set<object>();
   while (candidates.length && visited.size < 8) {
-    const candidate = candidates.shift()
-    if (!isRecord(candidate) || visited.has(candidate)) continue
-    visited.add(candidate)
+    const candidate = candidates.shift();
+    if (!isRecord(candidate) || visited.has(candidate)) continue;
+    visited.add(candidate);
     candidates.push(
       candidate.profile,
       candidate.data,
       candidate.user,
       candidate.teacher,
       candidate.student,
-    )
+    );
   }
   for (const candidate of visited) {
-    if (!isRecord(candidate)) continue
-    const avatar = isRecord(candidate.avatar) ? candidate.avatar : {}
+    if (!isRecord(candidate)) continue;
+    const avatar = isRecord(candidate.avatar) ? candidate.avatar : {};
     const image =
       candidate.avatarUrl ??
       candidate.avatar_url ??
@@ -370,16 +371,16 @@ function profileDisplayImage(value: unknown): string | null {
       candidate.imageUrl ??
       candidate.image_url ??
       avatar.url ??
-      (typeof candidate.avatar === "string" ? candidate.avatar : undefined)
-    if (typeof image === "string" && image.trim()) return image.trim()
+      (typeof candidate.avatar === "string" ? candidate.avatar : undefined);
+    if (typeof image === "string" && image.trim()) return image.trim();
   }
-  return null
+  return null;
 }
 
 function getRecords(data: unknown): Record<string, unknown>[] {
-  data = unwrapApiResponse(data)
+  data = unwrapApiResponse(data);
 
-  if (Array.isArray(data)) return data.filter(isRecord)
+  if (Array.isArray(data)) return data.filter(isRecord);
 
   if (isRecord(data)) {
     for (const key of [
@@ -393,42 +394,42 @@ function getRecords(data: unknown): Record<string, unknown>[] {
       "requests",
     ]) {
       if (Array.isArray(data[key]))
-        return (data[key] as unknown[]).filter(isRecord)
+        return (data[key] as unknown[]).filter(isRecord);
     }
   }
 
-  return isRecord(data) ? [data] : []
+  return isRecord(data) ? [data] : [];
 }
 
-type CoursePublicationState = "published" | "unpublished" | "draft"
+type CoursePublicationState = "published" | "unpublished" | "draft";
 
 function getCoursePublicationState(
   course: Record<string, unknown>,
 ): CoursePublicationState {
   // Prefer an explicit publication flag over a generic status field.
   for (const key of ["isPublished", "published", "is_published"]) {
-    const value = course[key]
+    const value = course[key];
     const normalizedValue =
-      typeof value === "string" ? value.trim().toLowerCase() : value
+      typeof value === "string" ? value.trim().toLowerCase() : value;
     if (
       normalizedValue === true ||
       normalizedValue === 1 ||
       normalizedValue === "1" ||
       normalizedValue === "true"
     )
-      return "published"
+      return "published";
     if (
       normalizedValue === false ||
       normalizedValue === 0 ||
       normalizedValue === "0" ||
       normalizedValue === "false"
     )
-      return "unpublished"
+      return "unpublished";
   }
   for (const key of ["isDraft", "is_draft"]) {
-    const value = course[key]
+    const value = course[key];
     if (value === true || value === 1 || value === "1" || value === "true")
-      return "draft"
+      return "draft";
   }
 
   const status = String(
@@ -439,48 +440,49 @@ function getCoursePublicationState(
       course.status ??
       course.state ??
       "",
-  ).toLowerCase()
+  ).toLowerCase();
 
   // CourseStatus is an integer enum from the API: Draft=0 and Published=1.
-  if (status === "1") return "published"
-  if (status === "0") return "draft"
-  if (status === "2") return "unpublished"
+  if (status === "1") return "published";
+  if (status === "0") return "draft";
+  if (status === "2") return "unpublished";
 
-  if (/draft|مسودة/.test(status)) return "draft"
-  if (/unpublish|not.?publish|غير.?منشور/.test(status)) return "unpublished"
-  if (/publish|منشور/.test(status)) return "published"
-  return "unpublished"
+  if (/draft|مسودة/.test(status)) return "draft";
+  if (/unpublish|not.?publish|غير.?منشور/.test(status)) return "unpublished";
+  if (/publish|منشور/.test(status)) return "published";
+  return "unpublished";
 }
 
 function isUnreadNotification(notification: Record<string, unknown>): boolean {
-  if (typeof notification.isUnread === "boolean") return notification.isUnread
-  if (typeof notification.isRead === "boolean") return !notification.isRead
-  if (typeof notification.is_read === "boolean") return !notification.is_read
-  if (typeof notification.read === "boolean") return !notification.read
+  if (typeof notification.isUnread === "boolean") return notification.isUnread;
+  if (typeof notification.isRead === "boolean") return !notification.isRead;
+  if (typeof notification.is_read === "boolean") return !notification.is_read;
+  if (typeof notification.read === "boolean") return !notification.read;
   const status = String(
     notification.readStatus ?? notification.status ?? "",
-  ).toLowerCase()
-  if (/unread|new|غير مقروء/.test(status)) return true
-  if (/^read$|مقروء/.test(status)) return false
-  if (notification.read_at !== undefined) return notification.read_at == null
-  if (notification.readAt !== undefined) return notification.readAt == null
-  return notification.readAt === null
+  ).toLowerCase();
+  if (/unread|new|غير مقروء/.test(status)) return true;
+  if (/^read$|مقروء/.test(status)) return false;
+  if (notification.read_at !== undefined) return notification.read_at == null;
+  if (notification.readAt !== undefined) return notification.readAt == null;
+  return notification.readAt === null;
 }
 
 function getNotificationRecords(data: unknown): Record<string, unknown>[] {
-  const payload = unwrapApiResponse(data)
-  if (Array.isArray(payload)) return payload.filter(isRecord)
-  if (!isRecord(payload)) return []
+  const payload = unwrapApiResponse(data);
+  if (Array.isArray(payload)) return payload.filter(isRecord);
+  if (!isRecord(payload)) return [];
   for (const key of ["items", "notifications", "records"]) {
-    if (Array.isArray(payload[key])) return (payload[key] as unknown[]).filter(isRecord)
+    if (Array.isArray(payload[key]))
+      return (payload[key] as unknown[]).filter(isRecord);
   }
   return payload.id !== undefined || payload.notificationId !== undefined
     ? [payload]
-    : []
+    : [];
 }
 
 function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
-  data = unwrapApiResponse(data)
+  data = unwrapApiResponse(data);
 
   if (Array.isArray(data))
     return data.filter(
@@ -490,8 +492,8 @@ function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
           enrollment.status ?? enrollment.enrollmentStatus,
           enrollment.isRejected,
         ),
-    )
-  if (!isRecord(data)) return []
+    );
+  if (!isRecord(data)) return [];
   if (Array.isArray(data.items))
     return data.items.filter(
       (enrollment): enrollment is Record<string, unknown> =>
@@ -500,9 +502,9 @@ function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
           enrollment.status ?? enrollment.enrollmentStatus,
           enrollment.isRejected,
         ),
-    )
-  if ("enrollments" in data) return getEnrollmentRecords(data.enrollments)
-  return []
+    );
+  if ("enrollments" in data) return getEnrollmentRecords(data.enrollments);
+  return [];
 }
 
 function isRejectedEnrollment(status: unknown, isRejected?: unknown): boolean {
@@ -510,7 +512,7 @@ function isRejectedEnrollment(status: unknown, isRejected?: unknown): boolean {
     isRejected === true ||
     String(status ?? "").trim() === "2" ||
     /reject|declin|cancel/i.test(String(status ?? ""))
-  )
+  );
 }
 
 function enrollmentProgressPercent(
@@ -518,47 +520,47 @@ function enrollmentProgressPercent(
 ): number | null {
   const nestedProgress = isRecord(enrollment.progress)
     ? enrollment.progress
-    : {}
+    : {};
   const rawValue =
     enrollment.progressPercentage ??
     enrollment.progressPercent ??
     enrollment.completionPercentage ??
     nestedProgress.progressPercentage ??
-    nestedProgress.percentage
+    nestedProgress.percentage;
   if (rawValue === undefined || rawValue === null || rawValue === "")
-    return null
+    return null;
 
-  const value = Number(rawValue)
-  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
 }
 
 function enrollmentStatusLabel(status: unknown, isApproved?: unknown): string {
-  const value = String(status ?? "").toLowerCase()
+  const value = String(status ?? "").toLowerCase();
 
-  if (value === "0" || isApproved === false) return "بانتظار الموافقة"
-  if (value === "2") return "غير نشط"
-  if (value === "3") return "مكتملة"
-  if (value === "1" || isApproved === true) return "مشترك"
-  if (/reject|declin|cancel/.test(value)) return "غير نشط"
-  if (/pending|await|review/.test(value)) return "بانتظار الموافقة"
-  if (/complete|finish/.test(value)) return "مكتملة"
-  if (/approv|active|accept|enroll/.test(value)) return "مشترك"
+  if (value === "0" || isApproved === false) return "بانتظار الموافقة";
+  if (value === "2") return "غير نشط";
+  if (value === "3") return "مكتملة";
+  if (value === "1" || isApproved === true) return "مشترك";
+  if (/reject|declin|cancel/.test(value)) return "غير نشط";
+  if (/pending|await|review/.test(value)) return "بانتظار الموافقة";
+  if (/complete|finish/.test(value)) return "مكتملة";
+  if (/approv|active|accept|enroll/.test(value)) return "مشترك";
 
-  return status ? String(status) : "الحالة غير محددة"
+  return status ? String(status) : "الحالة غير محددة";
 }
 
 function getAdminMetrics(data: unknown) {
-  if (!isRecord(data)) return []
+  if (!isRecord(data)) return [];
 
   type MetricEntry = {
-    key: string
-    value: number
-    parent: string
-  }
-  const entries: MetricEntry[] = []
+    key: string;
+    value: number;
+    parent: string;
+  };
+  const entries: MetricEntry[] = [];
 
   function collect(record: Record<string, unknown>, parent = "", depth = 0) {
-    if (depth > 3) return
+    if (depth > 3) return;
 
     Object.entries(record).forEach(([key, value]) => {
       if (
@@ -566,18 +568,18 @@ function getAdminMetrics(data: unknown) {
         Number.isFinite(value) &&
         !/(^id$|token|password|price|duration|date|time)/i.test(key)
       ) {
-        entries.push({ key, value, parent })
+        entries.push({ key, value, parent });
       } else if (isRecord(value)) {
-        collect(value, key, depth + 1)
+        collect(value, key, depth + 1);
       }
-    })
+    });
   }
 
-  collect(data)
+  collect(data);
 
   const metrics = entries.map(({ key, value, parent }) => {
-    const statKey = `${parent} ${key}`.toLowerCase()
-    const isPending = /pending|await|unapproved/.test(statKey)
+    const statKey = `${parent} ${key}`.toLowerCase();
+    const isPending = /pending|await|unapproved/.test(statKey);
     const label = isPending
       ? /enroll|request/.test(statKey)
         ? "طلبات التحاق قيد المراجعة"
@@ -592,7 +594,7 @@ function getAdminMetrics(data: unknown) {
               ? "طلبات الالتحاق"
               : /subject/.test(statKey)
                 ? "المواد الدراسية"
-                : `${parent ? `${parent} · ` : ""}${fieldLabels[key] ?? key}`
+                : `${parent ? `${parent} · ` : ""}${fieldLabels[key] ?? key}`;
 
     const Icon = isPending
       ? ClipboardList
@@ -600,12 +602,12 @@ function getAdminMetrics(data: unknown) {
         ? UsersRound
         : /course|subject/.test(statKey)
           ? BookOpenCheck
-          : BookOpen
+          : BookOpen;
 
-    return { key: `${parent}-${key}`, label, value, Icon }
-  })
+    return { key: `${parent}-${key}`, label, value, Icon };
+  });
 
-  return metrics.slice(0, 6)
+  return metrics.slice(0, 6);
 }
 
 function cardFields(record: Record<string, unknown>) {
@@ -614,166 +616,180 @@ function cardFields(record: Record<string, unknown>) {
       !/(^id$|id$|token|image|url|password)/i.test(key) &&
       value !== null &&
       ["string", "number", "boolean"].includes(typeof value),
-  )
+  );
 }
 
 function getStudentName(record: Record<string, unknown>) {
   const parts = [record.firstName, record.secondName, record.thirdName].filter(
     (part): part is string =>
       typeof part === "string" && part.trim().length > 0,
-  )
+  );
 
-  return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"))
+  return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"));
 }
 
 export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
-  const confirm = useConfirmation()
+  const confirm = useConfirmation();
 
   const useTeacherEnrollmentMock =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("teacherEnrollmentMock") ===
-      "1"
+      "1";
 
   const role = useTeacherEnrollmentMock
     ? "teacher"
-    : (window.sessionStorage.getItem("eduhub.auth.role") ?? "student")
+    : (window.sessionStorage.getItem("eduhub.auth.role") ?? "student");
 
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [searchInput, setSearchInput] = useState("")
+  const [searchInput, setSearchInput] = useState("");
 
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState("");
 
-  const query: PageQuery = { page, pageSize: 12, ...(search ? { search } : {}) }
+  const query: PageQuery = {
+    page,
+    pageSize: 12,
+    ...(search ? { search } : {}),
+  };
 
   const [activeKey, setActiveKey] = useState(() =>
     (() => {
-      const availableSections = getSections(role, query, useTeacherEnrollmentMock)
-      const savedSection = window.history.state?.waiApp &&
+      const availableSections = getSections(
+        role,
+        query,
+        useTeacherEnrollmentMock,
+      );
+      const savedSection =
+        window.history.state?.waiApp &&
         window.history.state.view === "dashboard"
-        ? window.history.state.dashboardSection
-        : null
+          ? window.history.state.dashboardSection
+          : null;
 
       if (
         typeof savedSection === "string" &&
         availableSections.some(({ key }) => key === savedSection)
       ) {
-        return savedSection
+        return savedSection;
       }
 
       return useTeacherEnrollmentMock
         ? "enrollments"
-        : availableSections[0].key
+        : availableSections[0].key;
     })(),
-  )
+  );
 
-  const sidebarNavRef = useRef<HTMLElement | null>(null)
-  const [sidebarIndicatorY, setSidebarIndicatorY] = useState<number | null>(null)
+  const sidebarNavRef = useRef<HTMLElement | null>(null);
+  const [sidebarIndicatorY, setSidebarIndicatorY] = useState<number | null>(
+    null,
+  );
 
   useLayoutEffect(() => {
-    const nav = sidebarNavRef.current
+    const nav = sidebarNavRef.current;
     const activeItem = Array.from(
       nav?.querySelectorAll<HTMLButtonElement>("[data-sidebar-item]") ?? [],
-    ).find((item) => item.dataset.sidebarItem === activeKey)
+    ).find((item) => item.dataset.sidebarItem === activeKey);
 
     if (activeItem) {
       setSidebarIndicatorY(
         activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2,
-      )
+      );
     }
-  }, [activeKey])
+  }, [activeKey]);
 
   useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [activeKey])
+    window.scrollTo(0, 0);
+  }, [activeKey]);
 
-  const [reloadKey, setReloadKey] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const [notificationReloadKey, setNotificationReloadKey] = useState(0)
+  const [notificationReloadKey, setNotificationReloadKey] = useState(0);
 
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const [focusStudentCourseId, setFocusStudentCourseId] =
-    useState<string | null>(null)
+  const [focusStudentCourseId, setFocusStudentCourseId] = useState<
+    string | null
+  >(null);
 
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [courseStatusFilter, setCourseStatusFilter] = useState<
     "all" | CoursePublicationState
-  >( "all")
+  >("all");
 
   const [coursePublicationOverrides, setCoursePublicationOverrides] = useState<
     Record<string, CoursePublicationState>
-  >({})
+  >({});
 
   const [coursePublicationRecords, setCoursePublicationRecords] = useState<
     Record<string, Record<string, unknown>>
-  >({})
+  >({});
 
   const [approvedStudentIds, setApprovedStudentIds] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [, setActionFeedbackState] = useState("")
+  const [, setActionFeedbackState] = useState("");
 
   const setActionFeedback = useCallback((message: string) => {
-    setActionFeedbackState(message)
+    setActionFeedbackState(message);
 
-    if (!message.trim()) return
+    if (!message.trim()) return;
 
-    if (/تم|نجاح|اعتماد/.test(message)) notifySuccess(message)
-    else notifyError(new Error(message), "تعذر إتمام العملية. حاول مرة أخرى.")
-  }, [])
+    if (/تم|نجاح|اعتماد/.test(message)) notifySuccess(message);
+    else notifyError(new Error(message), "تعذر إتمام العملية. حاول مرة أخرى.");
+  }, []);
 
   const reloadData = useCallback(() => {
-    setReloadKey((key) => key + 1)
-  }, [])
+    setReloadKey((key) => key + 1);
+  }, []);
 
   const clearFocusedStudentCourse = useCallback(() => {
-    setFocusStudentCourseId(null)
-  }, [])
+    setFocusStudentCourseId(null);
+  }, []);
 
   const handleMockEnrollment = useCallback(
     async (_id: string, approve: boolean) => {
       setActionFeedback(
         approve ? "تمت الموافقة على الطلب التجريبي." : "تم رفض الطلب التجريبي.",
-      )
+      );
 
-      return true
+      return true;
     },
 
     [setActionFeedback],
-  )
+  );
 
-  const [subjectName, setSubjectName] = useState("")
+  const [subjectName, setSubjectName] = useState("");
 
-  const [subjectYear, setSubjectYear] = useState("1")
+  const [subjectYear, setSubjectYear] = useState("1");
 
-  const [subjectId, setSubjectId] = useState("")
-  const subjectEditorRef = useRef<HTMLFormElement>(null)
+  const [subjectId, setSubjectId] = useState("");
+  const subjectEditorRef = useRef<HTMLFormElement>(null);
 
-  const [subjectIsActive, setSubjectIsActive] = useState(true)
+  const [subjectIsActive, setSubjectIsActive] = useState(true);
 
   useEffect(() => {
-    if (!subjectId) return
+    if (!subjectId) return;
     const frame = window.requestAnimationFrame(() => {
       subjectEditorRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
-      })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [subjectId])
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [subjectId]);
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
+    [],
+  );
 
   const sections = useMemo(
     () => getSections(role, query, useTeacherEnrollmentMock),
     [role, page, search, useTeacherEnrollmentMock],
-  )
+  );
 
   const changeDashboardSection = (section: string) => {
-    if (section === activeKey) return
+    if (section === activeKey) return;
 
     window.history.pushState(
       {
@@ -784,132 +800,134 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       },
       "",
       window.location.href,
-    )
-    setActiveKey(section)
-  }
+    );
+    setActiveKey(section);
+  };
 
   useEffect(() => {
-    const currentState = window.history.state
+    const currentState = window.history.state;
 
     if (currentState?.waiApp && currentState.view === "dashboard") {
       window.history.replaceState(
         { ...currentState, dashboardSection: activeKey },
         "",
         window.location.href,
-      )
+      );
     }
 
     const restoreDashboardSection = (event: PopStateEvent) => {
-      const state = event.state
-      if (!state?.waiApp || state.view !== "dashboard") return
+      const state = event.state;
+      if (!state?.waiApp || state.view !== "dashboard") return;
 
-      const section = state.dashboardSection
+      const section = state.dashboardSection;
       if (
         typeof section === "string" &&
         sections.some(({ key }) => key === section)
       ) {
-        setActiveKey(section)
+        setActiveKey(section);
       }
-    }
+    };
 
-    window.addEventListener("popstate", restoreDashboardSection)
-    return () => window.removeEventListener("popstate", restoreDashboardSection)
-  }, [activeKey, sections])
+    window.addEventListener("popstate", restoreDashboardSection);
+    return () =>
+      window.removeEventListener("popstate", restoreDashboardSection);
+  }, [activeKey, sections]);
 
-  const section = sections.find(({ key }) => key === activeKey) ?? sections[0]
+  const section = sections.find(({ key }) => key === activeKey) ?? sections[0];
 
-  const { data, error, loading } = useApiQuery(section.load, reloadKey)
+  const { data, error, loading } = useApiQuery(section.load, reloadKey);
 
-  const loadNotifications = useCallback(() => notificationsApi.list(), [])
+  const loadNotifications = useCallback(() => notificationsApi.list(), []);
   const { data: notificationData } = useApiQuery(
     loadNotifications,
     notificationReloadKey,
-  )
+  );
   const unreadNotifications = useMemo(() => {
-    const payload = unwrapApiResponse(notificationData)
+    const payload = unwrapApiResponse(notificationData);
     if (isRecord(payload)) {
-      const summary = isRecord(payload.summary) ? payload.summary : payload
+      const summary = isRecord(payload.summary) ? payload.summary : payload;
       const count = Number(
         summary.unreadCount ?? summary.unreadNotificationsCount,
-      )
-      if (Number.isFinite(count) && count >= 0) return Math.floor(count)
+      );
+      if (Number.isFinite(count) && count >= 0) return Math.floor(count);
     }
-    return getNotificationRecords(payload).filter(isUnreadNotification).length
-  }, [notificationData])
+    return getNotificationRecords(payload).filter(isUnreadNotification).length;
+  }, [notificationData]);
 
   useEffect(() => {
     const refresh = () => {
-      setNotificationReloadKey((key) => key + 1)
-      if (activeKey === "notifications") setReloadKey((key) => key + 1)
-    }
-    const interval = window.setInterval(refresh, 30_000)
-    window.addEventListener("focus", refresh)
+      setNotificationReloadKey((key) => key + 1);
+      if (activeKey === "notifications") setReloadKey((key) => key + 1);
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
     return () => {
-      window.clearInterval(interval)
-      window.removeEventListener("focus", refresh)
-    }
-  }, [activeKey])
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [activeKey]);
 
   const [accountName, setAccountName] = useState(
     () => window.sessionStorage.getItem("eduhub.auth.name") ?? "",
-  )
+  );
   const [accountImage, setAccountImage] = useState(
     () => window.sessionStorage.getItem("eduhub.auth.image") ?? "",
-  )
+  );
 
   useEffect(() => {
-    const response = unwrapApiResponse(data)
+    const response = unwrapApiResponse(data);
     const profile = isRecord(response)
       ? (response.profile ?? response)
-      : response
-    const name = profileDisplayName(profile)
-    const image = profileDisplayImage(profile)
+      : response;
+    const name = profileDisplayName(profile);
+    const image = profileDisplayImage(profile);
     if (name) {
-      window.sessionStorage.setItem("eduhub.auth.name", name)
-      setAccountName(name)
+      window.sessionStorage.setItem("eduhub.auth.name", name);
+      setAccountName(name);
     }
     if (image) {
-      window.sessionStorage.setItem("eduhub.auth.image", image)
-      setAccountImage(image)
+      window.sessionStorage.setItem("eduhub.auth.image", image);
+      setAccountImage(image);
     }
-  }, [data])
+  }, [data]);
 
   useEffect(() => {
     const updateImage = (event: Event) => {
-      const image = (event as CustomEvent<string>).detail
-      const nextImage = typeof image === "string" ? image : ""
-      setAccountImage(nextImage)
-      if (nextImage) window.sessionStorage.setItem("eduhub.auth.image", nextImage)
-      else window.sessionStorage.removeItem("eduhub.auth.image")
-    }
-    window.addEventListener("eduhub:profile-image-updated", updateImage)
+      const image = (event as CustomEvent<string>).detail;
+      const nextImage = typeof image === "string" ? image : "";
+      setAccountImage(nextImage);
+      if (nextImage)
+        window.sessionStorage.setItem("eduhub.auth.image", nextImage);
+      else window.sessionStorage.removeItem("eduhub.auth.image");
+    };
+    window.addEventListener("eduhub:profile-image-updated", updateImage);
     return () =>
-      window.removeEventListener("eduhub:profile-image-updated", updateImage)
-  }, [])
+      window.removeEventListener("eduhub:profile-image-updated", updateImage);
+  }, []);
 
   useEffect(() => {
-    if (!mobileNavOpen) return
+    if (!mobileNavOpen) return;
 
-    const previousOverflow = document.body.style.overflow
+    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNavOpen(false)
-    }
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
 
-    document.body.style.overflow = "hidden"
-    window.addEventListener("keydown", closeOnEscape)
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
 
     return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener("keydown", closeOnEscape)
-    }
-  }, [mobileNavOpen])
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileNavOpen]);
 
-  const responseData = unwrapApiResponse(data)
-  const rawRecords = getRecords(responseData)
+  const responseData = unwrapApiResponse(data);
+  const rawRecords = getRecords(responseData);
   const publicationStateOf = (course: Record<string, unknown>) => {
-    const id = String(course.courseId ?? course.id ?? "")
-    return coursePublicationOverrides[id] ?? getCoursePublicationState(course)
-  }
+    const id = String(course.courseId ?? course.id ?? "");
+    return coursePublicationOverrides[id] ?? getCoursePublicationState(course);
+  };
   const courseRecords =
     role.includes("admin") && activeKey === "courses"
       ? [
@@ -924,25 +942,26 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             )
             .map(([, record]) => record),
         ]
-      : rawRecords
+      : rawRecords;
   const records =
     activeKey === "pending"
       ? rawRecords.filter((record) => {
           const studentId = String(
             record.studentId ?? record.userId ?? record.id ?? "",
-          )
-          return !approvedStudentIds.has(studentId)
+          );
+          return !approvedStudentIds.has(studentId);
         })
-      : courseRecords
+      : courseRecords;
 
-  const isAdminCourseSection = role.includes("admin") && activeKey === "courses"
+  const isAdminCourseSection =
+    role.includes("admin") && activeKey === "courses";
   const displayedRecords = isAdminCourseSection
     ? records.filter(
         (record) =>
           courseStatusFilter === "all" ||
           publicationStateOf(record) === courseStatusFilter,
       )
-    : records
+    : records;
   const courseStatusCounts = {
     all: records.length,
     published: records.filter(
@@ -951,10 +970,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     unpublished: records.filter(
       (record) => publicationStateOf(record) === "unpublished",
     ).length,
-    draft: records.filter(
-      (record) => publicationStateOf(record) === "draft",
-    ).length,
-  }
+    draft: records.filter((record) => publicationStateOf(record) === "draft")
+      .length,
+  };
 
   const teacherStats =
     role.includes("teacher") &&
@@ -966,12 +984,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             !/(id|token|password)/i.test(key) &&
             (typeof value === "number" || typeof value === "boolean"),
         )
-      : []
+      : [];
 
   const adminMetrics =
     role.includes("admin") && activeKey === "stats"
       ? getAdminMetrics(responseData)
-      : []
+      : [];
 
   const studentOverview =
     !role.includes("admin") &&
@@ -979,11 +997,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     activeKey === "overview" &&
     isRecord(responseData)
       ? responseData
-      : null
+      : null;
   const studentOverviewCourses = getEnrollmentRecords(
     studentOverview?.enrollments,
-  ).slice(0, 4)
-  const studentEnrollmentTotal = studentOverviewCourses.length
+  ).slice(0, 4);
+  const studentEnrollmentTotal = studentOverviewCourses.length;
 
   const paginationData =
     role.includes("teacher") &&
@@ -991,12 +1009,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     isRecord(responseData) &&
     isRecord(responseData.requests)
       ? responseData.requests
-      : responseData
+      : responseData;
 
   const pagination =
     isRecord(paginationData) && typeof paginationData.totalPages === "number"
       ? { page: paginationData.page, totalPages: paginationData.totalPages }
-      : null
+      : null;
 
   const showGenericRecords =
     !(role.includes("admin") && activeKey === "stats") &&
@@ -1010,12 +1028,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       !role.includes("admin") &&
       !role.includes("teacher") &&
       ["profile", "courses"].includes(activeKey)
-    )
+    );
 
   const supportsSearch =
     (role.includes("admin") &&
       ["courses", "teachers", "students"].includes(activeKey)) ||
-    (role.includes("teacher") && activeKey === "courses")
+    (role.includes("teacher") && activeKey === "courses");
 
   useEffect(() => {
     if (
@@ -1023,24 +1041,23 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       !role.includes("teacher") &&
       activeKey !== "profile"
     )
-      return
+      return;
 
-    let active = true
+    let active = true;
 
     getAcademicYears()
-
       .then((years) => {
-        if (active) setAcademicYears(years)
+        if (active) setAcademicYears(years);
       })
 
       .catch(() => {
-        if (active) setActionFeedback("تعذر تحميل الصفوف الدراسية من الخادم.")
-      })
+        if (active) setActionFeedback("تعذر تحميل الصفوف الدراسية من الخادم.");
+      });
 
     return () => {
-      active = false
-    }
-  }, [role, activeKey])
+      active = false;
+    };
+  }, [role, activeKey]);
 
   async function handleEnrollment(
     id: string,
@@ -1048,7 +1065,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     approve: boolean,
     rejectionAlreadyConfirmed = false,
   ): Promise<boolean> {
-    let rejectionConfirmed = rejectionAlreadyConfirmed
+    let rejectionConfirmed = rejectionAlreadyConfirmed;
     if (!approve && role.includes("admin") && !rejectionConfirmed) {
       rejectionConfirmed = await confirm({
         title: "رفض طلب الالتحاق؟",
@@ -1056,139 +1073,142 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         variant: "warning",
         confirmText: "رفض الطلب",
         onConfirm: async () => {
-          await enrollmentsApi.adminReject(id)
+          await enrollmentsApi.adminReject(id);
         },
-      })
-      if (!rejectionConfirmed) return false
+      });
+      if (!rejectionConfirmed) return false;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionLoading(`${id}-${approve ? "approve" : "reject"}`)
+      setActionLoading(`${id}-${approve ? "approve" : "reject"}`);
 
       if (role.includes("admin")) {
-        if (approve) await enrollmentsApi.adminApprove(id)
-        else if (!rejectionConfirmed) await enrollmentsApi.adminReject(id)
+        if (approve) await enrollmentsApi.adminApprove(id);
+        else if (!rejectionConfirmed) await enrollmentsApi.adminReject(id);
       } else if (role.includes("teacher")) {
         await (approve
           ? teachersApi.approveEnrollment(id)
-          : teachersApi.rejectEnrollment(id))
+          : teachersApi.rejectEnrollment(id));
       } else {
-        setActionFeedback("هذا الإجراء متاح للأدمن والمدرّس فقط.")
-        return false
+        setActionFeedback("هذا الإجراء متاح للأدمن والمدرّس فقط.");
+        return false;
       }
 
-      setActionFeedback(approve ? "تمت الموافقة على الطلب." : "تم رفض الطلب.")
+      setActionFeedback(approve ? "تمت الموافقة على الطلب." : "تم رفض الطلب.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
 
-      return true
+      return true;
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
       const alreadyHandled =
         (cause instanceof ApiError && cause.status === 409) ||
-        /already|approved|accepted|processed|مقبول|تمت الموافقة|سبق/i.test(message)
+        /already|approved|accepted|processed|مقبول|تمت الموافقة|سبق/i.test(
+          message,
+        );
       if (approve && alreadyHandled) {
-        setActionFeedback("الطلب تمت الموافقة عليه بالفعل.")
-        setReloadKey((key) => key + 1)
-        return true
+        setActionFeedback("الطلب تمت الموافقة عليه بالفعل.");
+        setReloadKey((key) => key + 1);
+        return true;
       }
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الطلب.",
-      )
+      );
 
-      return false
+      return false;
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleMarkRead(id?: string) {
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionLoading(id ? `read-${id}` : "read-all")
+      setActionLoading(id ? `read-${id}` : "read-all");
 
-      if (id) await notificationsApi.markRead(id)
-      else await notificationsApi.markAllRead()
+      if (id) await notificationsApi.markRead(id);
+      else await notificationsApi.markAllRead();
 
-      setActionFeedback("تم تحديث حالة الإشعارات.")
+      setActionFeedback("تم تحديث حالة الإشعارات.");
 
-      setReloadKey((key) => key + 1)
-      setNotificationReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
+      setNotificationReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الإشعارات.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleNotificationDelete(id: string) {
-    setActionFeedback("")
-    setActionLoading(`delete-notification-${id}`)
+    setActionFeedback("");
+    setActionLoading(`delete-notification-${id}`);
     try {
-      await notificationsApi.remove(id)
-      const remaining = getNotificationRecords(await notificationsApi.list())
+      await notificationsApi.remove(id);
+      const remaining = getNotificationRecords(await notificationsApi.list());
       const stillExists = remaining.some(
         (notification) =>
           String(notification.id ?? notification.notificationId ?? "") === id,
-      )
+      );
       if (stillExists) {
-        throw new Error("الخادم استقبل طلب الحذف لكن الإشعار ما زال موجودًا.")
+        throw new Error("الخادم استقبل طلب الحذف لكن الإشعار ما زال موجودًا.");
       }
-      setActionFeedback("تم حذف الإشعار.")
-      setReloadKey((key) => key + 1)
-      setNotificationReloadKey((key) => key + 1)
+      setActionFeedback("تم حذف الإشعار.");
+      setReloadKey((key) => key + 1);
+      setNotificationReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف الإشعار.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleDeleteAllNotifications() {
     const confirmed = await confirm({
       title: "حذف جميع الإشعارات؟",
-      message: "سيتم حذف جميع الإشعارات نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+      message:
+        "سيتم حذف جميع الإشعارات نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
       variant: "danger",
       confirmText: "حذف الكل",
       onConfirm: async () => {
-        await notificationsApi.removeAll()
-        const remaining = getNotificationRecords(await notificationsApi.list())
+        await notificationsApi.removeAll();
+        const remaining = getNotificationRecords(await notificationsApi.list());
         if (remaining.length > 0) {
-          throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.")
+          throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.");
         }
       },
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
-    setActionFeedback("")
-    setActionLoading("delete-all-notifications")
+    setActionFeedback("");
+    setActionLoading("delete-all-notifications");
     try {
-      setActionFeedback("تم حذف جميع الإشعارات.")
-      setReloadKey((key) => key + 1)
-      setNotificationReloadKey((key) => key + 1)
+      setActionFeedback("تم حذف جميع الإشعارات.");
+      setReloadKey((key) => key + 1);
+      setNotificationReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف الإشعارات.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handlePendingStudent(id: string, approve: boolean) {
     if (!role.includes("admin")) {
-      setActionFeedback("اعتماد حسابات الطلاب متاح للأدمن فقط.")
-      return
+      setActionFeedback("اعتماد حسابات الطلاب متاح للأدمن فقط.");
+      return;
     }
 
-    let rejectionConfirmed = false
+    let rejectionConfirmed = false;
     if (!approve) {
       rejectionConfirmed = await confirm({
         title: "رفض طلب الطالب؟",
@@ -1196,121 +1216,123 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         variant: "danger",
         confirmText: "رفض وحذف",
         onConfirm: () => adminApi.rejectStudent(id),
-      })
-      if (!rejectionConfirmed) return
+      });
+      if (!rejectionConfirmed) return;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading(`${id}-${approve ? "approve" : "reject"}`)
+    setActionLoading(`${id}-${approve ? "approve" : "reject"}`);
 
     try {
-      if (approve) await adminApi.approveStudent(id)
-      else if (!rejectionConfirmed) await adminApi.rejectStudent(id)
+      if (approve) await adminApi.approveStudent(id);
+      else if (!rejectionConfirmed) await adminApi.rejectStudent(id);
 
       if (approve) {
-        setApprovedStudentIds((current) => new Set(current).add(id))
+        setApprovedStudentIds((current) => new Set(current).add(id));
       }
-      setActionFeedback(approve ? "تم اعتماد حساب الطالب." : "تم رفض الطلب.")
+      setActionFeedback(approve ? "تم اعتماد حساب الطالب." : "تم رفض الطلب.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
       const alreadyApproved =
         approve &&
         ((cause instanceof ApiError && cause.status === 409) ||
-          /already|approved|accepted|مقبول|تم اعتماده|تمت الموافقة|سبق/i.test(message))
+          /already|approved|accepted|مقبول|تم اعتماده|تمت الموافقة|سبق/i.test(
+            message,
+          ));
       if (alreadyApproved) {
-        setApprovedStudentIds((current) => new Set(current).add(id))
-        setActionFeedback("حساب الطالب معتمد بالفعل.")
-        setReloadKey((key) => key + 1)
-        return
+        setApprovedStudentIds((current) => new Set(current).add(id));
+        setActionFeedback("حساب الطالب معتمد بالفعل.");
+        setReloadKey((key) => key + 1);
+        return;
       }
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث طلب الطالب.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleCoursePublish(id: string, publish: boolean) {
     const currentCourse = courseRecords.find(
       (course) => String(course.id ?? course.courseId ?? "") === id,
-    )
+    );
     if (
       currentCourse &&
       (publicationStateOf(currentCourse) === "published") === publish
     ) {
       setActionFeedback(
         publish ? "الدورة منشورة بالفعل." : "الدورة غير منشورة بالفعل.",
-      )
-      return
+      );
+      return;
     }
 
-    let unpublishConfirmed = false
+    let unpublishConfirmed = false;
     if (!publish) {
       const courseTitle = String(
         currentCourse?.title ?? currentCourse?.name ?? "هذه الدورة",
-      )
+      );
       unpublishConfirmed = await confirm({
         title: "إلغاء نشر الدورة؟",
         message: `سيتم إخفاء «${courseTitle}» عن الطلاب مع الاحتفاظ بها لإعادة نشرها لاحقًا.`,
         variant: "warning",
         confirmText: "إلغاء النشر",
         onConfirm: async () => {
-          if (role.includes("admin")) await adminApi.unpublishCourse(id)
-          else await teachersApi.unpublishCourse(id)
+          if (role.includes("admin")) await adminApi.unpublishCourse(id);
+          else await teachersApi.unpublishCourse(id);
         },
-      })
-      if (!unpublishConfirmed) return
+      });
+      if (!unpublishConfirmed) return;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading(`${id}-publish`)
+    setActionLoading(`${id}-publish`);
 
     try {
       if (role.includes("admin")) {
-        if (publish) await adminApi.publishCourse(id)
-        else if (!unpublishConfirmed) await adminApi.unpublishCourse(id)
+        if (publish) await adminApi.publishCourse(id);
+        else if (!unpublishConfirmed) await adminApi.unpublishCourse(id);
       } else if (role.includes("teacher")) {
-        if (publish) await teachersApi.publishCourse(id)
-        else if (!unpublishConfirmed) await teachersApi.unpublishCourse(id)
+        if (publish) await teachersApi.publishCourse(id);
+        else if (!unpublishConfirmed) await teachersApi.unpublishCourse(id);
       } else {
-        setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.")
-        return
+        setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.");
+        return;
       }
 
       setCoursePublicationOverrides((current) => ({
         ...current,
         [id]: publish ? "published" : "unpublished",
-      }))
+      }));
       if (currentCourse) {
         setCoursePublicationRecords((current) => {
-          if (!publish) return { ...current, [id]: currentCourse }
-          const next = { ...current }
-          delete next[id]
-          return next
-        })
+          if (!publish) return { ...current, [id]: currentCourse };
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
       }
-      setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.")
-      setReloadKey((key) => key + 1)
+      setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.");
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث حالة الدورة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleSubjectSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
-    const currentSubjectId = String(form.get("subjectId") ?? "")
+    const currentSubjectId = String(form.get("subjectId") ?? "");
 
     const body = {
       name: String(form.get("name") ?? "").trim(),
@@ -1318,35 +1340,36 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       academicYear: Number(form.get("academicYear")),
 
       isActive: form.get("isActive") === "on",
-    }
+    };
 
-    if (!body.name || !Number.isFinite(body.academicYear)) return
+    if (!body.name || !Number.isFinite(body.academicYear)) return;
 
-    setActionLoading("subject-save")
+    setActionLoading("subject-save");
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      if (currentSubjectId) await adminApi.updateSubject(currentSubjectId, body)
-      else await adminApi.createSubject(body)
+      if (currentSubjectId)
+        await adminApi.updateSubject(currentSubjectId, body);
+      else await adminApi.createSubject(body);
 
-      setSubjectName("")
+      setSubjectName("");
 
-      setSubjectId("")
+      setSubjectId("");
 
-      setSubjectIsActive(true)
+      setSubjectIsActive(true);
 
       setActionFeedback(
         currentSubjectId ? "تم تحديث المادة." : "تمت إضافة المادة.",
-      )
+      );
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حفظ المادة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
@@ -1357,23 +1380,23 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       variant: "danger",
       confirmText: "حذف المادة",
       onConfirm: () => adminApi.deleteSubject(id),
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
-    setActionLoading(`${id}-delete`)
+    setActionLoading(`${id}-delete`);
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionFeedback("تم حذف المادة.")
+      setActionFeedback("تم حذف المادة.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف المادة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
@@ -1383,21 +1406,21 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       message: "ستحتاج إلى تسجيل الدخول مرة أخرى لفتح مساحة العمل.",
       variant: "primary",
       confirmText: "تسجيل الخروج",
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
-    clearAuthToken()
+    clearAuthToken();
 
-    window.sessionStorage.removeItem("eduhub.auth.role")
-    window.sessionStorage.removeItem("eduhub.auth.name")
-    window.sessionStorage.removeItem("eduhub.auth.image")
+    window.sessionStorage.removeItem("eduhub.auth.role");
+    window.sessionStorage.removeItem("eduhub.auth.name");
+    window.sessionStorage.removeItem("eduhub.auth.image");
 
-    navigate("landing")
+    navigate("landing");
   }
 
-  const roleCardTone = "border-emerald-900/10 bg-surface"
+  const roleCardTone = "border-emerald-900/10 bg-surface";
 
-  const roleCellTone = "bg-nuwa-soft/70"
+  const roleCellTone = "bg-nuwa-soft/70";
 
   const roleBadge = role.includes("admin")
     ? {
@@ -1421,7 +1444,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
           badge: "طالب",
 
           color: "bg-nuwa-soft text-nuwa-base",
-        }
+        };
 
   const sectionLabels: Record<string, string> = {
     stats: "الإحصائيات",
@@ -1447,7 +1470,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     enrollments: "طلبات الالتحاق",
 
     notifications: "الإشعارات",
-  }
+  };
 
   return (
     <div className="dashboard-shell min-h-dvh bg-canvas pb-10 dir-rtl sm:pb-16">
@@ -1591,7 +1614,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 />
               )}
               {sections.map((item) => {
-                const isActive = activeKey === item.key
+                const isActive = activeKey === item.key;
 
                 const iconMap: Record<string, typeof LayoutDashboard> = {
                   stats: LayoutDashboard,
@@ -1615,24 +1638,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   enrollments: ClipboardList,
 
                   notifications: Bell,
-                }
+                };
 
-                const Icon = iconMap[item.key] ?? Settings2
+                const Icon = iconMap[item.key] ?? Settings2;
 
                 return (
                   <button
                     key={item.key}
                     data-sidebar-item={item.key}
                     onClick={() => {
-                      changeDashboardSection(item.key)
+                      changeDashboardSection(item.key);
 
-                      setPage(1)
+                      setPage(1);
 
-                      setSearch("")
+                      setSearch("");
 
-                      setSearchInput("")
+                      setSearchInput("");
 
-                      setMobileNavOpen(false)
+                      setMobileNavOpen(false);
                     }}
                     aria-current={isActive ? "page" : undefined}
                     className={`relative flex h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition-colors duration-200 ${
@@ -1659,7 +1682,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       {sectionLabels[item.key] ?? item.label}
                     </span>
                   </button>
-                )
+                );
               })}
             </nav>
           </LazyMotion>
@@ -1754,11 +1777,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             {supportsSearch && (
               <form
                 onSubmit={(event) => {
-                  event.preventDefault()
+                  event.preventDefault();
 
-                  setPage(1)
+                  setPage(1);
 
-                  setSearch(searchInput.trim())
+                  setSearch(searchInput.trim());
                 }}
                 className="mt-5 flex flex-wrap gap-2 rounded-xl border border-stroke bg-surface p-3"
               >
@@ -1779,11 +1802,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchInput("")
+                      setSearchInput("");
 
-                      setSearch("")
+                      setSearch("");
 
-                      setPage(1)
+                      setPage(1);
                     }}
                     className="h-10 rounded-lg border border-stroke px-4 text-sm text-ink"
                   >
@@ -1799,12 +1822,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 aria-label="تصفية الدورات حسب حالة النشر"
                 className="mt-5 flex flex-wrap gap-2 rounded-2xl border border-stroke bg-surface p-3"
               >
-                {([
-                  ["all", "كل الدورات"],
-                  ["published", "منشورة"],
-                  ["unpublished", "غير منشورة"],
-                  ["draft", "مسودات"],
-                ] as const).map(([status, label]) => (
+                {(
+                  [
+                    ["all", "كل الدورات"],
+                    ["published", "منشورة"],
+                    ["unpublished", "غير منشورة"],
+                    ["draft", "مسودات"],
+                  ] as const
+                ).map(([status, label]) => (
                   <button
                     key={status}
                     type="button"
@@ -1813,7 +1838,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${courseStatusFilter === status ? "bg-nuwa-base text-white shadow-sm" : "bg-white text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"}`}
                   >
                     {label}
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${courseStatusFilter === status ? "bg-white/15 text-white" : "bg-canvas text-ink-muted"}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${courseStatusFilter === status ? "bg-white/15 text-white" : "bg-canvas text-ink-muted"}`}
+                    >
                       {courseStatusCounts[status]}
                     </span>
                   </button>
@@ -1832,7 +1859,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                         className={`rounded-xl border p-4 shadow-sm ${roleCardTone}`}
                       >
                         <dt className="text-sm font-medium text-ink-muted">
-                          {fieldLabels[key] ?? key}
+                          {fieldLabels[key] ?? "مؤشر إضافي"}
                         </dt>
                         <dd className="mt-2 text-2xl font-bold text-nuwa-deep">
                           {formatValue(key, value)}
@@ -1845,7 +1872,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     description="مقارنة القيم الحالية لأبرز المؤشرات"
                     metrics={teacherStats.map(([key, value]) => ({
                       key,
-                      label: fieldLabels[key] ?? key,
+                      label: fieldLabels[key] ?? "مؤشر إضافي",
                       value: Number(value),
                     }))}
                   />
@@ -1871,8 +1898,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             نظرة عامة على منصة وَعي
                           </h3>
                           <p className="mt-1 text-sm leading-6 text-white/75">
-                            تابع المؤشرات الرئيسية وانتقل مباشرةً إلى أدوات إدارة
-                            المنصة.
+                            تابع المؤشرات الرئيسية وانتقل مباشرةً إلى أدوات
+                            إدارة المنصة.
                           </p>
                         </div>
                         <button
@@ -1995,10 +2022,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               key={key}
                               type="button"
                               onClick={() => {
-                                changeDashboardSection(key)
-                                setPage(1)
-                                setSearch("")
-                                setSearchInput("")
+                                changeDashboardSection(key);
+                                setPage(1);
+                                setSearch("");
+                                setSearchInput("");
                               }}
                               className="group flex items-center gap-3 rounded-xl border border-stroke p-3 text-start transition hover:border-nuwa-base/40 hover:bg-nuwa-ice"
                             >
@@ -2063,7 +2090,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 "",
                             ),
                           ),
-                      ).length
+                      ).length;
                       const progressValues = studentOverviewCourses
                         .filter(
                           (enrollment) =>
@@ -2077,7 +2104,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             ),
                         )
                         .map(enrollmentProgressPercent)
-                        .filter((value): value is number => value !== null)
+                        .filter((value): value is number => value !== null);
                       const averageProgress = progressValues.length
                         ? Math.round(
                             progressValues.reduce(
@@ -2085,7 +2112,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               0,
                             ) / progressValues.length,
                           )
-                        : 0
+                        : 0;
 
                       return (
                         <>
@@ -2132,9 +2159,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               (enrollment, index) => {
                                 const course = isRecord(enrollment.course)
                                   ? enrollment.course
-                                  : {}
+                                  : {};
                                 const progress =
-                                  enrollmentProgressPercent(enrollment) ?? 0
+                                  enrollmentProgressPercent(enrollment) ?? 0;
 
                                 return {
                                   key: String(
@@ -2150,7 +2177,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                       `دورة ${index + 1}`,
                                   ),
                                   value: Math.round(progress),
-                                }
+                                };
                               },
                             )}
                           />
@@ -2166,11 +2193,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             <button
                               type="button"
                               onClick={() => {
-                                setFocusStudentCourseId(null)
-                                changeDashboardSection("courses")
-                                setPage(1)
-                                setSearch("")
-                                setSearchInput("")
+                                setFocusStudentCourseId(null);
+                                changeDashboardSection("courses");
+                                setPage(1);
+                                setSearch("");
+                                setSearchInput("");
                               }}
                               className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold text-nuwa-base transition hover:bg-nuwa-ice"
                             >
@@ -2183,29 +2210,29 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 (enrollment, index) => {
                                   const course = isRecord(enrollment.course)
                                     ? enrollment.course
-                                    : {}
+                                    : {};
                                   const courseId =
                                     enrollment.courseId ??
                                     course.id ??
-                                    course.courseId
+                                    course.courseId;
                                   const title =
                                     enrollment.courseTitle ??
                                     enrollment.courseName ??
                                     course.title ??
                                     course.name ??
-                                    `دورة ${index + 1}`
+                                    `دورة ${index + 1}`;
                                   const progressPercent =
-                                    enrollmentProgressPercent(enrollment) ?? 0
+                                    enrollmentProgressPercent(enrollment) ?? 0;
                                   const teacher = isRecord(enrollment.teacher)
                                     ? enrollment.teacher
                                     : isRecord(course.teacher)
                                       ? course.teacher
-                                      : {}
+                                      : {};
                                   const teacherName =
                                     enrollment.teacherName ??
                                     course.teacherName ??
                                     teacher.fullName ??
-                                    teacher.name
+                                    teacher.name;
                                   const canOpenCourse =
                                     enrollment.isApproved !== false &&
                                     !/pending|await|review|reject|declin|cancel/i.test(
@@ -2214,7 +2241,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                           enrollment.enrollmentStatus ??
                                           "",
                                       ),
-                                    )
+                                    );
 
                                   return (
                                     <article
@@ -2272,11 +2299,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                             onClick={() => {
                                               setFocusStudentCourseId(
                                                 String(courseId),
-                                              )
-                                              changeDashboardSection("courses")
-                                              setPage(1)
-                                              setSearch("")
-                                              setSearchInput("")
+                                              );
+                                              changeDashboardSection("courses");
+                                              setPage(1);
+                                              setSearch("");
+                                              setSearchInput("");
                                             }}
                                             className="mt-4 w-full rounded-lg bg-nuwa-soft px-3 py-2 text-sm font-semibold text-nuwa-base transition hover:bg-nuwa-base hover:text-white"
                                           >
@@ -2284,7 +2311,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                           </button>
                                         )}
                                     </article>
-                                  )
+                                  );
                                 },
                               )}
                             </div>
@@ -2311,7 +2338,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             </div>
                           )}
                         </>
-                      )
+                      );
                     })()}
                   </div>
                 </section>
@@ -2380,11 +2407,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       <button
                         type="button"
                         onClick={() => {
-                          setSubjectId("")
+                          setSubjectId("");
 
-                          setSubjectName("")
+                          setSubjectName("");
 
-                          setSubjectIsActive(true)
+                          setSubjectIsActive(true);
                         }}
                         className="h-10 rounded-lg border border-stroke px-3 text-sm"
                       >
@@ -2439,23 +2466,26 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       }
                     >
                       {displayedRecords.map((record, index) => {
-                        const recordId = activeKey === "notifications"
-                          ? (record.id ?? record.notificationId)
-                          : activeKey === "pending"
-                            ? (record.studentId ?? record.userId ?? record.id)
-                            : activeKey === "enrollments"
-                              ? (record.enrollmentId ?? record.requestId ?? record.id)
-                              : activeKey === "courses"
-                                ? (record.courseId ?? record.id)
-                                : record.id
-                        const id = formatValue("id", recordId)
+                        const recordId =
+                          activeKey === "notifications"
+                            ? (record.id ?? record.notificationId)
+                            : activeKey === "pending"
+                              ? (record.studentId ?? record.userId ?? record.id)
+                              : activeKey === "enrollments"
+                                ? (record.enrollmentId ??
+                                  record.requestId ??
+                                  record.id)
+                                : activeKey === "courses"
+                                  ? (record.courseId ?? record.id)
+                                  : record.id;
+                        const id = formatValue("id", recordId);
                         const unread =
                           activeKey === "notifications" &&
-                          isUnreadNotification(record)
+                          isUnreadNotification(record);
                         const publicationState =
                           activeKey === "courses"
                             ? publicationStateOf(record)
-                            : null
+                            : null;
 
                         const title = formatValue(
                           "title",
@@ -2465,33 +2495,33 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             record.name ??
                             record.email ??
                             `عنصر #${index + 1}`,
-                        )
+                        );
 
                         if (activeKey === "notifications") {
                           const sender = isRecord(record.sender)
                             ? record.sender
                             : isRecord(record.actor)
                               ? record.actor
-                              : {}
+                              : {};
                           const senderName = String(
                             record.senderName ??
                               record.actorName ??
                               sender.fullName ??
                               sender.name ??
                               "إشعار من المنصة",
-                          )
+                          );
                           const message =
                             record.message ??
                             record.body ??
                             record.description ??
                             record.content ??
                             record.text ??
-                            record.details
+                            record.details;
                           const createdAt =
                             record.createdAt ??
                             record.sentAt ??
                             record.createdOn ??
-                            record.date
+                            record.date;
                           const details = Object.entries(record).filter(
                             ([key, value]) =>
                               !/(^id$|id$|token|password|image|url|isread|isunread|readat|message|body|description|content|text|details|title|subject|sender|actor|createdat|sentat|createdon|date)/i.test(
@@ -2501,7 +2531,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               ["string", "number", "boolean"].includes(
                                 typeof value,
                               ),
-                          )
+                          );
 
                           return (
                             <article
@@ -2599,9 +2629,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => void handleNotificationDelete(id)}
+                                  onClick={() =>
+                                    void handleNotificationDelete(id)
+                                  }
                                   disabled={
-                                    actionLoading === `delete-notification-${id}`
+                                    actionLoading ===
+                                    `delete-notification-${id}`
                                   }
                                   aria-label={`حذف الإشعار: ${title}`}
                                   className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
@@ -2610,14 +2643,16 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 </button>
                               </div>
                             </article>
-                          )
+                          );
                         }
 
                         return (
                           <article
                             key={id === "—" ? index : id}
                             className={`flex flex-col justify-between rounded-2xl border p-5 shadow-nuwa transition-all hover:-translate-y-0.5 hover:shadow-nuwa-md ${roleCardTone} ${
-                              unread ? "border-emerald-200 bg-emerald-50/50" : ""
+                              unread
+                                ? "border-emerald-200 bg-emerald-50/50"
+                                : ""
                             }`}
                           >
                             <div>
@@ -2702,12 +2737,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 }`}
                               >
                                 {cardFields(record)
-
                                   .slice(0, 4)
 
                                   .map(([key, value]) => {
                                     const translatedKey =
-                                      fieldLabels[key] || key
+                                      fieldLabels[key] || key;
 
                                     return (
                                       <div
@@ -2724,7 +2758,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                           />
                                         </dd>
                                       </div>
-                                    )
+                                    );
                                   })}
                               </dl>
                               {activeKey === "students" ? (
@@ -2741,7 +2775,6 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                     </summary>
                                     <dl className="grid gap-2 border-t border-neutral-100 p-3 sm:grid-cols-2">
                                       {cardFields(record)
-
                                         .slice(4)
 
                                         .map(([key, value]) => (
@@ -2833,7 +2866,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const year = record.academicYear
+                                      const year = record.academicYear;
 
                                       const yearValue =
                                         typeof year === "object" &&
@@ -2842,11 +2875,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                               .value ??
                                             (year as Record<string, unknown>)
                                               .id)
-                                          : year
+                                          : year;
 
-                                      setSubjectId(id)
+                                      setSubjectId(id);
 
-                                      setSubjectName(String(record.name ?? ""))
+                                      setSubjectName(String(record.name ?? ""));
 
                                       setSubjectYear(
                                         String(
@@ -2854,11 +2887,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                             academicYears[0]?.value ??
                                             "1",
                                         ),
-                                      )
+                                      );
 
                                       setSubjectIsActive(
                                         record.isActive !== false,
-                                      )
+                                      );
                                     }}
                                     className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink"
                                   >
@@ -2907,7 +2940,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               </div>
                             )}
                           </article>
-                        )
+                        );
                       })}
                     </div>
                   )}
@@ -2945,5 +2978,5 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         </main>
       </div>
     </div>
-  )
+  );
 }

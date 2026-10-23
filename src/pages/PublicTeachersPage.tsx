@@ -4,16 +4,22 @@ import { teachersApi } from "../api/endpoints"
 
 import PublicCatalogPage from "./PublicCatalogPage"
 
-export default function PublicTeachersPage() {
+import type { NavigateFn } from "../types"
+
+export default function PublicTeachersPage({
+  navigate,
+}: {
+  navigate: NavigateFn
+}) {
   return (
     <PublicCatalogPage
       title="المعلمون"
-      description="المعلمون المسجلون في منصة وَعي"
+      description="تعرّف على معلمي منصة وَعي واستكشف دوراتهم التعليمية."
       emptyMessage="لا توجد ملفات معلمين متاحة حالياً."
       load={getPublicTeachers}
-      loadDetail={teachersApi.byId}
       loadRelated={(id) => teachersApi.courses(id)}
       personCards
+      navigate={navigate}
     />
   )
 }

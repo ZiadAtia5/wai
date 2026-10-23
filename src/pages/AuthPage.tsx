@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
   ArrowRight,
@@ -7,15 +7,15 @@ import {
   GraduationCap,
   ShieldCheck,
   Sparkles,
-} from "lucide-react"
+} from "lucide-react";
 
-import { ApiError, setAuthToken } from "../api/client"
+import { ApiError, setAuthToken } from "../api/client";
 
-import { authApi, type ApiObject } from "../api/endpoints"
+import { authApi, type ApiObject } from "../api/endpoints";
 
-import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
+import { getAcademicYears, type AcademicYearResponse } from "../api/catalog";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { notifyError, notifySuccess } from "../utils/notifications";
 
 import {
   FieldGroup,
@@ -25,14 +25,14 @@ import {
   PasswordField,
   PasswordRequirements,
   TextField,
-} from "../components/auth/AuthFields"
+} from "../components/auth/AuthFields";
 
-import type { NavigateFn } from "../types"
+import type { NavigateFn } from "../types";
 
 interface AuthPageProps {
-  mode: "login" | "register"
+  mode: "login" | "register";
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }
 
 function comparablePhone(value: string): string {
@@ -40,62 +40,64 @@ function comparablePhone(value: string): string {
     .replace(/[٠-٩۰-۹]/g, (digit) =>
       String("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹".indexOf(digit) % 10),
     )
-    .replace(/\D/g, "")
+    .replace(/\D/g, "");
 
-  if (digits.startsWith("0020")) digits = digits.slice(4)
-  else if (digits.startsWith("20") && digits.length >= 12) digits = digits.slice(2)
+  if (digits.startsWith("0020")) digits = digits.slice(4);
+  else if (digits.startsWith("20") && digits.length >= 12)
+    digits = digits.slice(2);
 
-  return digits.startsWith("0") ? digits.slice(1) : digits
+  return digits.startsWith("0") ? digits.slice(1) : digits;
 }
 
 export default function AuthPage({ mode, navigate }: AuthPageProps) {
-  const isLogin = mode === "login"
+  const isLogin = mode === "login";
 
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false);
 
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(false);
 
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [passwordValue, setPasswordValue] = useState("")
+  const [passwordValue, setPasswordValue] = useState("");
 
-  const [confirmPasswordValue, setConfirmPasswordValue] = useState("")
+  const [confirmPasswordValue, setConfirmPasswordValue] = useState("");
 
-  const [studentPhoneValue, setStudentPhoneValue] = useState("")
+  const [studentPhoneValue, setStudentPhoneValue] = useState("");
 
-  const [parentPhoneValue, setParentPhoneValue] = useState("")
+  const [parentPhoneValue, setParentPhoneValue] = useState("");
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
+    [],
+  );
 
-  const [success, setSuccess] = useState("")
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    if (isLogin) return
+    if (isLogin) return;
 
-    let active = true
+    let active = true;
 
     getAcademicYears()
-
       .then((years) => {
-        if (active) setAcademicYears(years)
+        if (active) setAcademicYears(years);
       })
 
       .catch((error: unknown) =>
         notifyError(error, "تعذر تحميل الصفوف الدراسية."),
-      )
+      );
 
     return () => {
-      active = false
-    }
-  }, [isLogin])
+      active = false;
+    };
+  }, [isLogin]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const form = event.currentTarget
+    const form = event.currentTarget;
     const firstInvalidField = form.querySelector<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >(":invalid")
+    >(":invalid");
 
     if (
       !isLogin &&
@@ -106,46 +108,46 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
       const passwordMessage = passwordRequirementMessage(
         passwordValue,
         confirmPasswordValue,
-      )
+      );
       if (passwordMessage) {
         const fieldName = passwordMessage.includes("تأكيد")
           ? "confirmPassword"
-          : "password"
-        const field = form.elements.namedItem(fieldName)
-        if (field instanceof HTMLInputElement) field.focus()
-        notifyError(new Error(passwordMessage))
-        return
+          : "password";
+        const field = form.elements.namedItem(fieldName);
+        if (field instanceof HTMLInputElement) field.focus();
+        notifyError(new Error(passwordMessage));
+        return;
       }
     }
 
     if (!form.checkValidity()) {
-      firstInvalidField?.focus()
+      firstInvalidField?.focus();
 
       if (firstInvalidField) {
-        let validationMessage = "تحقق من الحقل المحدد ثم حاول مرة أخرى."
+        let validationMessage = "تحقق من الحقل المحدد ثم حاول مرة أخرى.";
         if (firstInvalidField.validity.customError) {
-          validationMessage = firstInvalidField.validationMessage
+          validationMessage = firstInvalidField.validationMessage;
         } else if (firstInvalidField.validity.valueMissing) {
           const fieldLabel = firstInvalidField.labels?.[0]?.textContent
             ?.replace(/\s+/g, " ")
-            .trim()
+            .trim();
           validationMessage = fieldLabel
             ? `أكمل حقل ${fieldLabel}.`
-            : "أكمل الحقل المطلوب."
+            : "أكمل الحقل المطلوب.";
         } else if (firstInvalidField.validity.typeMismatch) {
-          validationMessage = "أدخل البريد الإلكتروني بالتنسيق الصحيح."
+          validationMessage = "أدخل البريد الإلكتروني بالتنسيق الصحيح.";
         } else if (firstInvalidField.validity.tooShort) {
-          validationMessage = "كلمة المرور يجب ألا تقل عن 8 أحرف."
+          validationMessage = "كلمة المرور يجب ألا تقل عن 8 أحرف.";
         }
-        notifyError(new Error(validationMessage))
-        return
+        notifyError(new Error(validationMessage));
+        return;
       }
 
       notifyError(
         new Error("تحقق من الحقول المطلوبة وتنسيق البريد وكلمة المرور."),
-      )
+      );
 
-      return
+      return;
     }
 
     if (
@@ -153,39 +155,42 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
       comparablePhone(studentPhoneValue) &&
       comparablePhone(studentPhoneValue) === comparablePhone(parentPhoneValue)
     ) {
-      const parentPhoneField = form.elements.namedItem("parentPhoneNumber")
-      if (parentPhoneField instanceof HTMLInputElement) parentPhoneField.focus()
-      notifyError(new Error("رقم هاتف الطالب ورقم ولي الأمر لازم يكونوا مختلفين."))
-      return
+      const parentPhoneField = form.elements.namedItem("parentPhoneNumber");
+      if (parentPhoneField instanceof HTMLInputElement)
+        parentPhoneField.focus();
+      notifyError(
+        new Error("رقم هاتف الطالب ورقم ولي الأمر لازم يكونوا مختلفين."),
+      );
+      return;
     }
 
-    setBusy(true)
+    setBusy(true);
 
-    setSuccess("")
+    setSuccess("");
 
-    const formData = new FormData(event.currentTarget)
+    const formData = new FormData(event.currentTarget);
 
-    const values = Object.fromEntries(formData.entries())
+    const values = Object.fromEntries(formData.entries());
 
-    let body: ApiObject
+    let body: ApiObject;
 
     if (isLogin) {
       body = {
         email: String(values.email ?? "").trim(),
 
         password: String(values.password ?? ""),
-      }
+      };
     } else {
-      const password = String(values.password ?? "")
+      const password = String(values.password ?? "");
 
-      const confirmPassword = String(values.confirmPassword ?? "")
+      const confirmPassword = String(values.confirmPassword ?? "");
 
       if (password !== confirmPassword) {
-        notifyError(new Error("كلمتا المرور غير متطابقتين."))
+        notifyError(new Error("كلمتا المرور غير متطابقتين."));
 
-        setBusy(false)
+        setBusy(false);
 
-        return
+        return;
       }
 
       body = {
@@ -208,58 +213,63 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         studentNumber: String(values.studentNumber ?? "").trim(),
 
         academicYear: Number(values.academicYear),
-      }
+      };
     }
 
     try {
       const response = await (isLogin
         ? authApi.login(body)
-        : authApi.registerStudent(body))
+        : authApi.registerStudent(body));
 
       const record =
         typeof response === "object" && response !== null
-          ? response as Record<string, unknown>
-          : {}
+          ? (response as Record<string, unknown>)
+          : {};
 
       const nested =
         typeof record.data === "object" && record.data !== null
-          ? record.data as Record<string, unknown>
-          : {}
+          ? (record.data as Record<string, unknown>)
+          : {};
 
       if ((record.pendingApproval ?? nested.pendingApproval) === true) {
-        const message = record.message ?? nested.message
+        const message = record.message ?? nested.message;
 
         const notice =
           typeof message === "string" && /[\u0600-\u06ff]/.test(message)
             ? message
-            : "تم استلام طلبك بنجاح. سيصبح بإمكانك تسجيل الدخول بعد اعتماد الحساب."
+            : "تم استلام طلبك بنجاح. سيصبح بإمكانك تسجيل الدخول بعد اعتماد الحساب.";
 
-        setSuccess(notice)
+        setSuccess(notice);
 
-        notifySuccess(notice)
+        notifySuccess(notice);
 
-        return
+        return;
       }
 
       const token =
-        record.token ?? record.accessToken ?? nested.token ?? nested.accessToken
+        record.token ??
+        record.accessToken ??
+        nested.token ??
+        nested.accessToken;
 
       if (typeof token !== "string" || !token)
-        throw new ApiError("لم يرسل الخادم رمز جلسة صالحاً.")
+        throw new ApiError("لم يرسل الخادم رمز جلسة صالحاً.");
 
-      const userSource = record.user ?? nested.user
+      const userSource = record.user ?? nested.user;
       const user =
         typeof userSource === "object" && userSource !== null
-          ? userSource as Record<string, unknown>
-          : record
+          ? (userSource as Record<string, unknown>)
+          : record;
 
-      setAuthToken(token)
+      setAuthToken(token);
 
       window.sessionStorage.setItem(
         "eduhub.auth.role",
 
-        String(user.role ?? record.role ?? nested.role ?? "Student").toLowerCase(),
-      )
+        String(
+          user.role ?? record.role ?? nested.role ?? "Student",
+        ).toLowerCase(),
+      );
 
       const displayName = [
         user.firstName ?? nested.firstName ?? record.firstName,
@@ -267,12 +277,20 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         user.thirdName ?? nested.thirdName ?? record.thirdName,
         user.lastName ?? nested.lastName ?? record.lastName,
       ]
-        .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
-        .join(" ")
+        .filter(
+          (part): part is string =>
+            typeof part === "string" && part.trim().length > 0,
+        )
+        .join(" ");
       const accountName =
-        user.fullName ?? user.displayName ?? user.name ?? nested.fullName ?? nested.name ?? displayName
+        user.fullName ??
+        user.displayName ??
+        user.name ??
+        nested.fullName ??
+        nested.name ??
+        displayName;
       if (typeof accountName === "string" && accountName.trim()) {
-        window.sessionStorage.setItem("eduhub.auth.name", accountName.trim())
+        window.sessionStorage.setItem("eduhub.auth.name", accountName.trim());
       }
 
       const profileImage =
@@ -291,16 +309,16 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         nested.profileImage ??
         nested.profile_image ??
         nested.profilePictureUrl ??
-        nested.imageUrl
+        nested.imageUrl;
       if (typeof profileImage === "string" && profileImage.trim()) {
-        window.sessionStorage.setItem("eduhub.auth.image", profileImage.trim())
+        window.sessionStorage.setItem("eduhub.auth.image", profileImage.trim());
       }
 
       notifySuccess(
         isLogin ? "تم تسجيل الدخول بنجاح." : "تم إنشاء الحساب بنجاح.",
-      )
+      );
 
-      navigate("dashboard")
+      navigate("dashboard");
     } catch (error) {
       notifyError(
         error,
@@ -308,9 +326,9 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         isLogin
           ? "تعذر تسجيل الدخول. تحقق من بياناتك وحاول مجدداً."
           : "تعذر إنشاء الحساب. راجع البيانات وحاول مجدداً.",
-      )
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -354,7 +372,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
 
               [Sparkles, "متابعة لتقدمك"],
             ].map(([Icon, label]) => {
-              const ItemIcon = Icon as typeof BookOpen
+              const ItemIcon = Icon as typeof BookOpen;
 
               return (
                 <div
@@ -364,7 +382,7 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                   <ItemIcon size={18} className="text-emerald-300" />
                   {String(label)}
                 </div>
-              )
+              );
             })}
           </div>
         </aside>
@@ -404,7 +422,11 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                 </button>
               </div>
             ) : (
-              <form noValidate onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+              <form
+                noValidate
+                onSubmit={handleSubmit}
+                className="space-y-4 sm:space-y-5"
+              >
                 {!isLogin && (
                   <>
                     <FieldGroup title="بيانات الطالب">
@@ -446,6 +468,24 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                       autoComplete="email"
                       className="sm:col-span-2"
                     />
+
+                    <PasswordField
+                      label="كلمة المرور"
+                      name="password"
+                      visible={showPassword}
+                      toggle={() => setShowPassword((value) => !value)}
+                      onChange={setPasswordValue}
+                      pattern={!isLogin ? PASSWORD_POLICY_PATTERN : undefined}
+                      title={
+                        !isLogin
+                          ? "كلمة المرور تتطلب حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا، وبطول 8 أحرف على الأقل."
+                          : undefined
+                      }
+                      autoComplete={
+                        isLogin ? "current-password" : "new-password"
+                      }
+                    />
+
                     {!isLogin && (
                       <>
                         <TextField
@@ -501,47 +541,53 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                     </label>
                   </FieldGroup>
                 )}
-                <FieldGroup title={isLogin ? "كلمة المرور" : "تأمين الحساب"}>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <PasswordField
-                      label="كلمة المرور"
-                      name="password"
-                      visible={showPassword}
-                      toggle={() => setShowPassword((value) => !value)}
-                      onChange={setPasswordValue}
-                      pattern={!isLogin ? PASSWORD_POLICY_PATTERN : undefined}
-                      title={
-                        !isLogin
-                          ? "كلمة المرور تتطلب حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا، وبطول 8 أحرف على الأقل."
-                          : undefined
-                      }
-                      autoComplete={
-                        isLogin ? "current-password" : "new-password"
-                      }
-                    />
-                    <>
-                      {!isLogin && (
-                        <PasswordField
-                          label="تأكيد كلمة المرور"
-                          name="confirmPassword"
-                          visible={showConfirmPassword}
-                          toggle={() => setShowConfirmPassword((value) => !value)}
-                          onChange={setConfirmPasswordValue}
-                          autoComplete="new-password"
-                        />
-                      )}
-                    </>
-                  </div>
-                  {isLogin ? null : (
-                    <PasswordRequirements
-                      password={passwordValue}
-                      confirmation={confirmPasswordValue}
-                    />
-                  )}
-                  {isLogin && <p className="mt-2 text-xs text-ink-muted">
-                    يجب ألا تقل كلمة المرور عن 8 أحرف.
-                  </p>}
-                </FieldGroup>
+                {!isLogin && (
+                  <FieldGroup title={isLogin ? "كلمة المرور" : "تأمين الحساب"}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <PasswordField
+                        label="كلمة المرور"
+                        name="password"
+                        visible={showPassword}
+                        toggle={() => setShowPassword((value) => !value)}
+                        onChange={setPasswordValue}
+                        pattern={!isLogin ? PASSWORD_POLICY_PATTERN : undefined}
+                        title={
+                          !isLogin
+                            ? "كلمة المرور تتطلب حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا، وبطول 8 أحرف على الأقل."
+                            : undefined
+                        }
+                        autoComplete={
+                          isLogin ? "current-password" : "new-password"
+                        }
+                      />
+                      <>
+                        {!isLogin && (
+                          <PasswordField
+                            label="تأكيد كلمة المرور"
+                            name="confirmPassword"
+                            visible={showConfirmPassword}
+                            toggle={() =>
+                              setShowConfirmPassword((value) => !value)
+                            }
+                            onChange={setConfirmPasswordValue}
+                            autoComplete="new-password"
+                          />
+                        )}
+                      </>
+                    </div>
+                    {isLogin ? null : (
+                      <PasswordRequirements
+                        password={passwordValue}
+                        confirmation={confirmPasswordValue}
+                      />
+                    )}
+                    {isLogin && (
+                      <p className="mt-2 text-xs text-ink-muted">
+                        يجب ألا تقل كلمة المرور عن 8 أحرف.
+                      </p>
+                    )}
+                  </FieldGroup>
+                )}
                 <button
                   type="submit"
                   disabled={busy || (!isLogin && !academicYears.length)}
@@ -576,5 +622,5 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         </section>
       </div>
     </main>
-  )
+  );
 }
