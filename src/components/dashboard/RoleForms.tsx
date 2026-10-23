@@ -13,7 +13,7 @@ import {
   Trash2,
 } from "lucide-react"
 
-import { ApiError } from "../../api/client"
+import { ApiError, resolveApiAssetUrl } from "../../api/client"
 
 import TeacherStudentProgress from "./TeacherStudentProgress"
 
@@ -1987,7 +1987,7 @@ export default function RoleForms({
 
               const coverUrl =
                 typeof course.coverImageUrl === "string"
-                  ? course.coverImageUrl
+                  ? resolveApiAssetUrl(course.coverImageUrl)
                   : ""
 
               return (

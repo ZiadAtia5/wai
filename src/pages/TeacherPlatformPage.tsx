@@ -310,6 +310,9 @@ export default function TeacherPlatformPage({
                       course.imageUrl ??
                       "",
                   )
+                  const coverImageUrl = coverImage
+                    ? resolveApiAssetUrl(coverImage)
+                    : ""
 
                   const title = String(
                     course.title ?? course.name ?? "دورة تعليمية",
@@ -335,9 +338,9 @@ export default function TeacherPlatformPage({
                       className="group flex min-h-80 flex-col overflow-hidden rounded-[24px] border border-stroke bg-white text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default"
                     >
                       <div className="relative flex h-44 w-full items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4">
-                        {coverImage ? (
+                        {coverImageUrl ? (
                           <img
-                            src={coverImage}
+                            src={coverImageUrl}
                             alt=""
                             className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
                           />
