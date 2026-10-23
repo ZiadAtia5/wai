@@ -28,14 +28,22 @@ interface TeacherRoute {
 
 function teacherRouteFromPath(pathname: string): TeacherRoute | null {
   const match = pathname.match(
-    /^\/teacher\/([a-z0-9_-]+)(?:\/course\/([a-z0-9_-]+))?\/?$/i,
+    /^\/teacher\/([^/]+)(?:\/course\/([^/]+))?\/?$/i,
   )
 
   if (!match) return null
 
+  const decodeSegment = (value: string) => {
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+
   return {
-    teacherId: match[1],
-    courseId: match[2] ?? null,
+    teacherId: decodeSegment(match[1]),
+    courseId: match[2] ? decodeSegment(match[2]) : null,
   }
 }
 

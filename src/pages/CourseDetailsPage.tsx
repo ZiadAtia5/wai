@@ -12,7 +12,7 @@ import {
   UserRound,
 } from "lucide-react"
 
-import { ApiError, getAuthToken } from "../api/client"
+import { ApiError, getAuthToken, resolveApiAssetUrl } from "../api/client"
 
 import { coursesApi, studentsApi } from "../api/endpoints"
 
@@ -371,9 +371,10 @@ export default function CourseDetailsPage({
 
   const canWatch = access === "approved"
 
-  const cover = String(
+  const coverSource = String(
     course?.coverImageUrl ?? course?.thumbnailUrl ?? course?.imageUrl ?? "",
   )
+  const cover = coverSource ? resolveApiAssetUrl(coverSource) : ""
 
   const subject = String(course?.subjectName ?? course?.subject ?? "")
 
