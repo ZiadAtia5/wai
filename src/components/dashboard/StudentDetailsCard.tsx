@@ -49,6 +49,34 @@ export const fieldLabels: Record<string, string> = {
 
   courseName: "اسم الدورة",
 
+  courseCount: "عدد الكورسات",
+
+  coursesCount: "عدد الكورسات",
+
+  totalCourses: "عدد الكورسات",
+
+  studentCount: "عدد الطلاب",
+
+  studentsCount: "عدد الطلاب",
+
+  totalStudents: "عدد الطلاب",
+
+  pendingRequests: "طلبات قيد الانتظار",
+
+  pendingRequestsCount: "طلبات قيد الانتظار",
+
+  enrollmentCount: "عدد الاشتراكات",
+
+  enrollmentsCount: "عدد الاشتراكات",
+
+  totalEnrollments: "عدد الاشتراكات",
+
+  lessonCount: "عدد الدروس",
+
+  lessonsCount: "عدد الدروس",
+
+  totalLessons: "عدد الدروس",
+
   studentName: "اسم الطالب",
 
   teacherName: "اسم المعلم",

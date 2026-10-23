@@ -50,6 +50,22 @@ function getApiBaseUrl(): string {
   }
 }
 
+export function resolveApiAssetUrl(path: string): string {
+  let url: URL
+
+  try {
+    url = new URL(path, getApiBaseUrl())
+  } catch {
+    throw new ApiError("مسار ملف الخادم غير صالح.")
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ApiError("بروتوكول ملف الخادم غير مدعوم.")
+  }
+
+  return url.toString()
+}
+
 export function isSecureApiConfigured(): boolean {
   try {
     return new URL(getApiBaseUrl()).protocol === "https:"
@@ -62,9 +78,11 @@ export async function apiRequest<T>(
   path: string,
 
   options: ApiRequestOptions = {},
+
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<T> {
   const { skipAuth = false, ...requestOptions } = options
+
   const baseUrl = getApiBaseUrl()
 
   const method = (requestOptions.method || "GET").toUpperCase()

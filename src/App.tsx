@@ -16,13 +16,44 @@ const CourseDetailsPage = lazy(() => import("./pages/CourseDetailsPage"))
 
 const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
 
+const TeacherPlatformPage = lazy(() => import("./pages/TeacherPlatformPage"))
+
 const DashboardPage = lazy(() => import("./pages/DashboardPage"))
 
+interface TeacherRoute {
+  teacherId: string
+  courseId: string | null
+}
+
+function teacherRouteFromPath(pathname: string): TeacherRoute | null {
+  const match = pathname.match(
+    /^\/teacher\/([a-z0-9_-]+)(?:\/course\/([a-z0-9_-]+))?\/?$/i,
+  )
+
+  if (!match) return null
+
+  return {
+    teacherId: match[1],
+    courseId: match[2] ?? null,
+  }
+}
+
 export default function App() {
+  const [teacherRoute, setTeacherRoute] = useState<TeacherRoute | null>(() =>
+    teacherRouteFromPath(window.location.pathname),
+  )
+  const teacherId = teacherRoute?.teacherId ?? null
   const [view, setView] = useState<View>(() => {
+    if (teacherRoute) {
+      return teacherRoute.courseId
+        ? "public:course-detail"
+        : "teacher:platform"
+    }
+
     const savedView = window.history.state?.waiApp
       ? window.history.state.view as View | undefined
       : undefined
+
     if (
       savedView &&
       [
@@ -32,6 +63,7 @@ export default function App() {
         "public:courses",
         "public:course-detail",
         "public:teachers",
+        "teacher:platform",
         "dashboard",
       ].includes(savedView)
     ) {
@@ -49,10 +81,11 @@ export default function App() {
 
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
     () =>
-      window.history.state?.waiApp &&
+      teacherRoute?.courseId ??
+      (window.history.state?.waiApp &&
       typeof window.history.state.selectedCourseId === "string"
         ? window.history.state.selectedCourseId
-        : null,
+        : null),
   )
 
   useEffect(() => {
@@ -76,6 +109,19 @@ export default function App() {
 
     const restoreAppView = (event: PopStateEvent) => {
       const state = event.state
+      const currentRoute = teacherRouteFromPath(window.location.pathname)
+      setTeacherRoute(currentRoute)
+
+      if (currentRoute) {
+        setView(
+          currentRoute.courseId
+            ? "public:course-detail"
+            : "teacher:platform",
+        )
+        setSelectedCourseId(currentRoute.courseId)
+        return
+      }
+
       if (!state?.waiApp || typeof state.view !== "string") return
 
       setView(state.view as View)
@@ -103,16 +149,41 @@ export default function App() {
       targetView === "public:course-detail"
         ? params?.courseId ?? null
         : null
+    const targetTeacherId =
+      targetView === "teacher:platform"
+        ? params?.teacherId ?? teacherId
+        : targetView === "public:course-detail"
+          ? params?.teacherId ?? teacherId
+          : null
 
-    if (targetView === view && targetCourseId === selectedCourseId) return
+    if (
+      targetView === view &&
+      targetCourseId === selectedCourseId &&
+      targetTeacherId === teacherId
+    ) {
+      return
+    }
+
+    const targetPath = targetTeacherId
+      ? targetView === "public:course-detail" && targetCourseId
+        ? `/teacher/${encodeURIComponent(targetTeacherId)}/course/${encodeURIComponent(targetCourseId)}`
+        : `/teacher/${encodeURIComponent(targetTeacherId)}`
+      : teacherRoute
+        ? "/"
+        : window.location.pathname
 
     window.history.pushState(
       { waiApp: true, view: targetView, selectedCourseId: targetCourseId },
       "",
-      window.location.href,
+      `${targetPath}${window.location.search}${window.location.hash}`,
     )
 
     setSelectedCourseId(targetCourseId)
+    setTeacherRoute(
+      targetTeacherId
+        ? { teacherId: targetTeacherId, courseId: targetCourseId }
+        : null,
+    )
 
     setView(targetView)
 
@@ -129,7 +200,11 @@ export default function App() {
       {view !== "dashboard" && (
         <PublicNavbar currentView={view} navigate={navigate} />
       )}
-      <main className={view === "dashboard" ? undefined : "pt-16"}>
+      <main
+        className={
+          view === "dashboard" ? undefined : "pt-16"
+        }
+      >
         <Suspense
           fallback={<div className="min-h-[60vh] bg-canvas" aria-busy="true" />}
         >
@@ -145,12 +220,25 @@ export default function App() {
             <CourseDetailsPage
               courseId={selectedCourseId}
               navigate={navigate}
+              onBack={
+                teacherId
+                  ? () =>
+                      navigate("teacher:platform", {
+                        teacherId,
+                      })
+                  : undefined
+              }
             />
           )}
           {view === "public:course-detail" && !selectedCourseId && (
             <PublicCoursesPage navigate={navigate} />
           )}
-          {view === "public:teachers" && <PublicTeachersPage />}
+          {view === "public:teachers" && (
+            <PublicTeachersPage navigate={navigate} />
+          )}
+          {view === "teacher:platform" && teacherId && (
+            <TeacherPlatformPage teacherId={teacherId} navigate={navigate} />
+          )}
           {view === "dashboard" &&
             (getAuthToken() ? (
               <DashboardPage navigate={navigate} />

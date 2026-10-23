@@ -73,6 +73,23 @@ function titleOf(record: Record<string, unknown>): string {
   );
 }
 
+function personNameOf(record: Record<string, unknown>): string {
+  const fullName =
+    record.fullName ??
+    record.name ??
+    record.teacherName ??
+    [record.firstName, record.lastName].filter(Boolean).join(" ");
+
+  return typeof fullName === "string" && fullName.trim()
+    ? fullName.trim()
+    : "معلم";
+}
+
+function personBioOf(record: Record<string, unknown>): string {
+  const bio = record.bio ?? record.description;
+  return typeof bio === "string" ? bio : "";
+}
+
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "-";
 
@@ -320,45 +337,56 @@ export default function PublicCatalogPage({
       : [];
 
   const detailFields = detail ? scalarFields(detail) : [];
+  const catalogHeader = courseCatalog || personCards;
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
       <header
         className={
-          courseCatalog
+          catalogHeader
             ? "px-4 pt-5 sm:px-6 lg:px-8"
             : "border-b border-stroke bg-surface"
         }
       >
         <div
-          className={`mx-auto max-w-360 ${courseCatalog ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}
+          className={`mx-auto max-w-360 ${catalogHeader ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}
         >
-          {courseCatalog && (
+          {catalogHeader && (
             <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-50">
-              <BookOpen size={15} /> تعلّم على وتيرتك
+              {personCards ? (
+                <>
+                  <GraduationCap size={15} /> معلمو منصة وَعي
+                </>
+              ) : (
+                <>
+                  <BookOpen size={15} /> تعلّم على وتيرتك
+                </>
+              )}
             </span>
           )}
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
               <h1
-                className={`mb-2 font-bold tracking-tight ${courseCatalog ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}
+                className={`mb-2 font-bold tracking-tight ${catalogHeader ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}
               >
                 {title}
               </h1>
               <p
-                className={`max-w-2xl text-sm leading-7 ${courseCatalog ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}
+                className={`max-w-2xl text-sm leading-7 ${catalogHeader ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}
               >
                 {description}
               </p>
             </div>
-            {courseCatalog && data && !error && (
+            {catalogHeader && data && !error && (
               <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur">
                 <strong className="block text-2xl">{data.totalCount}</strong>
-                <span className="text-xs text-emerald-50/75">دورة متاحة</span>
+                <span className="text-xs text-emerald-50/75">
+                  {personCards ? "معلم مسجل" : "دورة متاحة"}
+                </span>
               </div>
             )}
           </div>
-          {!courseCatalog && data && !error && (
+          {!catalogHeader && data && !error && (
             <p className="mt-3 text-xs text-ink-muted" aria-live="polite">
               إجمالي النتائج : {data.totalCount}
             </p>
@@ -377,7 +405,7 @@ export default function PublicCatalogPage({
 
             setDetail(null);
           }}
-          className={`mb-7 grid min-w-0 gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto] sm:items-end ${courseCatalog ? "sm:p-5 md:p-6" : ""}`}
+          className={`mb-7 grid min-w-0 gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:items-end ${personCards ? "sm:grid-cols-[minmax(0,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto]"} ${catalogHeader ? "sm:p-5 md:p-6" : ""}`}
         >
           <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
             بحث
@@ -385,10 +413,11 @@ export default function PublicCatalogPage({
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
-              placeholder="اكتب الاسم أو عنوان الدورة"
+              placeholder={personCards ? "ابحث باسم المعلم" : "اكتب الاسم أو عنوان الدورة"}
             />
           </label>
-          <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
+          {!personCards && (
+            <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
             الصف الدراسي
             <select
               value={academicYear}
@@ -408,7 +437,8 @@ export default function PublicCatalogPage({
                 </option>
               ))}
             </select>
-          </label>
+            </label>
+          )}
           <button className="min-h-11 w-full rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base sm:w-auto">
             بحث
           </button>
@@ -459,7 +489,29 @@ export default function PublicCatalogPage({
             )}
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stroke pb-4">
               <div>
-                {!courseCatalog && (
+                {personCards && (
+                  <div className="flex items-center gap-4">
+                    <PersonAvatar
+                      name={personNameOf(detail)}
+                      imageUrl={String(
+                        detail.avatarUrl ??
+                          detail.profileImageUrl ??
+                          detail.imageUrl ??
+                          "",
+                      )}
+                      size="lg"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-nuwa-base">
+                        معلم في منصة وَعي
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold text-ink">
+                        {personNameOf(detail)}
+                      </h2>
+                    </div>
+                  </div>
+                )}
+                {!courseCatalog && !personCards && (
                   <>
                     <p className="text-xs font-semibold text-nuwa-base">
                       التفاصيل
@@ -484,7 +536,7 @@ export default function PublicCatalogPage({
                   </div>
                 )}
               </div>
-              {!courseCatalog && (
+              {!courseCatalog && !personCards && (
                 <button
                   onClick={() => {
                     setDetail(null);
@@ -497,14 +549,20 @@ export default function PublicCatalogPage({
                 </button>
               )}
             </div>
-            {typeof (detail.description ?? detail.bio) === "string" && (
+            {personCards && personBioOf(detail) && (
+              <p className="mt-4 whitespace-pre-line rounded-2xl bg-canvas p-5 text-sm leading-8 text-ink-muted">
+                {personBioOf(detail)}
+              </p>
+            )}
+            {!personCards &&
+              typeof (detail.description ?? detail.bio) === "string" && (
               <p
                 className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}
               >
                 {String(detail.description ?? detail.bio)}
               </p>
             )}
-            <dl
+            {!personCards && <dl
               className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}
             >
               {detailFields
@@ -522,8 +580,8 @@ export default function PublicCatalogPage({
                     </dd>
                   </div>
                 ))}
-            </dl>
-            {detailFields.length > 6 && (
+            </dl>}
+            {!personCards && detailFields.length > 6 && (
               <details className="mt-4 rounded-xl border border-stroke bg-canvas">
                 <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-nuwa-base">
                   عرض التفاصيل الإضافية ({detailFields.length - 6})
@@ -561,7 +619,9 @@ export default function PublicCatalogPage({
             )}
             {loadRelated && (
               <div className="mt-5 border-t border-stroke pt-4">
-                <h3 className="mb-3 font-semibold text-ink">الدورات</h3>
+                <h3 className="mb-3 font-semibold text-ink">
+                  {personCards ? "الدورات التعليمية" : "الدورات"}
+                </h3>
                 {relatedItems.length === 0 ? (
                   <p className="text-sm text-ink-muted">لا توجد دورات متاحة.</p>
                 ) : (
@@ -571,23 +631,96 @@ export default function PublicCatalogPage({
 
                       if (!record) return null;
 
+                      const courseId = record.id;
+                      const courseTitle = String(
+                        record.title ?? record.name ?? "دورة تعليمية",
+                      );
+                      const coverImage = String(
+                        record.coverImageUrl ??
+                          record.thumbnailUrl ??
+                          record.imageUrl ??
+                          "",
+                      );
+
+                      if (personCards) {
+                        return (
+                          <button
+                            key={String(courseId ?? index)}
+                            type="button"
+                            disabled={courseId === undefined || courseId === null}
+                            onClick={() => {
+                              if (courseId !== undefined && courseId !== null) {
+                                navigate?.("public:course-detail", {
+                                  courseId: String(courseId),
+                                });
+                              }
+                            }}
+                            className="group overflow-hidden rounded-2xl border border-stroke bg-white text-start shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+                          >
+                            <div className="relative flex h-36 items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4">
+                              {coverImage ? (
+                                <img
+                                  src={coverImage}
+                                  alt=""
+                                  className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
+                                />
+                              ) : (
+                                <>
+                                  <div className="absolute -left-6 -top-10 size-40 rounded-full border border-white/15" />
+                                  <BookOpen
+                                    size={38}
+                                    className="absolute left-5 top-5 text-white/75"
+                                  />
+                                </>
+                              )}
+                              <span className="relative rounded-full border border-white/20 bg-black/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                                {String(record.academicYear ?? "دورة تعليمية")}
+                              </span>
+                            </div>
+                            <div className="p-4">
+                              <h4 className="line-clamp-1 font-bold text-ink">
+                                {courseTitle}
+                              </h4>
+                              <p className="mt-2 line-clamp-2 min-h-12 text-sm leading-6 text-ink-muted">
+                                {String(
+                                  record.description ??
+                                    "محتوى تعليمي منظم يساعدك على التقدم خطوة بخطوة.",
+                                )}
+                              </p>
+                              <div className="mt-4 flex items-center justify-between gap-3 border-t border-stroke pt-3 text-xs">
+                                <span className="line-clamp-1 text-ink-muted">
+                                  {String(
+                                    record.subjectName ?? "دورة تعليمية",
+                                  )}
+                                </span>
+                                <span className="shrink-0 font-semibold text-nuwa-base">
+                                  تفاصيل الدورة
+                                  <ArrowLeft
+                                    size={14}
+                                    className="ms-1 inline"
+                                  />
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      }
+
                       return (
                         <article
-                          key={String(record.id ?? index)}
-                          className="border border-stroke p-3"
+                          key={String(courseId ?? index)}
+                          className="overflow-hidden rounded-2xl border border-stroke p-3"
                         >
                           <h4 className="font-medium text-ink">
-                            {titleOf(record)}
+                            {courseTitle}
                           </h4>
                           <p className="mt-1 text-xs text-ink-muted">
                             {scalarFields(record)
                               .slice(0, 3)
-
                               .map(
                                 ([key, value]) =>
                                   `${key}: ${displayValue(value)}`,
                               )
-
                               .join(" · ")}
                           </p>
                         </article>
@@ -629,11 +762,25 @@ export default function PublicCatalogPage({
                           return;
                         }
 
+                        if (personCards) {
+                          const teacherId = record.id ?? record.teacherId;
+                          if (
+                            teacherId !== undefined &&
+                            teacherId !== null &&
+                            navigate
+                          ) {
+                            navigate("teacher:platform", {
+                              teacherId: String(teacherId),
+                            });
+                            return;
+                          }
+                        }
+
                         void selectRecord(item);
                       }}
                       className={`group relative overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${courseCatalog ? "flex min-h-80 flex-col" : ""} ${
                         personCards
-                          ? "flex min-h-72 flex-col items-center text-center"
+                          ? "flex min-h-72 flex-col items-center text-center hover:border-emerald-400 hover:shadow-xl"
                           : ""
                       }`}
                     >
@@ -671,7 +818,7 @@ export default function PublicCatalogPage({
                       )}
                       {personCards && (
                         <PersonAvatar
-                          name={titleOf(record)}
+                          name={personNameOf(record)}
                           imageUrl={String(
                             record.avatarUrl ??
                               record.profileImageUrl ??
@@ -679,14 +826,6 @@ export default function PublicCatalogPage({
                               "",
                           )}
                           size="lg"
-                          status={
-                            record.isActive === true ||
-                            record.isApproved === true
-                              ? "active"
-                              : record.isApproved === false
-                                ? "pending"
-                                : undefined
-                          }
                         />
                       )}
                       <h2
@@ -694,33 +833,25 @@ export default function PublicCatalogPage({
                           personCards ? "mt-3" : ""
                         }`}
                       >
-                        {titleOf(record)}
+                        {personCards ? personNameOf(record) : titleOf(record)}
                       </h2>
-                      {personCards &&
-                        Boolean(
-                          record.subjectName || record.specialization,
-                        ) && (
-                          <span className="mt-2 rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
-                            {String(
-                              record.subjectName ?? record.specialization,
-                            )}
-                          </span>
-                        )}
-                      {teacherNameOf(record) && (
+                      {!personCards && teacherNameOf(record) && (
                         <p className="mt-1 text-xs font-semibold text-emerald-700">
                           المعلم: {teacherNameOf(record)}
                         </p>
                       )}
                       <p className="mt-2 line-clamp-3 text-sm leading-7 text-ink-muted">
                         {String(
-                          record.description ??
-                            record.bio ??
-                            record.subjectName ??
-                            record.academicYear ??
-                            "",
+                          personCards
+                            ? personBioOf(record)
+                            : (record.description ??
+                                record.bio ??
+                                record.subjectName ??
+                                record.academicYear ??
+                                ""),
                         )}
                       </p>
-                      <div
+                      {!personCards && <div
                         className={`mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted ${
                           personCards ? "justify-center" : ""
                         }`}
@@ -751,7 +882,7 @@ export default function PublicCatalogPage({
                               : {displayValue(record[key])}
                             </span>
                           ))}
-                      </div>
+                      </div>}
                       {courseCatalog && (
                         <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4 text-xs text-ink-muted">
                           <span className="inline-flex items-center gap-1.5">
@@ -772,7 +903,7 @@ export default function PublicCatalogPage({
                           personCards ? "mt-auto pt-4" : "mt-4"
                         } inline-block text-sm font-semibold text-nuwa-base`}
                       >
-                        عرض التفاصيل
+                        {personCards ? "استكشف دورات المعلم" : "عرض التفاصيل"}
                       </span>
                     </button>
                   );
