@@ -1,35 +1,35 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react"
+import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react";
 
-import { ApiError } from "../api/client"
+import { ApiError } from "../api/client";
 
-import { getAuthToken } from "../api/client"
-import { studentsApi } from "../api/endpoints"
+import { getAuthToken } from "../api/client";
+import { studentsApi } from "../api/endpoints";
 
 import {
   getAcademicYears,
   type AcademicYearResponse,
   type ApiRecord,
   type PagedResult,
-} from "../api/catalog"
+} from "../api/catalog";
 
-import ApiQueryState from "../components/ApiQueryState"
+import ApiQueryState from "../components/ApiQueryState";
 
-import PersonAvatar from "../components/PersonAvatar"
+import PersonAvatar from "../components/PersonAvatar";
 
-import { useApiQuery } from "../hooks/useApiQuery"
+import { useApiQuery } from "../hooks/useApiQuery";
 
-import type { NavigateFn } from "../types"
+import type { NavigateFn } from "../types";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { notifyError, notifySuccess } from "../utils/notifications";
 
 interface PublicCatalogPageProps {
-  title: string
+  title: string;
 
-  description: string
+  description: string;
 
-  emptyMessage: string
+  emptyMessage: string;
 
   load: (
     page?: number,
@@ -39,27 +39,27 @@ interface PublicCatalogPageProps {
     search?: string,
 
     academicYear?: string,
-  ) => Promise<PagedResult<ApiRecord>>
+  ) => Promise<PagedResult<ApiRecord>>;
 
-  loadDetail?: (id: string) => Promise<unknown>
+  loadDetail?: (id: string) => Promise<unknown>;
 
-  loadRelated?: (id: string) => Promise<unknown>
+  loadRelated?: (id: string) => Promise<unknown>;
 
-  action?: (id: string) => Promise<unknown>
+  action?: (id: string) => Promise<unknown>;
 
-  actionLabel?: string
+  actionLabel?: string;
 
-  navigate?: NavigateFn
+  navigate?: NavigateFn;
 
-  personCards?: boolean
+  personCards?: boolean;
 
-  courseCatalog?: boolean
+  courseCatalog?: boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : null
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function titleOf(record: Record<string, unknown>): string {
@@ -70,25 +70,25 @@ function titleOf(record: Record<string, unknown>): string {
       record.teacherName ??
       record.email ??
       "عنصر من المنصة",
-  )
+  );
 }
 
 function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-"
+  if (value === null || value === undefined || value === "") return "-";
 
-  return typeof value === "object" ? JSON.stringify(value) : String(value)
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function teacherNameOf(record: Record<string, unknown>): string | null {
-  const nested = asRecord(record.teacher)
+  const nested = asRecord(record.teacher);
 
   const value =
     record.teacherName ??
     record.instructorName ??
     nested?.fullName ??
-    nested?.name
+    nested?.name;
 
-  return typeof value === "string" && value.trim() ? value.trim() : null
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function scalarFields(record: Record<string, unknown>): [string, unknown][] {
@@ -98,7 +98,7 @@ function scalarFields(record: Record<string, unknown>): [string, unknown][] {
       key !== "description" &&
       value !== null &&
       ["string", "number", "boolean"].includes(typeof value),
-  )
+  );
 }
 
 export default function PublicCatalogPage({
@@ -123,43 +123,46 @@ export default function PublicCatalogPage({
   personCards = false,
   courseCatalog = false,
 }: PublicCatalogPageProps) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [reloadKey, setReloadKey] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
 
-  const [related, setRelated] = useState<unknown>(null)
+  const [related, setRelated] = useState<unknown>(null);
 
-  const [, setActionMessage] = useState("")
+  const [, setActionMessage] = useState("");
 
-  const [actionLoading, setActionLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("")
+  const [searchInput, setSearchInput] = useState("");
 
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState("");
 
-  const [academicYear, setAcademicYear] = useState("")
+  const [academicYear, setAcademicYear] = useState("");
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
+    [],
+  );
   const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(
     () => new Set(),
-  )
-  const [enrollmentChecked, setEnrollmentChecked] = useState(false)
+  );
+  const [enrollmentChecked, setEnrollmentChecked] = useState(false);
 
   useEffect(() => {
-    const role = window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    const role = window.sessionStorage.getItem("eduhub.auth.role") ?? "";
     if (!action || !role.includes("student") || !getAuthToken()) {
-      setEnrollmentChecked(true)
-      return
+      setEnrollmentChecked(true);
+      return;
     }
 
-    let active = true
-    studentsApi.enrollments({ page: 1, pageSize: 100 })
+    let active = true;
+    studentsApi
+      .enrollments({ page: 1, pageSize: 100 })
       .then((response) => {
-        if (!active) return
-        const root = asRecord(response)
-        const nested = asRecord(root?.data)
+        if (!active) return;
+        const root = asRecord(response);
+        const nested = asRecord(root?.data);
         const items = Array.isArray(response)
           ? response
           : Array.isArray(root?.items)
@@ -168,100 +171,101 @@ export default function PublicCatalogPage({
               ? root.enrollments
               : Array.isArray(root?.data)
                 ? root.data
-              : Array.isArray(nested?.items)
-                ? nested.items
-                : Array.isArray(nested?.enrollments)
-                  ? nested.enrollments
-                  : []
+                : Array.isArray(nested?.items)
+                  ? nested.items
+                  : Array.isArray(nested?.enrollments)
+                    ? nested.enrollments
+                    : [];
         const ids = items.flatMap((item) => {
-          const record = asRecord(item)
-          const course = asRecord(record?.course)
-          const id = record?.courseId ?? course?.id
-          return id === undefined || id === null ? [] : [String(id)]
-        })
-        setEnrolledCourseIds(new Set(ids))
+          const record = asRecord(item);
+          const course = asRecord(record?.course);
+          const id = record?.courseId ?? course?.id;
+          return id === undefined || id === null ? [] : [String(id)];
+        });
+        setEnrolledCourseIds(new Set(ids));
       })
       .catch(() => undefined)
       .finally(() => {
-        if (active) setEnrollmentChecked(true)
-      })
-
-    return () => { active = false }
-  }, [action])
-
-  useEffect(() => {
-    let active = true
-
-    getAcademicYears()
-
-      .then((years) => {
-        if (active) setAcademicYears(years)
-      })
-
-      .catch(() => undefined)
+        if (active) setEnrollmentChecked(true);
+      });
 
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+    };
+  }, [action]);
+
+  useEffect(() => {
+    let active = true;
+
+    getAcademicYears()
+      .then((years) => {
+        if (active) setAcademicYears(years);
+      })
+
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const pageLoader = useCallback(
     () => load(page, 12, search, academicYear),
 
     [load, page, search, academicYear],
-  )
+  );
 
-  const { data, error, loading } = useApiQuery(pageLoader, reloadKey)
+  const { data, error, loading } = useApiQuery(pageLoader, reloadKey);
 
   async function selectRecord(item: ApiRecord) {
-    const record = asRecord(item)
+    const record = asRecord(item);
 
-    if (!record) return
+    if (!record) return;
 
-    setDetail(record)
+    setDetail(record);
 
-    setRelated(null)
+    setRelated(null);
 
-    setActionMessage("")
+    setActionMessage("");
 
-    if (record.id === undefined || record.id === null) return
+    if (record.id === undefined || record.id === null) return;
 
     try {
-      const id = String(record.id)
+      const id = String(record.id);
 
       if (loadDetail) {
-        const result = asRecord(await loadDetail(id))
+        const result = asRecord(await loadDetail(id));
 
-        if (result) setDetail(result)
+        if (result) setDetail(result);
       }
 
-      if (loadRelated) setRelated(await loadRelated(id))
+      if (loadRelated) setRelated(await loadRelated(id));
     } catch (cause) {
-      notifyError(cause, "تعذر تحميل التفاصيل.")
+      notifyError(cause, "تعذر تحميل التفاصيل.");
 
       setActionMessage(
         cause instanceof ApiError ? cause.message : "تعذر تحميل التفاصيل.",
-      )
+      );
     }
   }
 
   async function runAction() {
-    if (!action || detail?.id === undefined || detail.id === null) return
+    if (!action || detail?.id === undefined || detail.id === null) return;
 
-    const courseId = String(detail.id)
+    const courseId = String(detail.id);
     if (enrolledCourseIds.has(courseId)) {
-      setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
-      return
+      setActionMessage("أنت مسجل بالفعل في هذه الدورة.");
+      return;
     }
 
     if (!getAuthToken()) {
-      notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."))
+      notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."));
 
-      setActionMessage("سجّل الدخول أولاً لإرسال طلب الالتحاق.")
+      setActionMessage("سجّل الدخول أولاً لإرسال طلب الالتحاق.");
 
-      navigate?.("login")
+      navigate?.("login");
 
-      return
+      return;
     }
 
     if (
@@ -270,68 +274,93 @@ export default function PublicCatalogPage({
         .toLowerCase()
         .includes("student")
     ) {
-      const message = "طلب الالتحاق بالدورات متاح لحساب الطالب فقط."
-      notifyError(new Error(message))
-      setActionMessage(message)
-      return
+      const message = "طلب الالتحاق بالدورات متاح لحساب الطالب فقط.";
+      notifyError(new Error(message));
+      setActionMessage(message);
+      return;
     }
 
-    if (actionLoading) return
+    if (actionLoading) return;
 
-    setActionLoading(true)
+    setActionLoading(true);
 
     try {
-      await action(courseId)
+      await action(courseId);
 
-      setEnrolledCourseIds((current) => new Set(current).add(courseId))
+      setEnrolledCourseIds((current) => new Set(current).add(courseId));
 
-      notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
+      notifySuccess("تم إرسال طلب الالتحاق بنجاح.");
 
-      setActionMessage("تم إرسال طلب الالتحاق بنجاح.")
+      setActionMessage("تم إرسال طلب الالتحاق بنجاح.");
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
       const duplicate =
         (cause instanceof ApiError && cause.status === 409) ||
-        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message)
+        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message);
       if (duplicate) {
-        setEnrolledCourseIds((current) => new Set(current).add(courseId))
-        setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
-        notifySuccess("أنت مسجل بالفعل في هذه الدورة.")
-        return
+        setEnrolledCourseIds((current) => new Set(current).add(courseId));
+        setActionMessage("أنت مسجل بالفعل في هذه الدورة.");
+        notifySuccess("أنت مسجل بالفعل في هذه الدورة.");
+        return;
       }
-      notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+      notifyError(cause, "تعذر إرسال طلب الالتحاق.");
 
       setActionMessage(
         cause instanceof Error ? cause.message : "تعذر تنفيذ الطلب.",
-      )
+      );
     } finally {
-      setActionLoading(false)
+      setActionLoading(false);
     }
   }
 
   const relatedItems = Array.isArray(related)
     ? related
     : asRecord(related) && Array.isArray(asRecord(related)?.items)
-      ? asRecord(related)?.items as unknown[]
-      : []
+      ? (asRecord(related)?.items as unknown[])
+      : [];
 
-  const detailFields = detail ? scalarFields(detail) : []
+  const detailFields = detail ? scalarFields(detail) : [];
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
-      <header className={courseCatalog ? "px-4 pt-5 sm:px-6 lg:px-8" : "border-b border-stroke bg-surface"}>
-        <div className={`mx-auto max-w-360 ${courseCatalog ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}>
-          {courseCatalog && <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-50"><BookOpen size={15} /> تعلّم على وتيرتك</span>}
+      <header
+        className={
+          courseCatalog
+            ? "px-4 pt-5 sm:px-6 lg:px-8"
+            : "border-b border-stroke bg-surface"
+        }
+      >
+        <div
+          className={`mx-auto max-w-360 ${courseCatalog ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}
+        >
+          {courseCatalog && (
+            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-50">
+              <BookOpen size={15} /> تعلّم على وتيرتك
+            </span>
+          )}
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
-              <h1 className={`mb-2 font-bold tracking-tight ${courseCatalog ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}>{title}</h1>
-              <p className={`max-w-2xl text-sm leading-7 ${courseCatalog ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}>{description}</p>
+              <h1
+                className={`mb-2 font-bold tracking-tight ${courseCatalog ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}
+              >
+                {title}
+              </h1>
+              <p
+                className={`max-w-2xl text-sm leading-7 ${courseCatalog ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}
+              >
+                {description}
+              </p>
             </div>
-            {courseCatalog && data && !error && <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur"><strong className="block text-2xl">{data.totalCount}</strong><span className="text-xs text-emerald-50/75">دورة متاحة</span></div>}
+            {courseCatalog && data && !error && (
+              <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur">
+                <strong className="block text-2xl">{data.totalCount}</strong>
+                <span className="text-xs text-emerald-50/75">دورة متاحة</span>
+              </div>
+            )}
           </div>
           {!courseCatalog && data && !error && (
             <p className="mt-3 text-xs text-ink-muted" aria-live="polite">
-              إجمالي النتائج من الخادم: {data.totalCount}
+              إجمالي النتائج : {data.totalCount}
             </p>
           )}
         </div>
@@ -340,13 +369,13 @@ export default function PublicCatalogPage({
       <main className="mx-auto min-w-0 max-w-360 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
         <form
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault()
+            event.preventDefault();
 
-            setPage(1)
+            setPage(1);
 
-            setSearch(searchInput.trim())
+            setSearch(searchInput.trim());
 
-            setDetail(null)
+            setDetail(null);
           }}
           className={`mb-7 grid min-w-0 gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto] sm:items-end ${courseCatalog ? "sm:p-5 md:p-6" : ""}`}
         >
@@ -364,11 +393,11 @@ export default function PublicCatalogPage({
             <select
               value={academicYear}
               onChange={(event) => {
-                setAcademicYear(event.target.value)
+                setAcademicYear(event.target.value);
 
-                setPage(1)
+                setPage(1);
 
-                setDetail(null)
+                setDetail(null);
               }}
               className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
             >
@@ -391,47 +420,108 @@ export default function PublicCatalogPage({
           >
             {courseCatalog && (
               <div className="relative flex min-h-44 items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-6 py-7 text-white md:min-h-56 md:px-9">
-                {String(detail.coverImageUrl ?? detail.thumbnailUrl ?? detail.imageUrl ?? "") && (
-                  <img src={String(detail.coverImageUrl ?? detail.thumbnailUrl ?? detail.imageUrl)} alt="" className="absolute inset-0 size-full object-cover opacity-30" />
+                {String(
+                  detail.coverImageUrl ??
+                    detail.thumbnailUrl ??
+                    detail.imageUrl ??
+                    "",
+                ) && (
+                  <img
+                    src={String(
+                      detail.coverImageUrl ??
+                        detail.thumbnailUrl ??
+                        detail.imageUrl,
+                    )}
+                    alt=""
+                    className="absolute inset-0 size-full object-cover opacity-30"
+                  />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/80 to-transparent" />
                 <div className="relative z-10 max-w-3xl">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur"><GraduationCap size={15} /> تفاصيل الدورة</span>
-                  <h2 className="mt-3 text-2xl font-bold leading-tight md:text-3xl">{titleOf(detail)}</h2>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                    <GraduationCap size={15} /> تفاصيل الدورة
+                  </span>
+                  <h2 className="mt-3 text-2xl font-bold leading-tight md:text-3xl">
+                    {titleOf(detail)}
+                  </h2>
                 </div>
-                <button type="button" onClick={() => { setDetail(null); setRelated(null) }} className="absolute left-5 top-5 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-white/25 bg-black/15 px-4 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15">إغلاق <ArrowLeft size={16} /></button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetail(null);
+                    setRelated(null);
+                  }}
+                  className="absolute left-5 top-5 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-white/25 bg-black/15 px-4 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
+                >
+                  إغلاق <ArrowLeft size={16} />
+                </button>
               </div>
             )}
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stroke pb-4">
               <div>
-                {!courseCatalog && <><p className="text-xs font-semibold text-nuwa-base">التفاصيل</p><h2 className="mt-1 text-xl font-bold text-ink">{titleOf(detail)}</h2></>}
-                {courseCatalog && <div className="flex flex-wrap gap-2">{detail.academicYear != null && <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">{String(detail.academicYear)}</span>}{detail.subjectName != null && <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">{String(detail.subjectName)}</span>}</div>}
+                {!courseCatalog && (
+                  <>
+                    <p className="text-xs font-semibold text-nuwa-base">
+                      التفاصيل
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold text-ink">
+                      {titleOf(detail)}
+                    </h2>
+                  </>
+                )}
+                {courseCatalog && (
+                  <div className="flex flex-wrap gap-2">
+                    {detail.academicYear != null && (
+                      <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">
+                        {String(detail.academicYear)}
+                      </span>
+                    )}
+                    {detail.subjectName != null && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                        {String(detail.subjectName)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {!courseCatalog && <button
-                onClick={() => {
-                  setDetail(null)
+              {!courseCatalog && (
+                <button
+                  onClick={() => {
+                    setDetail(null);
 
-                  setRelated(null)
-                }}
-                className="h-9 border border-stroke px-3 text-sm"
-              >
-                إغلاق
-              </button>}
+                    setRelated(null);
+                  }}
+                  className="h-9 border border-stroke px-3 text-sm"
+                >
+                  إغلاق
+                </button>
+              )}
             </div>
             {typeof (detail.description ?? detail.bio) === "string" && (
-              <p className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}>
+              <p
+                className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}
+              >
                 {String(detail.description ?? detail.bio)}
               </p>
             )}
-            <dl className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}>
-              {detailFields.filter(([key]) => !/(^id$|image|url|description|bio)/i.test(key)).slice(0, courseCatalog ? 9 : 6).map(([key, value]) => (
-                <div key={key}>
-                  <dt className="text-xs text-ink-muted">{key}</dt>
-                  <dd className={`mt-1 wrap-break-word text-sm text-ink ${courseCatalog ? "rounded-xl bg-canvas p-3" : ""}`}>
-                    {displayValue(value)}
-                  </dd>
-                </div>
-              ))}
+            <dl
+              className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}
+            >
+              {detailFields
+                .filter(
+                  ([key]) => !/(^id$|image|url|description|bio)/i.test(key),
+                )
+                .slice(0, courseCatalog ? 9 : 6)
+                .map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-xs text-ink-muted">{key}</dt>
+                    <dd
+                      className={`mt-1 wrap-break-word text-sm text-ink ${courseCatalog ? "rounded-xl bg-canvas p-3" : ""}`}
+                    >
+                      {displayValue(value)}
+                    </dd>
+                  </div>
+                ))}
             </dl>
             {detailFields.length > 6 && (
               <details className="mt-4 rounded-xl border border-stroke bg-canvas">
@@ -455,14 +545,16 @@ export default function PublicCatalogPage({
                 type="button"
                 disabled={
                   actionLoading ||
-                  (enrolledCourseIds.has(String(detail.id)) && enrollmentChecked)
+                  (enrolledCourseIds.has(String(detail.id)) &&
+                    enrollmentChecked)
                 }
                 onClick={() => void runAction()}
                 className={`inline-flex h-12 items-center justify-center rounded-xl bg-nuwa-base px-6 text-sm font-bold text-white shadow-md shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep disabled:cursor-not-allowed disabled:opacity-60 ${courseCatalog ? "mx-6 mb-6 w-[calc(100%-3rem)] md:mx-9 md:w-auto md:min-w-64" : "mt-5"}`}
               >
                 {actionLoading
                   ? "جارٍ الإرسال..."
-                  : enrolledCourseIds.has(String(detail.id)) && enrollmentChecked
+                  : enrolledCourseIds.has(String(detail.id)) &&
+                      enrollmentChecked
                     ? "مسجل بالفعل"
                     : (actionLabel ?? "تنفيذ")}
               </button>
@@ -475,9 +567,9 @@ export default function PublicCatalogPage({
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {relatedItems.map((item, index) => {
-                      const record = asRecord(item)
+                      const record = asRecord(item);
 
-                      if (!record) return null
+                      if (!record) return null;
 
                       return (
                         <article
@@ -489,7 +581,6 @@ export default function PublicCatalogPage({
                           </h4>
                           <p className="mt-1 text-xs text-ink-muted">
                             {scalarFields(record)
-
                               .slice(0, 3)
 
                               .map(
@@ -500,7 +591,7 @@ export default function PublicCatalogPage({
                               .join(" · ")}
                           </p>
                         </article>
-                      )
+                      );
                     })}
                   </div>
                 )}
@@ -518,11 +609,13 @@ export default function PublicCatalogPage({
         >
           {data && data.items.length > 0 && (
             <>
-              <div className={`grid gap-5 md:grid-cols-2 ${courseCatalog ? "xl:grid-cols-3" : "lg:grid-cols-3"}`}>
+              <div
+                className={`grid gap-5 md:grid-cols-2 ${courseCatalog ? "xl:grid-cols-3" : "lg:grid-cols-3"}`}
+              >
                 {data.items.map((item, index) => {
-                  const record = asRecord(item)
+                  const record = asRecord(item);
 
-                  if (!record) return null
+                  if (!record) return null;
 
                   return (
                     <button
@@ -532,11 +625,11 @@ export default function PublicCatalogPage({
                         if (courseCatalog && navigate && record.id != null) {
                           navigate("public:course-detail", {
                             courseId: String(record.id),
-                          })
-                          return
+                          });
+                          return;
                         }
 
-                        void selectRecord(item)
+                        void selectRecord(item);
                       }}
                       className={`group relative overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${courseCatalog ? "flex min-h-80 flex-col" : ""} ${
                         personCards
@@ -544,10 +637,38 @@ export default function PublicCatalogPage({
                           : ""
                       }`}
                     >
-                      {courseCatalog && <div className="relative mb-5 grid h-40 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700">
-                        {String(record.coverImageUrl ?? record.thumbnailUrl ?? record.imageUrl ?? "") ? <img src={String(record.coverImageUrl ?? record.thumbnailUrl ?? record.imageUrl)} alt="" className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105" /> : <><div className="absolute -right-6 -top-10 size-40 rounded-full border border-white/15" /><div className="absolute -right-1 -top-4 size-28 rounded-full border border-white/15" /><BookOpen size={42} className="relative text-white/90" /></>}
-                        <span className="absolute bottom-3 right-3 rounded-full border border-white/20 bg-black/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">{String(record.academicYear ?? "دورة تعليمية")}</span>
-                      </div>}
+                      {courseCatalog && (
+                        <div className="relative mb-5 grid h-40 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700">
+                          {String(
+                            record.coverImageUrl ??
+                              record.thumbnailUrl ??
+                              record.imageUrl ??
+                              "",
+                          ) ? (
+                            <img
+                              src={String(
+                                record.coverImageUrl ??
+                                  record.thumbnailUrl ??
+                                  record.imageUrl,
+                              )}
+                              alt=""
+                              className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <>
+                              <div className="absolute -right-6 -top-10 size-40 rounded-full border border-white/15" />
+                              <div className="absolute -right-1 -top-4 size-28 rounded-full border border-white/15" />
+                              <BookOpen
+                                size={42}
+                                className="relative text-white/90"
+                              />
+                            </>
+                          )}
+                          <span className="absolute bottom-3 right-3 rounded-full border border-white/20 bg-black/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                            {String(record.academicYear ?? "دورة تعليمية")}
+                          </span>
+                        </div>
+                      )}
                       {personCards && (
                         <PersonAvatar
                           name={titleOf(record)}
@@ -607,24 +728,45 @@ export default function PublicCatalogPage({
                         {(courseCatalog
                           ? ["price", "subjectName", "academicYear"]
                           : personCards
-                          ? ["courseCount", "academicYear"]
-                          : [
-                              "price",
-                              "subjectName",
-                              "academicYear",
-                              "courseCount",
-                            ]
+                            ? ["courseCount", "academicYear"]
+                            : [
+                                "price",
+                                "subjectName",
+                                "academicYear",
+                                "courseCount",
+                              ]
                         )
 
                           .filter((key) => record[key] !== undefined)
 
                           .map((key) => (
                             <span key={key}>
-                              {key === "price" ? "السعر" : key === "subjectName" ? "المادة" : key === "academicYear" ? "الصف" : key}: {displayValue(record[key])}
+                              {key === "price"
+                                ? "السعر"
+                                : key === "subjectName"
+                                  ? "المادة"
+                                  : key === "academicYear"
+                                    ? "الصف"
+                                    : key}
+                              : {displayValue(record[key])}
                             </span>
                           ))}
                       </div>
-                      {courseCatalog && <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4 text-xs text-ink-muted"><span className="inline-flex items-center gap-1.5">{teacherNameOf(record) ? <UserRound size={14} /> : <BookOpen size={14} />}{teacherNameOf(record) ?? "دورة تعليمية"}</span><span className="inline-flex items-center gap-1 font-semibold text-emerald-800">التفاصيل <ArrowLeft size={14} /></span></div>}
+                      {courseCatalog && (
+                        <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4 text-xs text-ink-muted">
+                          <span className="inline-flex items-center gap-1.5">
+                            {teacherNameOf(record) ? (
+                              <UserRound size={14} />
+                            ) : (
+                              <BookOpen size={14} />
+                            )}
+                            {teacherNameOf(record) ?? "دورة تعليمية"}
+                          </span>
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-800">
+                            التفاصيل <ArrowLeft size={14} />
+                          </span>
+                        </div>
+                      )}
                       <span
                         className={`${
                           personCards ? "mt-auto pt-4" : "mt-4"
@@ -633,7 +775,7 @@ export default function PublicCatalogPage({
                         عرض التفاصيل
                       </span>
                     </button>
-                  )
+                  );
                 })}
               </div>
               {data.totalPages > 1 && (
@@ -644,9 +786,9 @@ export default function PublicCatalogPage({
                   <button
                     disabled={page <= 1}
                     onClick={() => {
-                      setPage((value) => value - 1)
+                      setPage((value) => value - 1);
 
-                      setDetail(null)
+                      setDetail(null);
                     }}
                     className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
                   >
@@ -658,9 +800,9 @@ export default function PublicCatalogPage({
                   <button
                     disabled={page >= data.totalPages}
                     onClick={() => {
-                      setPage((value) => value + 1)
+                      setPage((value) => value + 1);
 
-                      setDetail(null)
+                      setDetail(null);
                     }}
                     className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
                   >
@@ -673,5 +815,5 @@ export default function PublicCatalogPage({
         </ApiQueryState>
       </main>
     </div>
-  )
+  );
 }
