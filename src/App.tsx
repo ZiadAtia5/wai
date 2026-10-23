@@ -28,7 +28,7 @@ interface TeacherRoute {
 
 function teacherRouteFromPath(pathname: string): TeacherRoute | null {
   const match = pathname.match(
-    /^\/teacher\/([^/]+)(?:\/course\/([^/]+))?\/?$/i,
+    /(?:^|\/)teacher\/([^/]+)(?:\/course\/([^/]+))?\/?$/i,
   )
 
   if (!match) return null
@@ -45,6 +45,11 @@ function teacherRouteFromPath(pathname: string): TeacherRoute | null {
     teacherId: decodeSegment(match[1]),
     courseId: match[2] ? decodeSegment(match[2]) : null,
   }
+}
+
+function appBasePath(): string {
+  return new URL(import.meta.env.BASE_URL, window.location.origin).pathname
+    .replace(/\/+$/, "")
 }
 
 export default function App() {
@@ -173,12 +178,13 @@ export default function App() {
       return
     }
 
+    const basePath = appBasePath()
     const targetPath = targetTeacherId
       ? targetView === "public:course-detail" && targetCourseId
-        ? `/teacher/${encodeURIComponent(targetTeacherId)}/course/${encodeURIComponent(targetCourseId)}`
-        : `/teacher/${encodeURIComponent(targetTeacherId)}`
+        ? `${basePath}/teacher/${encodeURIComponent(targetTeacherId)}/course/${encodeURIComponent(targetCourseId)}`
+        : `${basePath}/teacher/${encodeURIComponent(targetTeacherId)}`
       : teacherRoute
-        ? "/"
+        ? `${basePath}/`
         : window.location.pathname
 
     window.history.pushState(
