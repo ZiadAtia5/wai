@@ -1,4 +1,4 @@
-import waiLogo from "../assets/waiLogo.png"
+import logo from "../assets/waiLogo.png"
 
 interface NuwaLogoProps {
   size?: "sm" | "md" | "lg"
@@ -23,7 +23,7 @@ export default function NuwaLogo({
 }: NuwaLogoProps) {
   return (
     <img
-      src={waiLogo}
+      src={logo}
       alt="شعار وَعي"
       className={`inline-block shrink-0 object-contain ${className}`}
       style={{ ...logoSizes[size], objectFit: "contain" }}
