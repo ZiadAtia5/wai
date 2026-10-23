@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react";
 
-import { ApiError } from "../api/client";
+import { ApiError, resolveApiAssetUrl } from "../api/client";
 
 import { getAuthToken } from "../api/client";
 import { studentsApi } from "../api/endpoints";
@@ -490,10 +490,12 @@ export default function PublicCatalogPage({
                     "",
                 ) && (
                   <img
-                    src={String(
-                      detail.coverImageUrl ??
-                        detail.thumbnailUrl ??
-                        detail.imageUrl,
+                    src={resolveApiAssetUrl(
+                      String(
+                        detail.coverImageUrl ??
+                          detail.thumbnailUrl ??
+                          detail.imageUrl,
+                      ),
                     )}
                     alt=""
                     className="absolute inset-0 size-full object-cover opacity-30"
@@ -695,6 +697,9 @@ export default function PublicCatalogPage({
                           record.imageUrl ??
                           "",
                       );
+                      const coverImageUrl = coverImage
+                        ? resolveApiAssetUrl(coverImage)
+                        : "";
 
                       if (personCards) {
                         return (
@@ -712,9 +717,9 @@ export default function PublicCatalogPage({
                             className="group overflow-hidden rounded-2xl border border-stroke bg-white text-start shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-sm"
                           >
                             <div className="relative flex h-36 items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4">
-                              {coverImage ? (
+                              {coverImageUrl ? (
                                 <img
-                                  src={coverImage}
+                                  src={coverImageUrl}
                                   alt=""
                                   className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
                                 />
@@ -852,10 +857,12 @@ export default function PublicCatalogPage({
                               "",
                           ) ? (
                             <img
-                              src={String(
-                                record.coverImageUrl ??
-                                  record.thumbnailUrl ??
-                                  record.imageUrl,
+                              src={resolveApiAssetUrl(
+                                String(
+                                  record.coverImageUrl ??
+                                    record.thumbnailUrl ??
+                                    record.imageUrl,
+                                ),
                               )}
                               alt=""
                               className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"

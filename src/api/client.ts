@@ -51,10 +51,16 @@ function getApiBaseUrl(): string {
 }
 
 export function resolveApiAssetUrl(path: string): string {
+  const trimmedPath = path.trim()
+
+  if (/^(?:data:image\/|blob:)/i.test(trimmedPath)) return trimmedPath
+
   let url: URL
 
   try {
-    url = new URL(path, getApiBaseUrl())
+    const apiUrl = new URL(getApiBaseUrl())
+    const baseUrl = `${apiUrl.origin}/`
+    url = new URL(trimmedPath, baseUrl)
   } catch {
     throw new ApiError("مسار ملف الخادم غير صالح.")
   }

@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowUpLeft, BookOpen, Star } from "lucide-react"
 import { motion, useReducedMotion } from "framer-motion"
+import { resolveApiAssetUrl } from "../../../api/client"
 import ApiQueryState from "../../../components/ApiQueryState"
 import type { NavigateFn } from "../../../types"
 import type { LandingCatalogSummary } from "../types"
@@ -95,7 +96,7 @@ export default function FeaturedCoursesSection({
                   const course = record(item)
                   const cover =
                     typeof course.coverImageUrl === "string"
-                      ? course.coverImageUrl
+                      ? resolveApiAssetUrl(course.coverImageUrl)
                       : ""
                   return (
                     <motion.article

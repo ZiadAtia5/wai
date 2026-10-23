@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react"
 
+import { resolveApiAssetUrl } from "../../api/client"
 import PersonAvatar from "../PersonAvatar"
 import { Skeleton, SkeletonAvatar, SkeletonText } from "../Skeleton"
 import { useConfirmation } from "../ConfirmationProvider"
@@ -77,7 +78,7 @@ function CourseThumbnail({ src }: { src: string }) {
 
   return src && !failed ? (
     <img
-      src={src}
+      src={resolveApiAssetUrl(src)}
       alt=""
       className="size-full object-cover"
       onError={() => setFailed(true)}

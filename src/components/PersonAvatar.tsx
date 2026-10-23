@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { resolveApiAssetUrl } from "../api/client"
 
 interface PersonAvatarProps {
   name: string
@@ -39,18 +40,19 @@ export default function PersonAvatar({
 }: PersonAvatarProps) {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const colorIndex = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0) % avatarColors.length
+  const resolvedImageUrl = imageUrl ? resolveApiAssetUrl(imageUrl) : ""
 
   return (
     <span className={`relative inline-grid shrink-0 place-items-center ${sizeClasses[size]}`}>
       <span
         className={`grid size-full place-items-center overflow-hidden rounded-full font-semibold text-ink ${avatarColors[colorIndex]}`}
       >
-        {imageUrl && failedImageUrl !== imageUrl ? (
+        {resolvedImageUrl && failedImageUrl !== imageUrl ? (
           <img
-            src={imageUrl}
+            src={resolvedImageUrl}
             alt=""
             className="size-full object-cover"
-            onError={() => setFailedImageUrl(imageUrl)}
+            onError={() => setFailedImageUrl(imageUrl ?? "")}
           />
         ) : (
           initials(name)
