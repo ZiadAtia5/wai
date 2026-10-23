@@ -13,6 +13,8 @@ import { resolveApiAssetUrl } from "../api/client"
 import { teachersApi } from "../api/endpoints"
 
 import ApiQueryState from "../components/ApiQueryState"
+import { Skeleton, SkeletonButton, SkeletonText } from "../components/Skeleton"
+import { TeacherCoursesSkeleton } from "../components/loading/SkeletonLayouts"
 
 import { useApiQuery } from "../hooks/useApiQuery"
 
@@ -159,7 +161,9 @@ export default function TeacherPlatformPage({
               aria-hidden="true"
               className="absolute -bottom-24 -left-12 size-72 rounded-full border border-white/15 sm:size-96"
             />
-            {teacherImage && failedTeacherImageUrl !== teacherImage ? (
+            {loading ? (
+              <Skeleton className="absolute inset-0 rounded-none bg-white/10" />
+            ) : teacherImage && failedTeacherImageUrl !== teacherImage ? (
               <img
                 src={teacherImage}
                 alt={`صورة ${teacherName}`}
@@ -169,14 +173,18 @@ export default function TeacherPlatformPage({
             ) : (
               <div className="absolute inset-0 grid place-items-center">
                 <div className="grid size-48 place-items-center rounded-full border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm sm:size-64">
-                  <span className="text-7xl font-bold tracking-tight text-white/90 sm:text-8xl">
-                    {teacherName
-                      .trim()
-                      .split(/\s+/)
-                      .slice(0, 2)
-                      .map((part) => part[0] ?? "")
-                      .join("")}
-                  </span>
+                  {loading ? (
+                    <Skeleton className="size-24 rounded-full bg-white/20 sm:size-32" />
+                  ) : (
+                    <span className="text-7xl font-bold tracking-tight text-white/90 sm:text-8xl">
+                      {teacherName
+                        .trim()
+                        .split(/\s+/)
+                        .slice(0, 2)
+                        .map((part) => part[0] ?? "")
+                        .join("")}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -188,10 +196,17 @@ export default function TeacherPlatformPage({
                   معلم على منصة وَعي
                 </span>
                 <p dir="auto" className="mt-3 text-2xl font-bold sm:text-3xl">
-                  {teacherName}
+                  {loading ? (
+                    <Skeleton className="h-8 w-48 bg-white/25 sm:h-9" />
+                  ) : teacherName}
                 </p>
               </div>
-              {data && (
+              {loading ? (
+                <div className="shrink-0 rounded-2xl border border-white/20 bg-black/15 px-4 py-3 text-center backdrop-blur">
+                  <Skeleton className="mx-auto h-7 w-10 bg-white/25" />
+                  <Skeleton className="mx-auto mt-2 h-3 w-20 bg-white/20" />
+                </div>
+              ) : data ? (
                 <div className="shrink-0 rounded-2xl border border-white/20 bg-black/15 px-4 py-3 text-center backdrop-blur">
                   <strong className="block text-2xl leading-none">
                     {data.courses.length}
@@ -200,7 +215,7 @@ export default function TeacherPlatformPage({
                     دورة تعليمية
                   </span>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -217,18 +232,27 @@ export default function TeacherPlatformPage({
               className="mt-2 text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl xl:text-5xl"
             >
               تعلّم مع
-              <span className="mt-1 block text-nuwa-base">{teacherName}</span>
+              <span className="mt-1 block text-nuwa-base">
+                {loading ? (
+                  <Skeleton className="h-10 w-52 bg-nuwa-soft sm:h-12" />
+                ) : teacherName}
+              </span>
             </h1>
             <p
               dir="auto"
               className="mt-5 max-w-xl whitespace-pre-line text-sm leading-8 text-ink-muted sm:text-base"
             >
-              {teacherBio ||
-                "اكتشف الدورات التعليمية وتعلّم بأسلوب واضح ومنظم، خطوة بخطوة."}
+              {loading ? (
+                <SkeletonText className="mt-5 max-w-xl" lines={3} />
+              ) : (
+                teacherBio ||
+                "اكتشف الدورات التعليمية وتعلّم بأسلوب واضح ومنظم، خطوة بخطوة."
+              )}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <button
                 type="button"
+                disabled={loading}
                 onClick={() =>
                   document
                     .getElementById("teacher-courses")
@@ -236,8 +260,17 @@ export default function TeacherPlatformPage({
                 }
                 className="inline-flex h-12 items-center gap-2 rounded-xl bg-nuwa-base px-5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep"
               >
-                استكشف الدورات
-                <ArrowDown size={17} />
+                {loading ? (
+                  <>
+                    <SkeletonButton className="h-4 w-24 bg-white/25" />
+                    <Skeleton className="size-4 rounded bg-white/25" />
+                  </>
+                ) : (
+                  <>
+                    استكشف الدورات
+                    <ArrowDown size={17} />
+                  </>
+                )}
               </button>
               <span className="text-xs font-medium text-ink-muted">
                 محتوى تعليمي أُعدّ بعناية
@@ -260,6 +293,7 @@ export default function TeacherPlatformPage({
 
           <ApiQueryState
             loading={loading}
+            loadingContent={<TeacherCoursesSkeleton />}
             error={error}
             isEmpty={Boolean(data && data.courses.length === 0)}
             emptyMessage="لا توجد دورات منشورة متاحة لهذا المعلم حاليًا."

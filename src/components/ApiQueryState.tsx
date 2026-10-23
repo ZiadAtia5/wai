@@ -12,6 +12,8 @@ interface ApiQueryStateProps {
   onRetry: () => void
 
   children: React.ReactNode
+
+  loadingContent?: React.ReactNode
 }
 
 export default function ApiQueryState({
@@ -26,8 +28,12 @@ export default function ApiQueryState({
   onRetry,
 
   children,
+
+  loadingContent,
 }: ApiQueryStateProps) {
   if (loading) {
+    if (loadingContent !== undefined) return loadingContent
+
     return (
       <div
         className="py-16 text-center text-sm text-ink-muted"

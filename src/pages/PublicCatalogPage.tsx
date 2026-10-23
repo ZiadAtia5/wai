@@ -17,6 +17,8 @@ import {
 import ApiQueryState from "../components/ApiQueryState";
 
 import PersonAvatar from "../components/PersonAvatar";
+import { Skeleton, SkeletonText } from "../components/Skeleton";
+import { CatalogGridSkeleton } from "../components/loading/SkeletonLayouts";
 
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -161,6 +163,8 @@ export default function PublicCatalogPage({
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
     [],
   );
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
+  const [relatedLoading, setRelatedLoading] = useState(false);
   const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -212,19 +216,25 @@ export default function PublicCatalogPage({
   }, [action]);
 
   useEffect(() => {
+    if (personCards) return;
+
     let active = true;
+    setAcademicYearsLoading(true);
 
     getAcademicYears()
       .then((years) => {
         if (active) setAcademicYears(years);
       })
 
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setAcademicYearsLoading(false);
+      });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [personCards]);
 
   const pageLoader = useCallback(
     () => load(page, 12, search, academicYear),
@@ -245,7 +255,12 @@ export default function PublicCatalogPage({
 
     setActionMessage("");
 
-    if (record.id === undefined || record.id === null) return;
+    if (record.id === undefined || record.id === null) {
+      setRelatedLoading(false);
+      return;
+    }
+
+    setRelatedLoading(Boolean(loadRelated));
 
     try {
       const id = String(record.id);
@@ -263,6 +278,8 @@ export default function PublicCatalogPage({
       setActionMessage(
         cause instanceof ApiError ? cause.message : "تعذر تحميل التفاصيل.",
       );
+    } finally {
+      setRelatedLoading(false);
     }
   }
 
@@ -377,6 +394,15 @@ export default function PublicCatalogPage({
                 {description}
               </p>
             </div>
+            {catalogHeader && loading && (
+              <div
+                aria-busy="true"
+                className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur"
+              >
+                <Skeleton className="mx-auto h-7 w-14 bg-white/25" />
+                <Skeleton className="mx-auto mt-2 h-3 w-20 bg-white/20" />
+              </div>
+            )}
             {catalogHeader && data && !error && (
               <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur">
                 <strong className="block text-2xl">{data.totalCount}</strong>
@@ -386,6 +412,9 @@ export default function PublicCatalogPage({
               </div>
             )}
           </div>
+          {!catalogHeader && loading && (
+            <Skeleton className="mt-3 h-4 w-40" />
+          )}
           {!catalogHeader && data && !error && (
             <p className="mt-3 text-xs text-ink-muted" aria-live="polite">
               إجمالي النتائج : {data.totalCount}
@@ -421,6 +450,8 @@ export default function PublicCatalogPage({
             الصف الدراسي
             <select
               value={academicYear}
+              disabled={academicYearsLoading}
+              aria-busy={academicYearsLoading}
               onChange={(event) => {
                 setAcademicYear(event.target.value);
 
@@ -430,7 +461,9 @@ export default function PublicCatalogPage({
               }}
               className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
             >
-              <option value="">كل الصفوف</option>
+              <option value="">
+                {academicYearsLoading ? "جارٍ تحميل الصفوف..." : "كل الصفوف"}
+              </option>
               {academicYears.map((year) => (
                 <option key={year.id} value={year.value}>
                   {year.arabicName}
@@ -622,7 +655,28 @@ export default function PublicCatalogPage({
                 <h3 className="mb-3 font-semibold text-ink">
                   {personCards ? "الدورات التعليمية" : "الدورات"}
                 </h3>
-                {relatedItems.length === 0 ? (
+                {relatedLoading ? (
+                  <div
+                    aria-busy="true"
+                    className="grid gap-2 sm:grid-cols-2"
+                  >
+                    {[0, 1].map((index) => (
+                      <div
+                        key={index}
+                        aria-hidden="true"
+                        className="rounded-2xl border border-stroke bg-white p-4"
+                      >
+                        <Skeleton className="h-36 w-full rounded-2xl" />
+                        <Skeleton className="mt-4 h-5 w-2/3" />
+                        <SkeletonText className="mt-3" lines={2} />
+                        <div className="mt-4 flex justify-between border-t border-stroke pt-3">
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : relatedItems.length === 0 ? (
                   <p className="text-sm text-ink-muted">لا توجد دورات متاحة.</p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -735,6 +789,11 @@ export default function PublicCatalogPage({
 
         <ApiQueryState
           loading={loading}
+          loadingContent={
+            <CatalogGridSkeleton
+              kind={personCards ? "person" : courseCatalog ? "course" : "record"}
+            />
+          }
           error={error}
           isEmpty={Boolean(data && data.items.length === 0)}
           emptyMessage={emptyMessage}

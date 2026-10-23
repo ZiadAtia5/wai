@@ -69,13 +69,18 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
     [],
   );
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(!isLogin);
 
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    if (isLogin) return;
+    if (isLogin) {
+      setAcademicYearsLoading(false);
+      return;
+    }
 
     let active = true;
+    setAcademicYearsLoading(true);
 
     getAcademicYears()
       .then((years) => {
@@ -84,7 +89,10 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
 
       .catch((error: unknown) =>
         notifyError(error, "تعذر تحميل الصفوف الدراسية."),
-      );
+      )
+      .finally(() => {
+        if (active) setAcademicYearsLoading(false);
+      });
 
     return () => {
       active = false;
@@ -320,6 +328,22 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
 
       navigate("dashboard");
     } catch (error) {
+      const loginErrorMessage =
+        error instanceof ApiError ? error.message.toLowerCase() : "";
+      const accountNeedsActivation =
+        isLogin &&
+        (error instanceof ApiError && error.status === 403 ||
+          /pending|not active|inactive|not approved|unapproved|activation|awaiting approval|غير مفعل|غير مفعّل|بانتظار التفعيل|قيد الموافقة|لم يتم تفعيل|لم يعتمد/.test(
+            loginErrorMessage,
+          ));
+
+      if (accountNeedsActivation) {
+        notifyError(
+          new Error("حسابك قيد المراجعة ولم يتم تفعيله بعد. يُرجى المحاولة بعد اعتماد الحساب من الإدارة."),
+        );
+        return;
+      }
+
       notifyError(
         error,
 
@@ -469,22 +493,16 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                       className="sm:col-span-2"
                     />
 
-                    <PasswordField
-                      label="كلمة المرور"
-                      name="password"
-                      visible={showPassword}
-                      toggle={() => setShowPassword((value) => !value)}
-                      onChange={setPasswordValue}
-                      pattern={!isLogin ? PASSWORD_POLICY_PATTERN : undefined}
-                      title={
-                        !isLogin
-                          ? "كلمة المرور تتطلب حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا، وبطول 8 أحرف على الأقل."
-                          : undefined
-                      }
-                      autoComplete={
-                        isLogin ? "current-password" : "new-password"
-                      }
-                    />
+                    {isLogin && (
+                      <PasswordField
+                        label="كلمة المرور"
+                        name="password"
+                        visible={showPassword}
+                        toggle={() => setShowPassword((value) => !value)}
+                        onChange={setPasswordValue}
+                        autoComplete="current-password"
+                      />
+                    )}
 
                     {!isLogin && (
                       <>
@@ -524,13 +542,15 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
                         name="academicYear"
                         required
                         defaultValue=""
-                        disabled={!academicYears.length}
+                        disabled={academicYearsLoading || !academicYears.length}
                         className={inputClass}
                       >
                         <option value="" disabled>
-                          {academicYears.length
-                            ? "اختر الصف الدراسي"
-                            : "جارٍ تحميل الصفوف..."}
+                          {academicYearsLoading
+                            ? "جارٍ تحميل الصفوف..."
+                            : academicYears.length
+                              ? "اختر الصف الدراسي"
+                              : "لا توجد صفوف متاحة"}
                         </option>
                         {academicYears.map((year) => (
                           <option key={year.id} value={year.value}>

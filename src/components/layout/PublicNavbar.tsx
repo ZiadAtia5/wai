@@ -10,6 +10,8 @@ import {
 } from "lucide-react"
 
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { motion } from "framer-motion"
 
 import { getAuthToken } from "../../api/client"
 
@@ -45,8 +47,17 @@ export default function PublicNavbar({
   navigate,
 }: PublicNavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
 
   const isAuthenticated = Boolean(getAuthToken())
+  const isOnLandingHero = currentView === "landing" && !scrolled
+
+  useEffect(() => {
+    const updateScrollState = () => setScrolled(window.scrollY > 24)
+    updateScrollState()
+    window.addEventListener("scroll", updateScrollState, { passive: true })
+    return () => window.removeEventListener("scroll", updateScrollState)
+  }, [])
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -77,9 +88,9 @@ export default function PublicNavbar({
   }
 
   return (
-    <>
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-stroke bg-surface/95 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-360 items-center justify-between gap-4 px-4 sm:px-6">
+    createPortal(<>
+      <header className={`fixed inset-x-3 top-4 z-[100] mx-auto max-w-7xl rounded-[1.75rem] border backdrop-blur-xl transition-colors duration-300 sm:inset-x-6 sm:top-5 ${isOnLandingHero ? "border-[#dce9de]/90 bg-white/85 shadow-[0_10px_32px_rgba(18,67,42,.1)]" : "border-white/50 bg-surface/85 shadow-[0_12px_36px_rgba(9,40,25,.14)]"}`}>
+        <div className="relative mx-auto flex h-16 max-w-360 items-center justify-between gap-4 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => goTo("landing")}
@@ -89,7 +100,7 @@ export default function PublicNavbar({
             <NuwaLogo size="sm" />
           </button>
           <nav
-            className="hidden flex-1 items-center justify-center gap-1 lg:flex"
+            className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-1 lg:flex"
             aria-label="روابط المنصة"
           >
             {publicNavigation.map(({ label, view }) => {
@@ -104,13 +115,22 @@ export default function PublicNavbar({
                   key={view}
                   onClick={() => goTo(view)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  className={`relative isolate rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
                     isActive
-                      ? "bg-nuwa-soft text-nuwa-base"
-                      : "text-ink-muted hover:bg-canvas hover:text-ink"
+                      ? "text-nuwa-base"
+                    : isOnLandingHero
+                      ? "text-[#50665a] hover:text-nuwa-deep"
+                      : "text-ink-muted hover:text-ink"
                   }`}
                 >
-                  {label}
+                  {isActive && (
+                    <motion.span
+                      layoutId="public-navigation-active"
+                      className="absolute inset-0 z-0 rounded-xl bg-nuwa-soft"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10">{label}</span>
                 </button>
               )
             })}
@@ -133,7 +153,9 @@ export default function PublicNavbar({
                   className={`h-10 rounded-xl px-4 text-sm font-semibold transition ${
                     currentView === "login"
                       ? "bg-nuwa-soft text-nuwa-base"
-                      : "text-ink-muted hover:bg-canvas hover:text-ink"
+                      : isOnLandingHero
+                        ? "text-[#50665a] hover:bg-[#edf5ef] hover:text-nuwa-deep"
+                        : "text-ink-muted hover:bg-canvas hover:text-ink"
                   }`}
                 >
                   تسجيل الدخول
@@ -150,7 +172,7 @@ export default function PublicNavbar({
           </div>
           <button
             type="button"
-            className="grid size-10 place-items-center rounded-xl border border-stroke bg-white text-ink-muted shadow-nuwa transition hover:bg-canvas hover:text-nuwa-base lg:hidden"
+            className={`grid size-10 place-items-center rounded-xl transition lg:hidden ${isOnLandingHero ? "border border-[#dce9de] bg-white text-ink-muted hover:bg-[#edf5ef]" : "border border-stroke bg-white text-ink-muted shadow-nuwa hover:bg-canvas hover:text-nuwa-base"}`}
             onClick={() => setMobileOpen((open) => !open)}
             aria-label={mobileOpen ? "إغلاق القائمة" : "فتح القائمة"}
             aria-expanded={mobileOpen}
@@ -166,7 +188,7 @@ export default function PublicNavbar({
           type="button"
           aria-label="إغلاق القائمة"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-40 bg-neutral-950/45 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[110] bg-neutral-950/45 backdrop-blur-[2px]"
         />
       )}
       <aside
@@ -174,7 +196,7 @@ export default function PublicNavbar({
         aria-label="القائمة الرئيسية"
         aria-hidden={!mobileOpen}
         inert={!mobileOpen}
-        className={`fixed inset-y-0 right-0 z-50 h-dvh w-[min(86vw,320px)] overflow-y-auto overscroll-contain border-l border-stroke bg-white p-4 shadow-2xl transition-transform duration-200 ${
+        className={`fixed inset-y-0 right-0 z-[120] h-dvh w-[min(86vw,320px)] overflow-y-auto overscroll-contain border-l border-stroke bg-white p-4 shadow-2xl transition-transform duration-200 ${
           mobileOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -274,6 +296,6 @@ export default function PublicNavbar({
           )}
         </nav>
       </aside>
-    </>
+    </>, document.body)
   )
 }
