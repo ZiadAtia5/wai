@@ -35,6 +35,13 @@ import { useConfirmation } from "../ConfirmationProvider"
 import ProfileImageEditor from "./ProfileImageEditor"
 
 import PersonAvatar from "../PersonAvatar"
+import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
+import {
+  CatalogGridSkeleton,
+  EnrollmentGridSkeleton,
+  ProfileSkeleton,
+  TeacherCoursesSkeleton,
+} from "../loading/SkeletonLayouts"
 
 type RecordValue = Record<string, unknown>
 
@@ -82,6 +89,8 @@ interface RoleFormsProps {
   section: string
 
   data: unknown
+
+  loading?: boolean
 
   onSaved: () => void
 
@@ -640,6 +649,8 @@ export default function RoleForms({
 
   data,
 
+  loading = false,
+
   onSaved,
 
   onFeedback,
@@ -650,6 +661,7 @@ export default function RoleForms({
 }: RoleFormsProps) {
   const confirm = useConfirmation()
   const [years, setYears] = useState<AcademicYearResponse[]>([])
+  const [yearsLoading, setYearsLoading] = useState(false)
 
   const profileFormRef = useRef<HTMLFormElement>(null)
 
@@ -796,6 +808,7 @@ export default function RoleForms({
     if (!isAdmin && !isTeacher && section !== "profile") return
 
     let active = true
+    setYearsLoading(true)
 
     getAcademicYears()
 
@@ -811,6 +824,9 @@ export default function RoleForms({
               : "تعذر تحميل الصفوف الدراسية.",
           )
         }
+      })
+      .finally(() => {
+        if (active) setYearsLoading(false)
       })
 
     if (isTeacher && section === "courses") {
@@ -1443,6 +1459,9 @@ export default function RoleForms({
     }
   }
 
+  if (loading && section === "profile")
+    return <ProfileSkeleton admin={isAdmin} />
+
   if (isAdmin && section === "teachers")
     return (
       <div className="mb-5 space-y-4">
@@ -1491,8 +1510,11 @@ export default function RoleForms({
               name="academicYears"
               multiple
               required
+              disabled={yearsLoading}
+              aria-busy={yearsLoading}
               className="min-h-20 rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
             >
+              {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
               {years.map((year) => (
                 <option key={year.id} value={year.value}>
                   {year.arabicName}
@@ -1507,8 +1529,11 @@ export default function RoleForms({
             إنشاء حساب معلم
           </button>
         </form>
-        <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {listFrom(data).map((teacher) => {
+        {loading ? (
+          <CatalogGridSkeleton kind="person" layout="dashboard" />
+        ) : (
+          <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {listFrom(data).map((teacher) => {
             const isEditingTeacher =
               editingTeacher &&
               String(editingTeacher.id) === String(teacher.id)
@@ -1570,6 +1595,8 @@ export default function RoleForms({
                         name="academicYears"
                         multiple
                         required
+                        disabled={yearsLoading}
+                        aria-busy={yearsLoading}
                         defaultValue={
                           Array.isArray(editingTeacher.academicYears)
                             ? editingTeacher.academicYears.map(String)
@@ -1577,6 +1604,7 @@ export default function RoleForms({
                         }
                         className="min-h-20 w-full rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
                       >
+                        {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
                         {years.map((year) => (
                           <option key={year.id} value={year.value}>
                             {year.arabicName}
@@ -1653,17 +1681,20 @@ export default function RoleForms({
                     teacher.id,
                 )}
               </h3>
-              {teacherDetails.email && (
+              {teacherDetails.email != null &&
+                String(teacherDetails.email).trim() !== "" && (
                 <p className="mt-1 break-all text-xs text-ink-muted">
                   {String(teacherDetails.email)}
                 </p>
               )}
-              {teacherDetails.phoneNumber && (
+              {teacherDetails.phoneNumber != null &&
+                String(teacherDetails.phoneNumber).trim() !== "" && (
                 <p className="mt-1 text-xs text-ink-muted">
                   {String(teacherDetails.phoneNumber)}
                 </p>
               )}
-              {teacherDetails.bio && (
+              {teacherDetails.bio != null &&
+                String(teacherDetails.bio).trim() !== "" && (
                 <p className="mt-3 line-clamp-3 text-xs leading-6 text-ink-muted">
                   {String(teacherDetails.bio)}
                 </p>
@@ -1693,8 +1724,9 @@ export default function RoleForms({
               </span>
             </article>
             )
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
     )
 
@@ -1803,10 +1835,13 @@ export default function RoleForms({
                     الصف الدراسي
                     <select
                       value={newSubjectYear || String(years[0]?.value ?? "")}
+                      disabled={yearsLoading || !years.length}
+                      aria-busy={yearsLoading}
                       onChange={(event) => setNewSubjectYear(event.currentTarget.value)}
                       className={fieldClass}
                       required
                     >
+                      {yearsLoading && <option value="">جارٍ تحميل الصفوف...</option>}
                       {years.map((year) => (
                         <option key={year.id} value={String(year.value)}>
                           {year.arabicName || year.name}
@@ -1920,7 +1955,9 @@ export default function RoleForms({
           ))}
         </div>
 
-        {teacherCourses.length === 0 ? (
+        {loading ? (
+          <TeacherCoursesSkeleton dashboard />
+        ) : teacherCourses.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-10 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-nuwa-soft text-nuwa-base">
               <BookOpen size={23} />
@@ -2310,7 +2347,9 @@ export default function RoleForms({
 
     return (
       <div className="mb-5 space-y-4">
-        {studentEnrollments.length > 0 && (
+        {loading ? (
+          <EnrollmentGridSkeleton />
+        ) : studentEnrollments.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {studentEnrollments.map((enrollment, index) => {
               const course = asRecord(enrollment.course)
@@ -2447,7 +2486,7 @@ export default function RoleForms({
             })}
           </div>
         )}
-        {studentEnrollments.length === 0 && (
+        {!loading && studentEnrollments.length === 0 && (
           <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-8 text-center text-sm text-ink-muted">
             لا توجد دورات أو طلبات التحاق نشطة حالياً.
           </div>
@@ -2503,7 +2542,23 @@ export default function RoleForms({
               />
             </div>
             {progressLoading && (
-              <p className="mt-3 text-sm text-ink-muted">جارٍ تحميل الدروس...</p>
+              <ul
+                aria-busy="true"
+                aria-label="جارٍ تحميل الدروس"
+                className="mt-4 divide-y divide-stroke overflow-hidden rounded-xl border border-stroke px-4"
+              >
+                {[0, 1, 2].map((item) => (
+                  <li key={item} className="space-y-3 py-4">
+                    <Skeleton className="h-5 w-2/3" />
+                    <Skeleton className="h-4 w-1/3" />
+                    <div className="flex flex-wrap gap-2">
+                      <Skeleton className="h-9 w-28 rounded-lg" />
+                      <Skeleton className="h-9 w-24 rounded-lg" />
+                    </div>
+                    <Skeleton className="h-20 w-full rounded-xl" />
+                  </li>
+                ))}
+              </ul>
             )}
             {progressError && (
               <div className="mt-4 rounded-xl border border-danger/20 bg-danger-light p-4">
@@ -2623,9 +2678,27 @@ export default function RoleForms({
               إغلاق الاختبار
             </button>
             {quizLoading && (
-              <p className="mt-3 text-sm text-ink-muted">
-                جارٍ تحميل الاختبار...
-              </p>
+              <div
+                aria-busy="true"
+                aria-label="جارٍ تحميل الاختبار"
+                className="mt-3 space-y-4"
+              >
+                {[0, 1].map((item) => (
+                  <div key={item} className="rounded-xl bg-nuwa-ice p-4">
+                    <Skeleton className="h-5 w-2/3" />
+                    <SkeletonText className="mt-4" lines={3} />
+                    <div className="mt-4 space-y-2">
+                      {[0, 1, 2].map((option) => (
+                        <Skeleton
+                          key={option}
+                          className="h-10 w-full rounded-lg"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <SkeletonButton className="w-36" />
+              </div>
             )}
             {quizError && (
               <div className="mt-3 rounded-lg border border-danger/20 bg-danger-light p-3">
@@ -3208,8 +3281,11 @@ export default function RoleForms({
                     name="academicYear"
                     required
                     defaultValue={String(studentAcademicYear)}
+                    disabled={yearsLoading || !years.length}
+                    aria-busy={yearsLoading}
                     className={fieldClass}
                   >
+                    {yearsLoading && <option value="">جارٍ تحميل الصفوف...</option>}
                     {years.map((year) => (
                       <option key={year.id} value={year.value}>
                         {year.arabicName}
@@ -3226,8 +3302,11 @@ export default function RoleForms({
                     multiple
                     required
                     defaultValue={teacherYears}
+                    disabled={yearsLoading}
+                    aria-busy={yearsLoading}
                     className="min-h-20 rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
                   >
+                    {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
                     {years.map((year) => (
                       <option key={year.id} value={year.value}>
                         {year.arabicName}

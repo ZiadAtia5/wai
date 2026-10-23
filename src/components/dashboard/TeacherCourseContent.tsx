@@ -5,6 +5,7 @@ import { ApiError } from "../../api/client"
 import { useConfirmation } from "../ConfirmationProvider"
 
 import { quizzesApi, teachersApi } from "../../api/endpoints"
+import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
 import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
 
 type DataRecord = Record<string, unknown>
@@ -567,9 +568,45 @@ export default function TeacherCourseContent({
 
   if (courseLoading)
     return (
-      <p className="rounded-xl border border-stroke bg-white p-4 text-sm text-ink-muted">
-        جارٍ تحميل محتوى الدورة...
-      </p>
+      <section
+        aria-busy="true"
+        aria-label="جارٍ تحميل محتوى الدورة"
+        className="mt-5 min-w-0 max-w-full rounded-2xl border border-nuwa-base/15 bg-gradient-to-b from-nuwa-ice to-white p-3 shadow-sm sm:p-6"
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="mb-5 grid gap-3 rounded-2xl border border-stroke bg-white p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+          <div>
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="mt-2 h-10 w-full rounded-lg" />
+          </div>
+          <div>
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="mt-2 h-10 w-full rounded-lg" />
+          </div>
+          <SkeletonButton className="w-full sm:w-28" />
+        </div>
+        <div className="space-y-3">
+          {[0, 1].map((item) => (
+            <div
+              key={item}
+              className="rounded-2xl border border-stroke bg-white p-4 shadow-sm sm:p-5"
+            >
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-10 rounded-lg" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="mt-2 h-5 w-2/3" />
+                </div>
+                <Skeleton className="h-8 w-20 rounded-lg" />
+              </div>
+              <SkeletonText className="mt-4" lines={2} />
+            </div>
+          ))}
+        </div>
+      </section>
     )
 
   if (courseError || !course)

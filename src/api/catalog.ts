@@ -24,29 +24,41 @@ export interface PagedResult<T> {
 
 export type ApiRecord = unknown
 
-export async function getAcademicYears(): Promise<AcademicYearResponse[]> {
-  const payload = await apiRequest<unknown>("/academic-years")
+let academicYearsRequest: Promise<AcademicYearResponse[]> | null = null
 
-  if (
-    !Array.isArray(payload) ||
-    !payload.every(
-      (year) =>
-        typeof year === "object" &&
-        year !== null &&
-        "value" in year &&
-        typeof year.value === "number" &&
-        "id" in year &&
-        typeof year.id === "number" &&
-        "name" in year &&
-        typeof year.name === "string" &&
-        "arabicName" in year &&
-        typeof year.arabicName === "string",
-    )
-  ) {
-    throw new Error("Unexpected academic-year response")
+export function getAcademicYears(): Promise<AcademicYearResponse[]> {
+  if (academicYearsRequest) return academicYearsRequest
+
+  const request = apiRequest<unknown>("/academic-years").then((payload) => {
+    if (
+      !Array.isArray(payload) ||
+      !payload.every(
+        (year) =>
+          typeof year === "object" &&
+          year !== null &&
+          "value" in year &&
+          typeof year.value === "number" &&
+          "id" in year &&
+          typeof year.id === "number" &&
+          "name" in year &&
+          typeof year.name === "string" &&
+          "arabicName" in year &&
+          typeof year.arabicName === "string",
+      )
+    ) {
+      throw new Error("Unexpected academic-year response")
+    }
+
+    return payload
+  })
+
+  academicYearsRequest = request
+  const clearRequest = () => {
+    if (academicYearsRequest === request) academicYearsRequest = null
   }
+  void request.then(clearRequest, clearRequest)
 
-  return payload
+  return request
 }
 
 export function getPublicCourses(

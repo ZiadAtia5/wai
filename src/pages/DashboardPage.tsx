@@ -50,6 +50,11 @@ import { useConfirmation } from "../components/ConfirmationProvider";
 import NuwaLogo from "../components/NuwaLogo";
 
 import PersonAvatar from "../components/PersonAvatar";
+import { Skeleton, SkeletonIcon, SkeletonText } from "../components/Skeleton";
+import {
+  RecordGridSkeleton,
+  StatGridSkeleton,
+} from "../components/loading/SkeletonLayouts";
 
 import { getAcademicYears, type AcademicYearResponse } from "../api/catalog";
 
@@ -628,6 +633,105 @@ function getStudentName(record: Record<string, unknown>) {
   return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"));
 }
 
+function DashboardOverviewSkeleton({
+  student = false,
+}: {
+  student?: boolean;
+}) {
+  return (
+    <section
+      aria-busy="true"
+      aria-label="جارٍ تحميل النظرة العامة"
+      className="mb-5 overflow-hidden rounded-2xl border border-stroke bg-white shadow-nuwa"
+    >
+      <div className="bg-gradient-to-l from-nuwa-deep to-nuwa-base px-5 py-6 sm:px-7">
+        <Skeleton className="h-6 w-36 rounded-full bg-white/20" />
+        <Skeleton className="mt-4 h-8 w-2/3 max-w-lg bg-white/25" />
+        <Skeleton className="mt-2 h-4 w-full max-w-xl bg-white/20" />
+      </div>
+      <div className="p-4 sm:p-6">
+        <StatGridSkeleton count={student ? 3 : 4} />
+        <div className="mt-5 rounded-2xl border border-stroke bg-white p-4 sm:p-6">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+          <div className="mt-5 flex h-36 items-end gap-3 border-b border-stroke px-2">
+            {[
+              "h-1/3",
+              "h-2/3",
+              "h-1/2",
+              "h-2/3",
+              "h-1/3",
+              "h-1/2",
+            ].map((height, item) => (
+              <Skeleton
+                key={item}
+                className={`${height} min-h-8 flex-1 rounded-t-lg`}
+              />
+            ))}
+          </div>
+        </div>
+        {student && (
+          <div className="mt-6">
+            <Skeleton className="h-5 w-36" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-xl border border-stroke bg-white p-4"
+                >
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="mt-3 h-4 w-1/2" />
+                  <SkeletonText className="mt-4" lines={2} />
+                  <Skeleton className="mt-4 h-2 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function AdminStatsSkeleton() {
+  return (
+    <section
+      aria-busy="true"
+      aria-label="جارٍ تحميل إحصاءات المنصة"
+      className="mb-5 overflow-hidden rounded-2xl border border-stroke bg-white shadow-nuwa"
+    >
+      <div className="bg-gradient-to-l from-nuwa-deep to-nuwa-base px-5 py-6 sm:px-7">
+        <Skeleton className="h-6 w-40 rounded-full bg-white/20" />
+        <Skeleton className="mt-4 h-8 w-2/3 max-w-lg bg-white/25" />
+        <Skeleton className="mt-2 h-4 w-full max-w-xl bg-white/20" />
+      </div>
+      <div className="p-4 sm:p-6">
+        <StatGridSkeleton count={6} />
+        <div className="mt-6 rounded-2xl border border-stroke bg-white p-4 sm:p-6">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+          <div className="mt-5 flex h-36 items-end gap-3 border-b border-stroke px-2">
+            {[0, 1, 2, 3, 4, 5].map((item) => (
+              <Skeleton key={item} className="min-h-8 flex-1 rounded-t-lg" />
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((item) => (
+            <div key={item} className="flex items-center gap-3 rounded-xl border border-stroke p-3">
+              <SkeletonIcon />
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="mt-2 h-3 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const confirm = useConfirmation();
 
@@ -782,6 +886,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
     [],
   );
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
 
   const sections = useMemo(
     () => getSections(role, query, useTeacherEnrollmentMock),
@@ -837,13 +942,21 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const { data, error, loading } = useApiQuery(section.load, reloadKey);
 
-  const loadNotifications = useCallback(() => notificationsApi.list(), []);
+  const loadNotifications = useCallback(
+    () =>
+      activeKey === "notifications"
+        ? Promise.resolve(null)
+        : notificationsApi.list(),
+    [activeKey],
+  );
   const { data: notificationData } = useApiQuery(
     loadNotifications,
     notificationReloadKey,
   );
   const unreadNotifications = useMemo(() => {
-    const payload = unwrapApiResponse(notificationData);
+    const payload = unwrapApiResponse(
+      activeKey === "notifications" ? data : notificationData,
+    );
     if (isRecord(payload)) {
       const summary = isRecord(payload.summary) ? payload.summary : payload;
       const count = Number(
@@ -852,12 +965,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       if (Number.isFinite(count) && count >= 0) return Math.floor(count);
     }
     return getNotificationRecords(payload).filter(isUnreadNotification).length;
-  }, [notificationData]);
+  }, [activeKey, data, notificationData]);
 
   useEffect(() => {
     const refresh = () => {
-      setNotificationReloadKey((key) => key + 1);
       if (activeKey === "notifications") setReloadKey((key) => key + 1);
+      else setNotificationReloadKey((key) => key + 1);
     };
     const interval = window.setInterval(refresh, 30_000);
     window.addEventListener("focus", refresh);
@@ -1044,6 +1157,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       return;
 
     let active = true;
+    setAcademicYearsLoading(true);
 
     getAcademicYears()
       .then((years) => {
@@ -1052,6 +1166,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
       .catch(() => {
         if (active) setActionFeedback("تعذر تحميل الصفوف الدراسية من الخادم.");
+      })
+      .finally(() => {
+        if (active) setAcademicYearsLoading(false);
       });
 
     return () => {
@@ -1850,6 +1967,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
             {/* Data Cards Section */}
             <div className="mt-6">
+              {role.includes("teacher") &&
+                activeKey === "overview" &&
+                loading && <DashboardOverviewSkeleton />}
               {teacherStats.length > 0 && (
                 <>
                   <dl className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1878,6 +1998,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   />
                 </>
               )}
+              {role.includes("admin") &&
+                activeKey === "stats" &&
+                loading && <AdminStatsSkeleton />}
               {role.includes("admin") &&
                 activeKey === "stats" &&
                 !loading &&
@@ -2051,6 +2174,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     </div>
                   </section>
                 )}
+              {!role.includes("admin") &&
+                !role.includes("teacher") &&
+                activeKey === "overview" &&
+                loading && <DashboardOverviewSkeleton student />}
               {studentOverview && !loading && !error && (
                 <section className="mb-5 overflow-hidden rounded-2xl border border-stroke bg-white shadow-nuwa">
                   <div className="relative isolate overflow-hidden bg-gradient-to-l from-nuwa-deep to-nuwa-base px-5 py-6 text-white sm:px-7">
@@ -2347,6 +2474,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 role={role}
                 section={activeKey}
                 data={data}
+                loading={loading}
                 onSaved={reloadData}
                 onFeedback={setActionFeedback}
                 focusCourseId={focusStudentCourseId}
@@ -2380,10 +2508,15 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                     <select
                       name="academicYear"
                       value={subjectYear}
+                      disabled={academicYearsLoading || !academicYears.length}
+                      aria-busy={academicYearsLoading}
                       onChange={(event) => setSubjectYear(event.target.value)}
                       required
                       className="h-10 rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
                     >
+                      {academicYearsLoading && (
+                        <option value="">جارٍ تحميل الصفوف الدراسية...</option>
+                      )}
                       {academicYears.map((year) => (
                         <option key={year.id} value={year.value}>
                           {year.arabicName}
@@ -2450,6 +2583,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
               ) : (
                 <ApiQueryState
                   loading={loading}
+                  loadingContent={
+                    showGenericRecords ? (
+                      <RecordGridSkeleton
+                        compact={activeKey === "notifications"}
+                      />
+                    ) : null
+                  }
                   error={error}
                   isEmpty={Boolean(
                     data && displayedRecords.length === 0 && showGenericRecords,

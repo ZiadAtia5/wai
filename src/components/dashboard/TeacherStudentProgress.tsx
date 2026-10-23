@@ -8,6 +8,8 @@ import ApiQueryState from "../ApiQueryState"
 
 import PersonAvatar from "../PersonAvatar"
 
+import { ProgressGridSkeleton } from "../loading/SkeletonLayouts"
+
 import { useApiQuery } from "../../hooks/useApiQuery"
 
 import {
@@ -439,6 +441,7 @@ export default function TeacherStudentProgress() {
 
       <ApiQueryState
         loading={loading}
+        loadingContent={<ProgressGridSkeleton />}
         error={error}
         isEmpty={!overview.length}
         emptyMessage="لا توجد سجلات طلاب أو محاولات اختبارات مرتبطة بدوراتك حتى الآن."

@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import PersonAvatar from "../PersonAvatar"
+import { Skeleton, SkeletonAvatar, SkeletonText } from "../Skeleton"
 import { useConfirmation } from "../ConfirmationProvider"
 
 type RequestStatus = "pending" | "approved" | "rejected"
@@ -609,18 +610,62 @@ export default function TeacherEnrollmentRequests({
 
   if (loading) {
     return (
-      <div
-        className="space-y-4"
-        aria-busy="true"
-        aria-label="جاري تحميل الطلبات"
-      >
-        {[1, 2].map((item) => (
-          <div
-            key={item}
-            className="h-32 animate-pulse rounded-2xl border border-neutral-200 bg-white"
-          />
-        ))}
-      </div>
+      <section className="space-y-5" aria-busy="true" aria-label="جاري تحميل الطلبات">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+            </div>
+            <Skeleton className="h-11 w-full rounded-xl lg:max-w-sm" />
+          </div>
+          <div className="mt-5 flex gap-2 overflow-hidden pb-1">
+            {[0, 1, 2, 3].map((item) => (
+              <Skeleton key={item} className="h-10 w-28 shrink-0 rounded-xl" />
+            ))}
+          </div>
+        </div>
+        <div className="space-y-4">
+          {[0, 1].map((item) => (
+            <article
+              key={item}
+              className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm"
+            >
+              <div className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
+                <Skeleton className="size-14 shrink-0 rounded-xl sm:size-16" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-5 w-2/3" />
+                  <div className="mt-2 flex gap-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </div>
+                </div>
+                <Skeleton className="size-5 shrink-0 rounded-full" />
+              </div>
+              <div className="grid gap-3 border-t border-neutral-100 bg-neutral-50/60 p-3 sm:grid-cols-2 sm:p-5">
+                {[0, 1].map((request) => (
+                  <div
+                    key={request}
+                    className="rounded-[22px] border border-stroke bg-white p-4 shadow-nuwa"
+                  >
+                    <div className="flex items-start gap-3">
+                      <SkeletonAvatar />
+                      <div className="min-w-0 flex-1">
+                        <Skeleton className="h-5 w-2/3" />
+                        <SkeletonText className="mt-2" lines={2} />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Skeleton className="h-9 w-24 rounded-lg" />
+                      <Skeleton className="h-9 w-24 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     )
   }
 

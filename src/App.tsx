@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react"
+import { motion } from "framer-motion"
 
 import { getAuthToken } from "./api/client"
 
@@ -6,7 +7,7 @@ import type { NavigateFn, View } from "./types"
 
 import PublicNavbar from "./components/layout/PublicNavbar"
 
-const LandingPage = lazy(() => import("./pages/LandingPage"))
+const LandingPage = lazy(() => import("./pages/landing/LandingPage"))
 
 const AuthPage = lazy(() => import("./pages/AuthPage"))
 
@@ -197,17 +198,27 @@ export default function App() {
           "'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif",
       }}
     >
-      {view !== "dashboard" && (
+      {view !== "dashboard" && view !== "landing" && (
         <PublicNavbar currentView={view} navigate={navigate} />
       )}
       <main
         className={
-          view === "dashboard" ? undefined : "pt-16"
+          view === "dashboard"
+            ? undefined
+            : view === "landing"
+              ? "pt-0"
+              : "pt-24"
         }
       >
-        <Suspense
-          fallback={<div className="min-h-[60vh] bg-canvas" aria-busy="true" />}
+        <motion.div
+          key={`${view}:${selectedCourseId ?? ""}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.16, ease: "easeOut" }}
         >
+          <Suspense
+            fallback={<div className="min-h-[60vh] bg-canvas" aria-busy="true" />}
+          >
           {view === "landing" && <LandingPage navigate={navigate} />}
           {view === "login" && <AuthPage mode="login" navigate={navigate} />}
           {view === "register" && (
@@ -245,7 +256,8 @@ export default function App() {
             ) : (
               <AuthPage mode="login" navigate={navigate} />
             ))}
-        </Suspense>
+          </Suspense>
+        </motion.div>
       </main>
     </div>
   )

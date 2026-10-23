@@ -17,6 +17,12 @@ import { ApiError, getAuthToken } from "../api/client"
 import { coursesApi, studentsApi } from "../api/endpoints"
 
 import LessonVideoPlayer from "../components/dashboard/LessonVideoPlayer"
+import {
+  Skeleton,
+  SkeletonButton,
+  SkeletonIcon,
+  SkeletonText,
+} from "../components/Skeleton"
 
 import { notifyError, notifySuccess } from "../utils/notifications"
 
@@ -143,6 +149,58 @@ function coursePrice(value: unknown): string {
     currency: "EGP",
     maximumFractionDigits: 0,
   }).format(price)
+}
+
+function CourseDetailsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="جارٍ تحميل تفاصيل الدورة">
+      <section className="relative isolate flex min-h-[300px] items-end overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-6 text-white shadow-xl shadow-emerald-950/10 sm:min-h-[370px] sm:p-10">
+        <div className="max-w-3xl">
+          <Skeleton className="h-7 w-36 rounded-full bg-white/20" />
+          <Skeleton className="mt-5 h-10 w-3/4 bg-white/25 sm:h-12" />
+          <SkeletonText className="mt-4 max-w-2xl" lines={2} />
+          <div className="mt-6 flex gap-2">
+            <Skeleton className="h-7 w-20 rounded-full bg-white/20" />
+            <Skeleton className="h-7 w-24 rounded-full bg-white/20" />
+          </div>
+        </div>
+        <Skeleton className="absolute left-5 top-5 h-10 w-24 rounded-full bg-white/20 sm:left-8 sm:top-8" />
+      </section>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="min-w-0 rounded-[1.75rem] border border-stroke bg-white p-5 shadow-nuwa-md sm:p-7">
+          <div className="flex items-end justify-between gap-4 border-b border-stroke pb-5">
+            <div>
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="mt-2 h-8 w-44" />
+            </div>
+            <Skeleton className="h-7 w-32 rounded-full" />
+          </div>
+          <div className="mt-5 space-y-4">
+            {[0, 1, 2].map((item) => (
+              <div
+                key={item}
+                aria-hidden="true"
+                className="flex items-center gap-3 rounded-2xl border border-stroke bg-[#fbfdfb] p-4 sm:p-5"
+              >
+                <SkeletonIcon />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="mt-2 h-5 w-2/3" />
+                </div>
+                <Skeleton className="h-4 w-16" />
+              </div>
+            ))}
+          </div>
+        </section>
+        <aside className="rounded-[1.75rem] border border-stroke bg-white p-5 shadow-nuwa-md sm:p-7">
+          <Skeleton className="h-6 w-40" />
+          <SkeletonText className="mt-4" lines={4} />
+          <SkeletonButton className="mt-6 w-full" />
+        </aside>
+      </div>
+    </div>
+  )
 }
 
 function statusMessage(access: AccessState): string {
@@ -338,10 +396,7 @@ export default function CourseDetailsPage({
         </button>
 
         {loading ? (
-          <div className="space-y-5" aria-busy="true">
-            <div className="h-72 animate-pulse rounded-[2rem] bg-white" />
-            <div className="h-40 animate-pulse rounded-2xl bg-white" />
-          </div>
+          <CourseDetailsSkeleton />
         ) : error ? (
           <section className="rounded-2xl border border-rose-200 bg-white p-7 text-center">
             <p role="alert" className="font-semibold text-rose-700">
