@@ -1,4 +1,4 @@
-import logo from "../assets/wailogo.png";
+import logo from "../assets/newlogo.png";
 
 interface NuwaLogoProps {
   size?: "sm" | "md" | "lg";
