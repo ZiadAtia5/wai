@@ -1,12 +1,18 @@
 import { ArrowLeft, ArrowUpLeft, BookOpen, Star } from "lucide-react"
+
 import { motion, useReducedMotion } from "framer-motion"
+
 import { resolveApiAssetUrl } from "../../../api/client"
+
 import ApiQueryState from "../../../components/ApiQueryState"
+
 import type { NavigateFn } from "../../../types"
+
 import type { LandingCatalogSummary } from "../types"
+
 import { CourseGridSkeleton } from "./LandingSkeletons"
 
-const INITIAL_VISIBLE_COURSES = 3
+const INITIAL_VISIBLE_COURSES = 4
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -16,30 +22,44 @@ function record(value: unknown): Record<string, unknown> {
 
 export default function FeaturedCoursesSection({
   data,
+
   loading,
+
   error,
+
   onRetry,
+
   navigate,
 }: {
   data?: LandingCatalogSummary
+
   loading: boolean
+
   error: string | null
+
   onRetry: () => void
+
   navigate: NavigateFn
 }) {
   const reduce = !!useReducedMotion()
 
   // one quiet fade-in when an element first scrolls into view, nothing else
+
   const fade = (delay = 0) =>
     reduce
       ? {}
       : {
           initial: { opacity: 0, y: 12 },
+
           whileInView: { opacity: 1, y: 0 },
+
           viewport: { once: true, margin: "-60px" },
+
           transition: {
             duration: 0.5,
+
             delay,
+
             ease: [0.2, 0.7, 0.2, 1] as const,
           },
         }
@@ -89,15 +109,19 @@ export default function FeaturedCoursesSection({
           onRetry={onRetry}
         >
           {data && (
-            <div className="mt-9 grid gap-5 md:grid-cols-3">
+            <div className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {data.featured
+
                 .slice(0, INITIAL_VISIBLE_COURSES)
+
                 .map((item, index) => {
                   const course = record(item)
+
                   const cover =
                     typeof course.coverImageUrl === "string"
                       ? resolveApiAssetUrl(course.coverImageUrl)
                       : ""
+
                   return (
                     <motion.article
                       key={String(course.id ?? index)}
@@ -156,7 +180,14 @@ export default function FeaturedCoursesSection({
 
                         <button
                           type="button"
-                          onClick={() => navigate("public:courses")}
+                          disabled={
+                            course.id === undefined || course.id === null
+                          }
+                          onClick={() =>
+                            navigate("public:course-detail", {
+                              courseId: String(course.id),
+                            })
+                          }
                           className="group/link mt-4 inline-flex items-center gap-2 rounded-md text-sm font-semibold text-nuwa-base transition-colors hover:text-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                         >
                           تفاصيل الدورة

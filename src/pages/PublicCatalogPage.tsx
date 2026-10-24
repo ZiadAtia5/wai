@@ -154,9 +154,15 @@ export default function PublicCatalogPage({
 
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
+  );
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
+  );
 
   const [academicYear, setAcademicYear] = useState("");
 
@@ -412,9 +418,7 @@ export default function PublicCatalogPage({
               </div>
             )}
           </div>
-          {!catalogHeader && loading && (
-            <Skeleton className="mt-3 h-4 w-40" />
-          )}
+          {!catalogHeader && loading && <Skeleton className="mt-3 h-4 w-40" />}
           {!catalogHeader && data && !error && (
             <p className="mt-3 text-xs text-ink-muted" aria-live="polite">
               إجمالي النتائج : {data.totalCount}
@@ -442,34 +446,36 @@ export default function PublicCatalogPage({
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
-              placeholder={personCards ? "ابحث باسم المعلم" : "اكتب الاسم أو عنوان الدورة"}
+              placeholder={
+                personCards ? "ابحث باسم المعلم" : "اكتب الاسم أو عنوان الدورة"
+              }
             />
           </label>
           {!personCards && (
             <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
-            الصف الدراسي
-            <select
-              value={academicYear}
-              disabled={academicYearsLoading}
-              aria-busy={academicYearsLoading}
-              onChange={(event) => {
-                setAcademicYear(event.target.value);
+              الصف الدراسي
+              <select
+                value={academicYear}
+                disabled={academicYearsLoading}
+                aria-busy={academicYearsLoading}
+                onChange={(event) => {
+                  setAcademicYear(event.target.value);
 
-                setPage(1);
+                  setPage(1);
 
-                setDetail(null);
-              }}
-              className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
-            >
-              <option value="">
-                {academicYearsLoading ? "جارٍ تحميل الصفوف..." : "كل الصفوف"}
-              </option>
-              {academicYears.map((year) => (
-                <option key={year.id} value={year.value}>
-                  {year.arabicName}
+                  setDetail(null);
+                }}
+                className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
+              >
+                <option value="">
+                  {academicYearsLoading ? "جارٍ تحميل الصفوف..." : "كل الصفوف"}
                 </option>
-              ))}
-            </select>
+                {academicYears.map((year) => (
+                  <option key={year.id} value={year.value}>
+                    {year.arabicName}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           <button className="min-h-11 w-full rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base sm:w-auto">
@@ -591,31 +597,33 @@ export default function PublicCatalogPage({
             )}
             {!personCards &&
               typeof (detail.description ?? detail.bio) === "string" && (
-              <p
-                className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}
+                <p
+                  className={`whitespace-pre-line text-sm leading-8 text-ink-muted ${courseCatalog ? "px-6 py-5 md:px-9 md:py-7 md:text-base" : "mt-4 rounded-xl border border-stroke bg-canvas p-4"}`}
+                >
+                  {String(detail.description ?? detail.bio)}
+                </p>
+              )}
+            {!personCards && (
+              <dl
+                className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}
               >
-                {String(detail.description ?? detail.bio)}
-              </p>
+                {detailFields
+                  .filter(
+                    ([key]) => !/(^id$|image|url|description|bio)/i.test(key),
+                  )
+                  .slice(0, courseCatalog ? 9 : 6)
+                  .map(([key, value]) => (
+                    <div key={key}>
+                      <dt className="text-xs text-ink-muted">{key}</dt>
+                      <dd
+                        className={`mt-1 wrap-break-word text-sm text-ink ${courseCatalog ? "rounded-xl bg-canvas p-3" : ""}`}
+                      >
+                        {displayValue(value)}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
             )}
-            {!personCards && <dl
-              className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${courseCatalog ? "px-6 pb-6 md:px-9" : "mt-4"}`}
-            >
-              {detailFields
-                .filter(
-                  ([key]) => !/(^id$|image|url|description|bio)/i.test(key),
-                )
-                .slice(0, courseCatalog ? 9 : 6)
-                .map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="text-xs text-ink-muted">{key}</dt>
-                    <dd
-                      className={`mt-1 wrap-break-word text-sm text-ink ${courseCatalog ? "rounded-xl bg-canvas p-3" : ""}`}
-                    >
-                      {displayValue(value)}
-                    </dd>
-                  </div>
-                ))}
-            </dl>}
             {!personCards && detailFields.length > 6 && (
               <details className="mt-4 rounded-xl border border-stroke bg-canvas">
                 <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-nuwa-base">
@@ -658,10 +666,7 @@ export default function PublicCatalogPage({
                   {personCards ? "الدورات التعليمية" : "الدورات"}
                 </h3>
                 {relatedLoading ? (
-                  <div
-                    aria-busy="true"
-                    className="grid gap-2 sm:grid-cols-2"
-                  >
+                  <div aria-busy="true" className="grid gap-2 sm:grid-cols-2">
                     {[0, 1].map((index) => (
                       <div
                         key={index}
@@ -706,7 +711,9 @@ export default function PublicCatalogPage({
                           <button
                             key={String(courseId ?? index)}
                             type="button"
-                            disabled={courseId === undefined || courseId === null}
+                            disabled={
+                              courseId === undefined || courseId === null
+                            }
                             onClick={() => {
                               if (courseId !== undefined && courseId !== null) {
                                 navigate?.("public:course-detail", {
@@ -748,9 +755,7 @@ export default function PublicCatalogPage({
                               </p>
                               <div className="mt-4 flex items-center justify-between gap-3 border-t border-stroke pt-3 text-xs">
                                 <span className="line-clamp-1 text-ink-muted">
-                                  {String(
-                                    record.subjectName ?? "دورة تعليمية",
-                                  )}
+                                  {String(record.subjectName ?? "دورة تعليمية")}
                                 </span>
                                 <span className="shrink-0 font-semibold text-nuwa-base">
                                   تفاصيل الدورة
@@ -796,7 +801,9 @@ export default function PublicCatalogPage({
           loading={loading}
           loadingContent={
             <CatalogGridSkeleton
-              kind={personCards ? "person" : courseCatalog ? "course" : "record"}
+              kind={
+                personCards ? "person" : courseCatalog ? "course" : "record"
+              }
             />
           }
           error={error}
@@ -917,38 +924,40 @@ export default function PublicCatalogPage({
                                 ""),
                         )}
                       </p>
-                      {!personCards && <div
-                        className={`mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted ${
-                          personCards ? "justify-center" : ""
-                        }`}
-                      >
-                        {(courseCatalog
-                          ? ["price", "subjectName", "academicYear"]
-                          : personCards
-                            ? ["courseCount", "academicYear"]
-                            : [
-                                "price",
-                                "subjectName",
-                                "academicYear",
-                                "courseCount",
-                              ]
-                        )
+                      {!personCards && (
+                        <div
+                          className={`mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted ${
+                            personCards ? "justify-center" : ""
+                          }`}
+                        >
+                          {(courseCatalog
+                            ? ["price", "subjectName", "academicYear"]
+                            : personCards
+                              ? ["courseCount", "academicYear"]
+                              : [
+                                  "price",
+                                  "subjectName",
+                                  "academicYear",
+                                  "courseCount",
+                                ]
+                          )
 
-                          .filter((key) => record[key] !== undefined)
+                            .filter((key) => record[key] !== undefined)
 
-                          .map((key) => (
-                            <span key={key}>
-                              {key === "price"
-                                ? "السعر"
-                                : key === "subjectName"
-                                  ? "المادة"
-                                  : key === "academicYear"
-                                    ? "الصف"
-                                    : key}
-                              : {displayValue(record[key])}
-                            </span>
-                          ))}
-                      </div>}
+                            .map((key) => (
+                              <span key={key}>
+                                {key === "price"
+                                  ? "السعر"
+                                  : key === "subjectName"
+                                    ? "المادة"
+                                    : key === "academicYear"
+                                      ? "الصف"
+                                      : key}
+                                : {displayValue(record[key])}
+                              </span>
+                            ))}
+                        </div>
+                      )}
                       {courseCatalog && (
                         <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4 text-xs text-ink-muted">
                           <span className="inline-flex items-center gap-1.5">

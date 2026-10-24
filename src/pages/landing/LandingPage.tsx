@@ -1,55 +1,54 @@
 import { useState } from "react"
-import {
-  getAcademicYears,
-  getPublicCourses,
-  getPublicTeachers,
-} from "../../api/catalog"
+
+import { getPublicCourses, getPublicTeachers } from "../../api/catalog"
+
 import { useApiQuery } from "../../hooks/useApiQuery"
+
 import type { NavigateFn } from "../../types"
+
 import type { LandingCatalogSummary } from "./types"
-import AcademicYearsSection from "./components/AcademicYearsSection"
-import AudienceSection from "./components/AudienceSection"
+
+import CategoriesSection from "./components/CategoriesSection"
+
 import CallToActionSection from "./components/CallToActionSection"
+
 import FeaturedCoursesSection from "./components/FeaturedCoursesSection"
-import HeroSection from "./components/HeroSection"
-import LandingFooter from "./components/LandingFooter"
+
+import FeaturedTeachersSection from "./components/FeaturedTeachersSection"
+
+import LandingHeroSection from "./components/LandingHeroSection"
+
+import PlatformBenefitsSection from "./components/PlatformBenefitsSection"
 
 async function loadCatalogSummary(): Promise<LandingCatalogSummary> {
-  const [courses, teachers, academicYears] = await Promise.all([
-    getPublicCourses(1, 3),
-    getPublicTeachers(1, 1),
-    getAcademicYears(),
+  const [courses, teachers] = await Promise.all([
+    getPublicCourses(1, 4),
+
+    getPublicTeachers(1, 4),
   ])
 
   return {
     courseCount: courses.totalCount,
+
     teacherCount: teachers.totalCount,
-    academicYears,
+
     featured: courses.items,
+
+    featuredTeachers: teachers.items,
   }
 }
 
 export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
   const [reloadKey, setReloadKey] = useState(0)
+
   const { data, error, loading } = useApiQuery(loadCatalogSummary, reloadKey)
+
   const retry = () => setReloadKey((key) => key + 1)
 
   return (
     <div className="overflow-hidden bg-[#f4f8f5] text-[#15352a]">
-      <HeroSection
-        navigate={navigate}
-        data={data ?? undefined}
-        loading={loading}
-        error={error}
-        onRetry={retry}
-      />
-      <AcademicYearsSection
-        navigate={navigate}
-        data={data ?? undefined}
-        loading={loading}
-        error={error}
-        onRetry={retry}
-      />
+      <LandingHeroSection navigate={navigate} data={data ?? undefined} />
+      <PlatformBenefitsSection />
       <FeaturedCoursesSection
         navigate={navigate}
         data={data ?? undefined}
@@ -57,9 +56,13 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
         error={error}
         onRetry={retry}
       />
-      <AudienceSection navigate={navigate} />
-      <CallToActionSection navigate={navigate} />
-      <LandingFooter />
+      <CategoriesSection navigate={navigate} />
+      <FeaturedTeachersSection
+        navigate={navigate}
+        teachers={data?.featuredTeachers ?? []}
+        loading={loading}
+      />
+      <CallToActionSection navigate={navigate} data={data ?? undefined} />
     </div>
   )
 }
