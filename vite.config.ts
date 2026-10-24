@@ -10,10 +10,10 @@ export default defineConfig(({ mode }) => {
   const emitSourcemaps = mode === "development";
 
   return {
-    // 💡 التعديل هنا: في حالة الإنتاج (Production) بنخلي الـ base نسبي "./" عشان يقرأ الملفات صح على Vercel
+    // Production is served from the domain root; absolute asset paths also work on nested SPA routes.
     base:
-      process.env.NODE_ENV === "production"
-        ? "./"
+      mode === "production"
+        ? "/"
         : process.env.FIGMA_PUBLIC_URL
           ? `${process.env.FIGMA_PUBLIC_URL}/`
           : "/",
