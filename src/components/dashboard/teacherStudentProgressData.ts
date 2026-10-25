@@ -4,6 +4,10 @@ export interface CourseInfo {
   id: string
 
   title: string
+
+  subjectId: string
+
+  subjectName: string
 }
 
 export interface EnrollmentRow {
@@ -140,7 +144,9 @@ export function getNumber(...values: unknown[]): number | null {
 
 export function stableStudentKey(
   student: DataRecord,
+
   email: string,
+
   name: string,
 ) {
   return getText(student.id, student.studentId) || email.toLowerCase() || name

@@ -16,6 +16,7 @@ import {
 import { ApiError, resolveApiAssetUrl } from "../../api/client"
 
 import TeacherStudentProgress from "./TeacherStudentProgress"
+import TeacherStudents from "./TeacherStudents"
 
 import {
   adminApi,
@@ -642,6 +643,64 @@ const fieldClass =
 
 const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted"
 
+function AcademicYearsChecklist({
+  years,
+  disabled,
+  selectedValues = [],
+}: {
+  years: AcademicYearResponse[]
+  disabled: boolean
+  selectedValues?: unknown
+}) {
+  const selected = Array.isArray(selectedValues)
+    ? selectedValues.map((value) => {
+        if (typeof value === "object" && value !== null) {
+          const year = asRecord(value)
+          return String(year.value ?? year.id ?? "")
+        }
+        return String(value)
+      })
+    : []
+
+  return (
+    <fieldset
+      disabled={disabled}
+      aria-busy={disabled}
+      className="grid gap-2 rounded-lg border border-stroke bg-white p-3 sm:col-span-2"
+    >
+      <legend className="px-1 text-xs font-semibold text-ink-muted">
+        الصفوف التي يدرّسها
+      </legend>
+      {disabled && years.length === 0 ? (
+        <span className="text-xs text-ink-muted">جارٍ تحميل الصفوف...</span>
+      ) : years.length === 0 ? (
+        <span className="text-xs text-ink-muted">لا توجد صفوف دراسية متاحة.</span>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {years.map((year) => (
+            <label
+              key={year.id}
+              className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink hover:bg-nuwa-ice"
+            >
+              <input
+                type="checkbox"
+                name="academicYears"
+                value={year.value}
+                defaultChecked={
+                  selected.includes(String(year.value)) ||
+                  selected.includes(String(year.id))
+                }
+                className="size-4 accent-nuwa-base"
+              />
+              {year.arabicName}
+            </label>
+          ))}
+        </div>
+      )}
+    </fieldset>
+  )
+}
+
 export default function RoleForms({
   role,
 
@@ -712,6 +771,10 @@ export default function RoleForms({
   const [isCreatingCourse, setIsCreatingCourse] = useState(false)
 
   const [editingTeacher, setEditingTeacher] = useState<RecordValue | null>(null)
+
+  const [addingTeacher, setAddingTeacher] = useState(false)
+
+  const [showTeacherPassword, setShowTeacherPassword] = useState(false)
 
   useEffect(() => {
     const target = editingTeacher
@@ -889,6 +952,11 @@ export default function RoleForms({
 
     const academicYears = form.getAll("academicYears").map(Number)
 
+    if (academicYears.length === 0) {
+      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+      return
+    }
+
     const body: ApiObject = {
       firstName: String(form.get("firstName") ?? "").trim(),
 
@@ -905,9 +973,16 @@ export default function RoleForms({
       academicYears,
     }
 
-    await mutate(() => adminApi.createTeacher(body), "تم إنشاء حساب المعلم.")
-
-    formElement.reset()
+    if (
+      await mutate(
+        () => adminApi.createTeacher(body),
+        "تم إنشاء حساب المعلم.",
+      )
+    ) {
+      formElement.reset()
+      setAddingTeacher(false)
+      setShowTeacherPassword(false)
+    }
   }
 
   async function updateTeacher(event: FormEvent<HTMLFormElement>) {
@@ -916,6 +991,13 @@ export default function RoleForms({
     if (editingTeacher?.id === undefined) return
 
     const form = new FormData(event.currentTarget)
+
+    const academicYears = form.getAll("academicYears").map(Number)
+
+    if (academicYears.length === 0) {
+      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+      return
+    }
 
     const body = {
       firstName: String(form.get("firstName") ?? "").trim(),
@@ -926,7 +1008,7 @@ export default function RoleForms({
 
       bio: String(form.get("bio") ?? "").trim(),
 
-      academicYears: form.getAll("academicYears").map(Number),
+      academicYears,
     }
 
     if (
@@ -1465,70 +1547,95 @@ export default function RoleForms({
   if (isAdmin && section === "teachers")
     return (
       <div className="mb-5 space-y-4">
-        <form
-          onSubmit={(event) => void createTeacher(event)}
-          className="grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3"
+        <button
+          type="button"
+          aria-expanded={addingTeacher}
+          onClick={() => setAddingTeacher((open) => !open)}
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-base focus-visible:ring-offset-2"
         >
-          <label className={labelClass}>
-            الاسم الأول
-            <input name="firstName" required className={fieldClass} />
-          </label>
-          <label className={labelClass}>
-            اسم العائلة
-            <input name="lastName" required className={fieldClass} />
-          </label>
-          <label className={labelClass}>
-            البريد الإلكتروني
-            <input name="email" type="email" required className={fieldClass} />
-          </label>
-          <label className={labelClass}>
-            رقم الهاتف
-            <input
-              name="phoneNumber"
-              type="tel"
-              required
-              className={fieldClass}
-            />
-          </label>
-          <label className={labelClass}>
-            كلمة المرور
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              className={fieldClass}
-            />
-          </label>
-          <label className={labelClass}>
-            نبذة
-            <input name="bio" className={fieldClass} />
-          </label>
-          <label className={labelClass}>
-            الصفوف التي يدرّسها
-            <select
-              name="academicYears"
-              multiple
-              required
-              disabled={yearsLoading}
-              aria-busy={yearsLoading}
-              className="min-h-20 rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
-            >
-              {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
-              {years.map((year) => (
-                <option key={year.id} value={year.value}>
-                  {year.arabicName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            disabled={busy || !years.length}
-            className="self-end rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          <Plus
+            size={17}
+            className={
+              addingTeacher
+                ? "rotate-45 transition-transform"
+                : "transition-transform"
+            }
+          />
+          {addingTeacher ? "إلغاء إضافة معلم" : "إضافة معلم جديد"}
+        </button>
+        {addingTeacher && (
+          <form
+            onSubmit={(event) => void createTeacher(event)}
+            className="grid gap-3 rounded-xl border border-stroke bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3"
           >
-            إنشاء حساب معلم
-          </button>
-        </form>
+            <label className={labelClass}>
+              الاسم الأول
+              <input name="firstName" required className={fieldClass} />
+            </label>
+            <label className={labelClass}>
+              اسم العائلة
+              <input name="lastName" required className={fieldClass} />
+            </label>
+            <label className={labelClass}>
+              البريد الإلكتروني
+              <input
+                name="email"
+                type="email"
+                required
+                className={fieldClass}
+              />
+            </label>
+            <label className={labelClass}>
+              رقم الهاتف
+              <input
+                name="phoneNumber"
+                type="tel"
+                required
+                className={fieldClass}
+              />
+            </label>
+            <label className={labelClass}>
+              كلمة المرور
+              <span className="relative">
+                <input
+                  name="password"
+                  type={showTeacherPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  className={`${fieldClass} pe-10`}
+                />
+                <button
+                  type="button"
+                  aria-label={
+                    showTeacherPassword
+                      ? "إخفاء كلمة المرور"
+                      : "إظهار كلمة المرور"
+                  }
+                  aria-pressed={showTeacherPassword}
+                  onClick={() => setShowTeacherPassword((visible) => !visible)}
+                  className="absolute inset-y-0 end-0 inline-flex w-10 items-center justify-center text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nuwa-base"
+                >
+                  {showTeacherPassword ? (
+                    <EyeOff size={17} aria-hidden="true" />
+                  ) : (
+                    <Eye size={17} aria-hidden="true" />
+                  )}
+                </button>
+              </span>
+            </label>
+            <label className={labelClass}>
+              نبذة
+              <input name="bio" className={fieldClass} />
+            </label>
+            <AcademicYearsChecklist years={years} disabled={yearsLoading} />
+            <button
+              disabled={busy || yearsLoading || !years.length}
+              className="self-end rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              إنشاء حساب معلم
+            </button>
+          </form>
+        )}
         {loading ? (
           <CatalogGridSkeleton kind="person" layout="dashboard" />
         ) : (
@@ -1589,29 +1696,11 @@ export default function RoleForms({
                         className={fieldClass}
                       />
                     </label>
-                    <label className={`${labelClass} sm:col-span-2`}>
-                      الصفوف التي يدرّسها
-                      <select
-                        name="academicYears"
-                        multiple
-                        required
-                        disabled={yearsLoading}
-                        aria-busy={yearsLoading}
-                        defaultValue={
-                          Array.isArray(editingTeacher.academicYears)
-                            ? editingTeacher.academicYears.map(String)
-                            : []
-                        }
-                        className="min-h-20 w-full rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
-                      >
-                        {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
-                        {years.map((year) => (
-                          <option key={year.id} value={year.value}>
-                            {year.arabicName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <AcademicYearsChecklist
+                      years={years}
+                      disabled={yearsLoading}
+                      selectedValues={editingTeacher.academicYears}
+                    />
                     <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
                       <button
                         disabled={busy}
@@ -1729,6 +1818,8 @@ export default function RoleForms({
         )}
       </div>
     )
+
+  if (isTeacher && section === "students") return <TeacherStudents />
 
   if (isTeacher && section === "student-progress")
     return <TeacherStudentProgress />

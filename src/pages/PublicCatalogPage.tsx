@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { ApiError, resolveApiAssetUrl } from "../api/client";
 
@@ -16,9 +17,14 @@ import {
 
 import ApiQueryState from "../components/ApiQueryState";
 
+import SearchBar from "../components/SearchBar";
 import PersonAvatar from "../components/PersonAvatar";
 import { Skeleton, SkeletonText } from "../components/Skeleton";
 import { CatalogGridSkeleton } from "../components/loading/SkeletonLayouts";
+import {
+  staggerContainerVariants,
+  staggerItemVariants,
+} from "../components/motion/PageTransition";
 
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -120,6 +126,67 @@ function scalarFields(record: Record<string, unknown>): [string, unknown][] {
   );
 }
 
+function normalizeArabic(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .toLocaleLowerCase("ar")
+    .trim();
+}
+
+function subjectValues(record: Record<string, unknown>): string[] {
+  const subjects = record.subjects ?? record.teachingSubjects;
+  const values = Array.isArray(subjects)
+    ? subjects.map((subject) => {
+        const nested = asRecord(subject);
+        return String(nested?.name ?? nested?.subjectName ?? subject ?? "");
+      })
+    : [];
+  const primary =
+    record.subjectName ??
+    record.subject ??
+    record.specialization ??
+    record.specialty;
+  if (primary) values.unshift(String(primary));
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function highlightMatch(text: string, query: string) {
+  const normalizedQuery = normalizeArabic(query);
+  if (!normalizedQuery) return text;
+
+  let normalizedText = "";
+  const sourcePositions: number[] = [];
+  const sourceEnds: number[] = [];
+  let sourceOffset = 0;
+  Array.from(text).forEach((character) => {
+    const normalizedCharacter = normalizeArabic(character);
+    for (const part of normalizedCharacter) {
+      normalizedText += part;
+      sourcePositions.push(sourceOffset);
+      sourceEnds.push(sourceOffset + character.length);
+    }
+    sourceOffset += character.length;
+  });
+  const matchIndex = normalizedText.indexOf(normalizedQuery);
+  if (matchIndex < 0) return text;
+
+  const start = sourcePositions[matchIndex];
+  const end = sourceEnds[matchIndex + normalizedQuery.length - 1];
+  return (
+    <>
+      {text.slice(0, start)}
+      <mark className="rounded bg-nuwa-soft px-0.5 text-inherit">
+        {text.slice(start, end)}
+      </mark>
+      {text.slice(end)}
+    </>
+  );
+}
+
 export default function PublicCatalogPage({
   title,
 
@@ -163,6 +230,7 @@ export default function PublicCatalogPage({
     () =>
       new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
   );
+  const [subjectFilter, setSubjectFilter] = useState("");
 
   const [academicYear, setAcademicYear] = useState("");
 
@@ -248,7 +316,69 @@ export default function PublicCatalogPage({
     [load, page, search, academicYear],
   );
 
-  const { data, error, loading } = useApiQuery(pageLoader, reloadKey);
+  const { data, error, loading } = useApiQuery(pageLoader, reloadKey, true);
+
+  const filterOptions = useMemo(() => {
+    if (personCards) {
+      const values = (data?.items ?? []).flatMap((item) => {
+        const record = asRecord(item);
+        return record ? subjectValues(record) : [];
+      });
+      return [...new Set(values)].map((value) => ({ value, label: value }));
+    }
+    return academicYears.map((year) => ({
+      value: String(year.value),
+      label: year.arabicName,
+    }));
+  }, [academicYears, data, personCards]);
+
+  const visibleItems = useMemo(() => {
+    const query = normalizeArabic(search);
+    return (data?.items ?? []).filter((item) => {
+      const record = asRecord(item);
+      if (!record) return false;
+      if (
+        personCards &&
+        subjectFilter &&
+        !subjectValues(record).some((subject) => subject === subjectFilter)
+      ) {
+        return false;
+      }
+
+      const year = String(record.academicYear ?? record.grade ?? "");
+      const selectedYearLabel = filterOptions.find(
+        (option) => option.value === academicYear,
+      )?.label;
+      if (
+        !personCards &&
+        academicYear &&
+        year !== academicYear &&
+        year !== selectedYearLabel
+      ) {
+        return false;
+      }
+      if (!query) return true;
+
+      const searchable = [
+        titleOf(record),
+        personNameOf(record),
+        personBioOf(record),
+        String(record.description ?? record.bio ?? ""),
+        String(record.email ?? ""),
+        ...subjectValues(record),
+      ];
+      return searchable.some((value) =>
+        normalizeArabic(value).includes(query),
+      );
+    });
+  }, [
+    academicYear,
+    data,
+    filterOptions,
+    personCards,
+    search,
+    subjectFilter,
+  ]);
 
   async function selectRecord(item: ApiRecord) {
     const record = asRecord(item);
@@ -361,6 +491,19 @@ export default function PublicCatalogPage({
 
   const detailFields = detail ? scalarFields(detail) : [];
   const catalogHeader = courseCatalog || personCards;
+  const resultCount =
+    subjectFilter
+      ? visibleItems.length
+      : (data?.totalCount ?? visibleItems.length);
+
+  const submitSearch = () => {
+    const nextSearch = searchInput.trim();
+    if (nextSearch === search) return;
+
+    setPage(1);
+    setSearch(nextSearch);
+    setDetail(null);
+  };
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
@@ -371,11 +514,32 @@ export default function PublicCatalogPage({
             : "border-b border-stroke bg-surface"
         }
       >
-        <div
-          className={`mx-auto max-w-360 ${catalogHeader ? "rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 px-6 py-10 text-white shadow-xl shadow-emerald-950/10 md:px-10 md:py-14" : "px-6 py-8 md:px-10"}`}
+        <motion.div
+          className={`relative mx-auto ${catalogHeader ? "isolate max-w-7xl overflow-hidden rounded-[32px] border border-emerald-800/20 px-5 py-6 text-white shadow-xl shadow-emerald-950/10 sm:px-8 sm:py-7 md:px-10 md:py-8" : "max-w-360 px-6 py-8 md:px-10"}`}
         >
           {catalogHeader && (
-            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-emerald-50">
+            <motion.div
+              aria-hidden="true"
+              initial={{ y: 12 }}
+              animate={{ y: 0 }}
+              transition={{
+                type: "tween",
+                duration: 0.38,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="absolute inset-0 -z-10 rounded-[32px] bg-gradient-to-l from-[#0b3b25] via-emerald-900 to-[#176b43]"
+            />
+          )}
+          {catalogHeader && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-20 left-8 -z-10 size-48 rounded-full border border-white/10 sm:left-16"
+            />
+          )}
+          {catalogHeader && (
+            <span
+              className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-emerald-50"
+            >
               {personCards ? (
                 <>
                   <GraduationCap size={15} /> معلمو منصة وَعي
@@ -387,31 +551,31 @@ export default function PublicCatalogPage({
               )}
             </span>
           )}
-          <div className="flex flex-wrap items-end justify-between gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
             <div>
               <h1
-                className={`mb-2 font-bold tracking-tight ${catalogHeader ? "text-3xl md:text-4xl" : "text-2xl text-ink"}`}
+                className={`mb-1 font-bold tracking-tight ${catalogHeader ? "text-2xl md:text-3xl" : "text-2xl text-ink"}`}
               >
                 {title}
               </h1>
               <p
-                className={`max-w-2xl text-sm leading-7 ${catalogHeader ? "text-emerald-50/80 md:text-base" : "text-ink-muted"}`}
+                className={`max-w-2xl text-sm leading-6 ${catalogHeader ? "text-emerald-50/80" : "text-ink-muted"}`}
               >
                 {description}
               </p>
             </div>
-            {catalogHeader && loading && (
+            {catalogHeader && loading && !data && (
               <div
                 aria-busy="true"
-                className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur"
+                className="inline-flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5"
               >
-                <Skeleton className="mx-auto h-7 w-14 bg-white/25" />
-                <Skeleton className="mx-auto mt-2 h-3 w-20 bg-white/20" />
+                <Skeleton className="h-7 w-14 bg-white/25" />
+                <Skeleton className="h-3 w-20 bg-white/20" />
               </div>
             )}
             {catalogHeader && data && !error && (
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur">
-                <strong className="block text-2xl">{data.totalCount}</strong>
+              <div className="inline-flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5">
+                <strong className="text-2xl leading-none">{data.totalCount}</strong>
                 <span className="text-xs text-emerald-50/75">
                   {personCards ? "معلم مسجل" : "دورة متاحة"}
                 </span>
@@ -424,64 +588,132 @@ export default function PublicCatalogPage({
               إجمالي النتائج : {data.totalCount}
             </p>
           )}
-        </div>
+        </motion.div>
       </header>
 
-      <main className="mx-auto min-w-0 max-w-360 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
-        <form
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-
-            setPage(1);
-
-            setSearch(searchInput.trim());
-
-            setDetail(null);
-          }}
-          className={`mb-7 grid min-w-0 gap-3 rounded-2xl border border-stroke bg-surface p-4 shadow-sm sm:items-end ${personCards ? "sm:grid-cols-[minmax(0,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto]"} ${catalogHeader ? "sm:p-5 md:p-6" : ""}`}
+      <main className={`mx-auto min-w-0 px-4 py-6 sm:px-6 sm:py-8 md:px-10 ${catalogHeader ? "max-w-7xl" : "max-w-360"}`}>
+        <motion.div
+          variants={staggerItemVariants}
+          initial="hidden"
+          animate="visible"
+          className="-mx-4 mb-7 border-y border-stroke/40 bg-canvas px-4 py-3 sm:-mx-6 sm:px-6 md:-mx-10 md:px-10"
         >
-          <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
-            بحث
-            <input
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
-              placeholder={
-                personCards ? "ابحث باسم المعلم" : "اكتب الاسم أو عنوان الدورة"
-              }
-            />
-          </label>
-          {!personCards && (
-            <label className="grid min-w-0 gap-1 text-xs font-semibold text-ink-muted">
-              الصف الدراسي
-              <select
-                value={academicYear}
-                disabled={academicYearsLoading}
-                aria-busy={academicYearsLoading}
-                onChange={(event) => {
-                  setAcademicYear(event.target.value);
-
-                  setPage(1);
-
-                  setDetail(null);
-                }}
-                className="h-11 min-w-0 w-full rounded-xl border border-stroke bg-canvas px-3 text-sm text-ink outline-none transition focus:border-emerald-700 focus:ring-4 focus:ring-emerald-800/10"
+          <div className="mx-auto max-w-360">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <SearchBar
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onSubmit={submitSearch}
+                  label={personCards ? "البحث عن معلم" : "البحث عن دورة"}
+                  placeholder={
+                    personCards ? "ابحث باسم المعلم أو تخصصه" : "ابحث عن دورة أو مادة أو معلم"
+                  }
+                />
+              </div>
+              <motion.span
+                key={resultCount}
+                initial={{ opacity: 0.5, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                aria-live="polite"
+                className="shrink-0 text-xs font-semibold text-ink-muted sm:text-sm"
               >
-                <option value="">
-                  {academicYearsLoading ? "جارٍ تحميل الصفوف..." : "كل الصفوف"}
-                </option>
-                {academicYears.map((year) => (
-                  <option key={year.id} value={year.value}>
-                    {year.arabicName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <button className="min-h-11 w-full rounded-xl bg-nuwa-base px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base sm:w-auto">
-            بحث
-          </button>
-        </form>
+                {loading && data
+                  ? "جارٍ التحديث..."
+                  : `${resultCount} ${personCards ? "معلم" : "دورة"}`}
+              </motion.span>
+            </div>
+            {(filterOptions.length > 0 || academicYearsLoading) && (
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+                  <motion.button
+                    type="button"
+                    aria-pressed={!academicYear && !subjectFilter}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      setAcademicYear("");
+                      setSubjectFilter("");
+                    }}
+                    className={`relative isolate min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors ${
+                      !academicYear && !subjectFilter
+                        ? "text-nuwa-deep"
+                        : "bg-white/75 text-ink-muted hover:text-nuwa-base"
+                    }`}
+                  >
+                    {!academicYear && !subjectFilter && (
+                      <motion.span
+                        layoutId={`catalog-filter-${personCards ? "teachers" : "courses"}`}
+                        className="absolute inset-0 z-0 rounded-full bg-nuwa-soft"
+                        transition={{
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 34,
+                        }}
+                      />
+                    )}
+                    <span className="relative z-10">الكل</span>
+                  </motion.button>
+                  {filterOptions.map((option) => {
+                    const selected = personCards
+                      ? subjectFilter === option.value
+                      : academicYear === option.value;
+                    return (
+                      <motion.button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => {
+                          if (personCards) setSubjectFilter(option.value);
+                          else {
+                            setAcademicYear(option.value);
+                            setPage(1);
+                          }
+                          setDetail(null);
+                        }}
+                        className={`relative isolate min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors ${
+                          selected
+                            ? "text-nuwa-deep"
+                            : "bg-white/75 text-ink-muted hover:text-nuwa-base"
+                        }`}
+                      >
+                        {selected && (
+                          <motion.span
+                            layoutId={`catalog-filter-${personCards ? "teachers" : "courses"}`}
+                            className="absolute inset-0 z-0 rounded-full bg-nuwa-soft"
+                            transition={{
+                              type: "spring",
+                              stiffness: 420,
+                              damping: 34,
+                            }}
+                          />
+                        )}
+                        <span className="relative z-10">{option.label}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+                {(searchInput || academicYear || subjectFilter) && (
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      setSearchInput("");
+                      setSearch("");
+                      setAcademicYear("");
+                      setSubjectFilter("");
+                      setPage(1);
+                      setDetail(null);
+                    }}
+                    className="min-h-10 shrink-0 rounded-full px-3 text-xs font-semibold text-nuwa-base transition hover:bg-nuwa-soft"
+                  >
+                    مسح الكل
+                  </motion.button>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
         {detail && (
           <section
             className={`mb-8 overflow-hidden rounded-[28px] border border-stroke bg-surface shadow-lg shadow-slate-900/5 ${courseCatalog ? "" : "p-5"}`}
@@ -798,33 +1030,100 @@ export default function PublicCatalogPage({
         )}
 
         <ApiQueryState
-          loading={loading}
+          loading={loading && !data}
           loadingContent={
             <CatalogGridSkeleton
               kind={
                 personCards ? "person" : courseCatalog ? "course" : "record"
               }
+              count={12}
             />
           }
           error={error}
-          isEmpty={Boolean(data && data.items.length === 0)}
+          isEmpty={false}
           emptyMessage={emptyMessage}
           onRetry={() => setReloadKey((key) => key + 1)}
         >
-          {data && data.items.length > 0 && (
+          {data && (
             <>
-              <div
-                className={`grid gap-5 md:grid-cols-2 ${courseCatalog ? "xl:grid-cols-3" : "lg:grid-cols-3"}`}
-              >
-                {data.items.map((item, index) => {
+              {visibleItems.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="grid min-h-64 place-items-center rounded-3xl border border-dashed border-stroke-strong bg-surface px-6 py-12 text-center"
+                >
+                  <div>
+                    <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-nuwa-soft text-nuwa-base">
+                      {personCards ? (
+                        <GraduationCap size={25} aria-hidden="true" />
+                      ) : (
+                        <BookOpen size={25} aria-hidden="true" />
+                      )}
+                    </span>
+                    <h2 className="mt-4 text-lg font-bold text-ink">
+                      لا توجد نتائج مطابقة
+                    </h2>
+                    <p className="mt-2 text-sm text-ink-muted">
+                      جرّب كلمات بحث أخرى أو أزل عوامل التصفية.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchInput("");
+                        setSearch("");
+                        setAcademicYear("");
+                        setSubjectFilter("");
+                        setPage(1);
+                      }}
+                      className="mt-5 min-h-11 rounded-xl bg-nuwa-base px-5 text-sm font-semibold text-white transition hover:bg-nuwa-deep active:scale-[0.97]"
+                    >
+                      إعادة ضبط البحث
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  layout
+                  variants={staggerContainerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className={`grid gap-5 md:grid-cols-2 ${courseCatalog ? "xl:grid-cols-3" : "lg:grid-cols-3"}`}
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {visibleItems.map((item, index) => {
                   const record = asRecord(item);
 
                   if (!record) return null;
+                  const cardTitle = personCards
+                    ? personNameOf(record)
+                    : titleOf(record);
+                  const cardDescription = String(
+                    personCards
+                      ? personBioOf(record)
+                      : (record.description ??
+                          record.bio ??
+                          record.subjectName ??
+                          record.academicYear ??
+                          ""),
+                  );
 
                   return (
-                    <button
+                    <motion.button
                       key={String(record.id ?? index)}
                       type="button"
+                      layout
+                      variants={staggerItemVariants}
+                      exit={{ opacity: 0, y: 12 }}
+                      whileHover={{
+                        y: -4,
+                        boxShadow: "0 18px 36px rgba(11,59,37,.13)",
+                      }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 26,
+                      }}
                       onClick={() => {
                         if (courseCatalog && navigate && record.id != null) {
                           navigate("public:course-detail", {
@@ -849,9 +1148,9 @@ export default function PublicCatalogPage({
 
                         void selectRecord(item);
                       }}
-                      className={`group relative overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${courseCatalog ? "flex min-h-80 flex-col" : ""} ${
+                      className={`group relative overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 text-start shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${courseCatalog ? "flex min-h-80 flex-col" : ""} ${
                         personCards
-                          ? "flex min-h-72 flex-col items-center text-center hover:border-emerald-400 hover:shadow-xl"
+                          ? "flex min-h-72 flex-col items-center text-center"
                           : ""
                       }`}
                     >
@@ -906,7 +1205,7 @@ export default function PublicCatalogPage({
                           personCards ? "mt-3" : ""
                         }`}
                       >
-                        {personCards ? personNameOf(record) : titleOf(record)}
+                        {highlightMatch(cardTitle, search)}
                       </h2>
                       {!personCards && teacherNameOf(record) && (
                         <p className="mt-1 text-xs font-semibold text-emerald-700">
@@ -914,15 +1213,7 @@ export default function PublicCatalogPage({
                         </p>
                       )}
                       <p className="mt-2 line-clamp-3 text-sm leading-7 text-ink-muted">
-                        {String(
-                          personCards
-                            ? personBioOf(record)
-                            : (record.description ??
-                                record.bio ??
-                                record.subjectName ??
-                                record.academicYear ??
-                                ""),
-                        )}
+                        {highlightMatch(cardDescription, search)}
                       </p>
                       {!personCards && (
                         <div
@@ -980,10 +1271,12 @@ export default function PublicCatalogPage({
                       >
                         {personCards ? "استكشف دورات المعلم" : "عرض التفاصيل"}
                       </span>
-                    </button>
+                    </motion.button>
                   );
-                })}
-              </div>
+                    })}
+                  </AnimatePresence>
+                </motion.div>
+              )}
               {data.totalPages > 1 && (
                 <nav
                   className="mt-6 flex items-center justify-between border-t border-stroke pt-4"

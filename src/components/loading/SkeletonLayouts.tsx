@@ -16,14 +16,43 @@ function CatalogCardSkeleton({ kind }: { kind: CatalogSkeletonKind }) {
         aria-hidden="true"
         className="flex min-h-72 flex-col items-center rounded-[24px] border border-stroke bg-surface p-5 text-center shadow-sm"
       >
-        <SkeletonAvatar className="size-24" />
-        <Skeleton className="mt-4 h-5 w-2/3" />
-        <SkeletonText className="mt-3 w-full" lines={2} />
-        <div className="mt-4 flex gap-3">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-16" />
+        <SkeletonAvatar className="size-20" />
+        <Skeleton className="mt-3 h-7 w-2/3" />
+        <div className="mt-2 grid w-full gap-3">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5 justify-self-center" />
         </div>
-        <SkeletonButton className="mt-auto h-9 w-40" />
+        <div className="mt-auto w-full pt-4">
+          <Skeleton className="h-5 w-40" />
+        </div>
+      </article>
+    )
+  }
+
+  if (kind === "course") {
+    return (
+      <article
+        aria-hidden="true"
+        className="flex min-h-80 flex-col overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 shadow-sm"
+      >
+        <SkeletonImage className="mb-5 h-40 rounded-2xl" />
+        <Skeleton className="h-7 w-3/4" />
+        <Skeleton className="mt-1 h-4 w-1/2" />
+        <div className="mt-2 grid gap-3">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="mt-auto flex items-center justify-between border-t border-stroke pt-4">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+        <Skeleton className="mt-4 h-5 w-24" />
       </article>
     )
   }
@@ -31,11 +60,8 @@ function CatalogCardSkeleton({ kind }: { kind: CatalogSkeletonKind }) {
   return (
     <article
       aria-hidden="true"
-      className={`flex min-h-80 flex-col overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 shadow-sm ${kind === "course" ? "" : "min-h-56"}`}
+      className="flex min-h-56 flex-col overflow-hidden rounded-[24px] border border-stroke bg-surface p-5 shadow-sm"
     >
-      {kind === "course" && (
-        <SkeletonImage className="mb-5 h-40 rounded-2xl" />
-      )}
       <Skeleton className="h-6 w-3/4" />
       <Skeleton className="mt-3 h-4 w-1/2" />
       <SkeletonText className="mt-4 w-full" lines={3} />
@@ -47,24 +73,71 @@ function CatalogCardSkeleton({ kind }: { kind: CatalogSkeletonKind }) {
   )
 }
 
+export function PublicCatalogPageSkeleton({
+  kind,
+}: {
+  kind: "course" | "person"
+}) {
+  return (
+    <div className="min-h-screen bg-canvas pb-16">
+      <header className="px-4 pt-5 sm:px-6 lg:px-8">
+        <div
+          aria-hidden="true"
+          className="relative isolate mx-auto flex min-h-[164px] max-w-7xl items-center justify-between gap-4 overflow-hidden rounded-[32px] border border-emerald-800/20 bg-gradient-to-l from-[#0b3b25] via-emerald-900 to-[#176b43] px-5 py-6 text-white shadow-xl shadow-emerald-950/10 sm:gap-6 sm:px-8 sm:py-7 md:min-h-[176px] md:px-10 md:py-8"
+        >
+          <span className="pointer-events-none absolute -bottom-20 left-8 -z-10 size-48 rounded-full border border-white/10 sm:left-16" />
+          <div className="w-full max-w-2xl">
+            <Skeleton className="mb-3 h-6 w-36 bg-white/20" />
+            <Skeleton className="h-8 w-2/3 bg-white/25" />
+            <Skeleton className="mt-2 h-5 w-full max-w-xl bg-white/20" />
+          </div>
+          <div className="inline-flex shrink-0 items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-3 py-2 sm:px-4 sm:py-2.5">
+            <Skeleton className="h-7 w-14 bg-white/25" />
+            <Skeleton className="h-3 w-20 bg-white/20" />
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto min-w-0 max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10">
+        <div aria-hidden="true" className="mb-7 border-y border-stroke/40 py-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-[52px] min-w-0 flex-1 rounded-2xl bg-white" />
+            <Skeleton className="h-5 w-16 shrink-0" />
+          </div>
+          <div className="mt-3 flex gap-2 overflow-hidden">
+            {[0, 1, 2, 3].map((item) => (
+              <Skeleton key={item} className="h-10 w-20 shrink-0 rounded-full" />
+            ))}
+          </div>
+        </div>
+        <CatalogGridSkeleton kind={kind} count={12} />
+      </main>
+    </div>
+  )
+}
+
 export function CatalogGridSkeleton({
   kind,
   layout = "public",
+  count = 3,
 }: {
   kind: CatalogSkeletonKind
   layout?: "public" | "dashboard"
+  count?: number
 }) {
+  const gridColumns =
+    layout === "dashboard"
+      ? "grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
+      : `grid gap-5 md:grid-cols-2 ${
+          kind === "course" ? "xl:grid-cols-3" : "lg:grid-cols-3"
+        }`
+  const secondColumn = layout === "dashboard" ? "sm:block" : "md:block"
   const thirdColumn =
     layout === "dashboard"
       ? "xl:block"
       : kind === "course"
         ? "xl:block"
         : "lg:block"
-  const secondColumn = layout === "dashboard" ? "sm:block" : "md:block"
-  const gridColumns =
-    layout === "dashboard"
-      ? "grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
-      : `grid gap-5 md:grid-cols-2 ${kind === "course" ? "xl:grid-cols-3" : "lg:grid-cols-3"}`
 
   return (
     <div
@@ -72,13 +145,19 @@ export function CatalogGridSkeleton({
       aria-label="جارٍ تحميل النتائج"
       className={gridColumns}
     >
-      <CatalogCardSkeleton kind={kind} />
-      <div className={`hidden ${secondColumn}`}>
-        <CatalogCardSkeleton kind={kind} />
-      </div>
-      <div className={`hidden ${thirdColumn}`}>
-        <CatalogCardSkeleton kind={kind} />
-      </div>
+      {Array.from({ length: Math.max(1, count) }, (_, index) => {
+        const visibility =
+          count <= 3 && index === 1
+            ? `hidden ${secondColumn}`
+            : count <= 3 && index === 2
+              ? `hidden ${thirdColumn}`
+              : ""
+        return (
+          <div key={index} className={visibility}>
+            <CatalogCardSkeleton kind={kind} />
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -93,7 +172,9 @@ export function TeacherCoursesSkeleton({
     <div
       aria-busy="true"
       aria-label="جارٍ تحميل دورات المعلم"
-      className={`grid gap-5 md:grid-cols-2 ${dashboard ? "2xl:grid-cols-3" : "xl:grid-cols-3"}`}
+      className={`grid gap-5 md:grid-cols-2 ${
+        dashboard ? "2xl:grid-cols-3" : "xl:grid-cols-3"
+      }`}
     >
       <CourseGridCardSkeleton />
       <div className="hidden md:block">
@@ -125,15 +206,13 @@ function CourseGridCardSkeleton() {
   )
 }
 
-export function RecordGridSkeleton({
-  compact = false,
-}: {
-  compact?: boolean
-}) {
+export function RecordGridSkeleton({ compact = false }: { compact?: boolean }) {
   const card = (
     <article
       aria-hidden="true"
-      className={`rounded-2xl border border-stroke bg-white p-4 shadow-sm sm:p-5 ${compact ? "min-h-24" : "min-h-48"}`}
+      className={`rounded-2xl border border-stroke bg-white p-4 shadow-sm sm:p-5 ${
+        compact ? "min-h-24" : "min-h-48"
+      }`}
     >
       <div className="flex items-start gap-3">
         {compact ? <SkeletonAvatar className="size-10" /> : <SkeletonIcon />}
@@ -246,7 +325,9 @@ export function EnrollmentGridSkeleton() {
         <article
           key={item}
           aria-hidden="true"
-          className={`min-h-64 rounded-2xl border border-stroke bg-white p-5 shadow-nuwa ${item > 0 ? "hidden sm:flex" : "flex"} ${item > 1 ? "xl:flex" : ""} flex-col`}
+          className={`min-h-64 rounded-2xl border border-stroke bg-white p-5 shadow-nuwa ${
+            item > 0 ? "hidden sm:flex" : "flex"
+          } ${item > 1 ? "xl:flex" : ""} flex-col`}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
@@ -275,15 +356,23 @@ export function ProfileSkeleton({ admin = false }: { admin?: boolean }) {
     <div aria-busy="true" aria-label="جارٍ تحميل الملف الشخصي">
       <section className="mb-5 overflow-hidden rounded-3xl border border-stroke bg-white shadow-sm">
         <div
-          className={`flex flex-wrap items-center gap-3 px-4 py-6 sm:gap-5 sm:px-9 sm:py-8 ${admin ? "bg-gradient-to-l from-[#0b3b25] to-[#25845a]" : "bg-white"}`}
+          className={`flex flex-wrap items-center gap-3 px-4 py-6 sm:gap-5 sm:px-9 sm:py-8 ${
+            admin ? "bg-gradient-to-l from-[#0b3b25] to-[#25845a]" : "bg-white"
+          }`}
         >
           <SkeletonAvatar
             className={`size-20 sm:size-24 ${admin ? "bg-white/20" : ""}`}
           />
           <div className="min-w-0 flex-1">
             <Skeleton className={`h-4 w-28 ${admin ? "bg-white/20" : ""}`} />
-            <Skeleton className={`mt-2 h-8 w-48 ${admin ? "bg-white/25" : ""}`} />
-            <Skeleton className={`mt-3 h-6 w-24 rounded-full ${admin ? "bg-white/20" : ""}`} />
+            <Skeleton
+              className={`mt-2 h-8 w-48 ${admin ? "bg-white/25" : ""}`}
+            />
+            <Skeleton
+              className={`mt-3 h-6 w-24 rounded-full ${
+                admin ? "bg-white/20" : ""
+              }`}
+            />
           </div>
           <SkeletonButton className={`w-40 ${admin ? "bg-white/20" : ""}`} />
         </div>

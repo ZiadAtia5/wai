@@ -4,19 +4,50 @@ import {
   GraduationCap,
   House,
   MoveUpRight,
-} from "lucide-react"
+} from "lucide-react";
 
-import { getAuthToken } from "../../api/client"
+import { getAuthToken } from "../../api/client";
 
-import type { NavigateFn } from "../../types"
+import type { NavigateFn } from "../../types";
 
-import NuwaLogo from "../NuwaLogo"
+import NuwaLogo from "../NuwaLogo";
 
-export default function PlatformFooter({ navigate }: { navigate: NavigateFn }) {
-  const authenticated = Boolean(getAuthToken())
+export default function PlatformFooter({
+  navigate,
+  compact = false,
+  dashboard = false,
+}: {
+  navigate: NavigateFn;
+  compact?: boolean;
+  dashboard?: boolean;
+}) {
+  const authenticated = Boolean(getAuthToken());
+
+  if (compact) {
+    return (
+      <footer className="rounded-2xl border border-stroke bg-surface/80 px-5 sm:px-7">
+        <div className="mx-auto flex w-full max-w-[1920px] flex-col gap-2 py-4 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} منصة وَعي التعليمية</span>
+          <button
+            type="button"
+            onClick={() => navigate("landing")}
+            className="w-fit font-semibold text-nuwa-base transition hover:text-nuwa-deep"
+          >
+            العودة إلى المنصة
+          </button>
+        </div>
+      </footer>
+    );
+  }
 
   return (
-    <footer className="border-t border-[#d9e4dc] bg-[#f5f8f5]">
+    <footer
+      className={
+        dashboard
+          ? "mt-7 overflow-hidden rounded-[32px] border border-[#d9e4dc] bg-[#f5f8f5]"
+          : "border-t border-[#d9e4dc] bg-[#f5f8f5]"
+      }
+    >
       <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[1.5fr_1fr_1fr] lg:gap-16">
         <div>
           <button
@@ -94,5 +125,5 @@ export default function PlatformFooter({ navigate }: { navigate: NavigateFn }) {
         </div>
       </div>
     </footer>
-  )
+  );
 }

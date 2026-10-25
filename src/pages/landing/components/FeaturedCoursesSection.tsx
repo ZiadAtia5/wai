@@ -1,23 +1,23 @@
-import { ArrowLeft, ArrowUpLeft, BookOpen, Star } from "lucide-react"
+import { ArrowLeft, ArrowUpLeft, BookOpen, Star } from "lucide-react";
 
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion";
 
-import { resolveApiAssetUrl } from "../../../api/client"
+import { resolveApiAssetUrl } from "../../../api/client";
 
-import ApiQueryState from "../../../components/ApiQueryState"
+import ApiQueryState from "../../../components/ApiQueryState";
 
-import type { NavigateFn } from "../../../types"
+import type { NavigateFn } from "../../../types";
 
-import type { LandingCatalogSummary } from "../types"
+import type { LandingCatalogSummary } from "../types";
 
-import { CourseGridSkeleton } from "./LandingSkeletons"
+import { CourseGridSkeleton } from "./LandingSkeletons";
 
-const INITIAL_VISIBLE_COURSES = 4
+const INITIAL_VISIBLE_COURSES = 4;
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : {}
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 export default function FeaturedCoursesSection({
@@ -31,17 +31,17 @@ export default function FeaturedCoursesSection({
 
   navigate,
 }: {
-  data?: LandingCatalogSummary
+  data?: LandingCatalogSummary;
 
-  loading: boolean
+  loading: boolean;
 
-  error: string | null
+  error: string | null;
 
-  onRetry: () => void
+  onRetry: () => void;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }) {
-  const reduce = !!useReducedMotion()
+  const reduce = !!useReducedMotion();
 
   // one quiet fade-in when an element first scrolls into view, nothing else
 
@@ -62,7 +62,7 @@ export default function FeaturedCoursesSection({
 
             ease: [0.2, 0.7, 0.2, 1] as const,
           },
-        }
+        };
 
   return (
     <section className="relative isolate overflow-hidden bg-white py-16 sm:py-20">
@@ -115,12 +115,12 @@ export default function FeaturedCoursesSection({
                 .slice(0, INITIAL_VISIBLE_COURSES)
 
                 .map((item, index) => {
-                  const course = record(item)
+                  const course = record(item);
 
                   const cover =
                     typeof course.coverImageUrl === "string"
                       ? resolveApiAssetUrl(course.coverImageUrl)
-                      : ""
+                      : "";
 
                   return (
                     <motion.article
@@ -198,12 +198,12 @@ export default function FeaturedCoursesSection({
                         </button>
                       </div>
                     </motion.article>
-                  )
+                  );
                 })}
             </div>
           )}
         </ApiQueryState>
       </div>
     </section>
-  )
+  );
 }

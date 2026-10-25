@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { motion, useReducedMotion } from "framer-motion"
+import { Skeleton } from "../../../components/Skeleton"
 
 import type { NavigateFn } from "../../../types"
 
@@ -17,16 +18,22 @@ export default function CallToActionSection({
   navigate,
 
   data,
+  loading,
 }: {
   navigate: NavigateFn
 
   data?: LandingCatalogSummary
+  loading: boolean
 }) {
   const reduce = !!useReducedMotion()
 
   const stats = [
     {
-      value: data ? data.courseCount.toLocaleString("ar-EG") : "متنوعة",
+      value: loading
+        ? null
+        : data
+          ? data.courseCount.toLocaleString("ar-EG")
+          : "متنوعة",
 
       label: "دورات تعليمية",
 
@@ -34,7 +41,11 @@ export default function CallToActionSection({
     },
 
     {
-      value: data ? data.teacherCount.toLocaleString("ar-EG") : "خبرات",
+      value: loading
+        ? null
+        : data
+          ? data.teacherCount.toLocaleString("ar-EG")
+          : "خبرات",
 
       label: "معلمون متخصصون",
 
@@ -90,9 +101,13 @@ export default function CallToActionSection({
               <span className="mb-3 grid size-9 place-items-center rounded-lg border border-white/20 bg-white/10 text-emerald-200">
                 <Icon size={18} aria-hidden="true" />
               </span>
-              <strong className="block truncate text-base font-bold tabular-nums sm:text-lg">
-                {value}
-              </strong>
+              {value === null ? (
+                <Skeleton className="h-6 w-20 bg-white/20" />
+              ) : (
+                <strong className="block truncate text-base font-bold tabular-nums sm:text-lg">
+                  {value}
+                </strong>
+              )}
               <span className="mt-1 block text-xs text-white/70">{label}</span>
             </motion.div>
           ))}

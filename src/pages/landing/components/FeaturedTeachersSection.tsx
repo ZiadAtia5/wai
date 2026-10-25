@@ -5,6 +5,7 @@ import { ArrowLeft, BadgeCheck, GraduationCap } from "lucide-react";
 import { resolveApiAssetUrl } from "../../../api/client";
 
 import type { NavigateFn } from "../../../types";
+import { TeacherCardSkeleton } from "./LandingSkeletons";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -178,18 +179,7 @@ export default function FeaturedTeachersSection({
         >
           {loading
             ? [0, 1, 2, 3].map((item) => (
-                <div
-                  key={item}
-                  aria-hidden="true"
-                  className="overflow-hidden rounded-xl border border-stroke bg-white"
-                >
-                  <span className="skeleton block aspect-[4/3] w-full" />
-                  <span className="block p-4">
-                    <span className="skeleton block h-4 w-2/3" />
-                    <span className="skeleton mt-3 block h-3 w-full" />
-                    <span className="skeleton mt-4 block h-8 w-full" />
-                  </span>
-                </div>
+                <TeacherCardSkeleton key={item} />
               ))
             : visibleTeachers.map((item, index) => {
                 const record = asRecord(item);

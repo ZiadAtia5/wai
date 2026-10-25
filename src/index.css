@@ -48,6 +48,7 @@
 
 html {
   direction: rtl;
+  scrollbar-gutter: stable;
   font-family: var(--font-sans);
   background-color: #e9edeb;
   color: #15221a;
@@ -81,6 +82,10 @@ body {
   outline: 2px solid #42a879;
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+.search-focus-input:focus-visible {
+  outline: none;
 }
 
 ::selection {

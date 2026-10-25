@@ -47,7 +47,11 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
 
   return (
     <div className="overflow-hidden bg-[#f4f8f5] text-[#15352a]">
-      <LandingHeroSection navigate={navigate} data={data ?? undefined} />
+      <LandingHeroSection
+        navigate={navigate}
+        data={data ?? undefined}
+        loading={loading}
+      />
       <PlatformBenefitsSection />
       <FeaturedCoursesSection
         navigate={navigate}
@@ -62,7 +66,11 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
         teachers={data?.featuredTeachers ?? []}
         loading={loading}
       />
-      <CallToActionSection navigate={navigate} data={data ?? undefined} />
+      <CallToActionSection
+        navigate={navigate}
+        data={data ?? undefined}
+        loading={loading}
+      />
     </div>
   )
 }

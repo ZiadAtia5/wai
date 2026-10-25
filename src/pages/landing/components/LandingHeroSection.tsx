@@ -9,8 +9,7 @@ import {
 } from "lucide-react"
 
 import { motion, useReducedMotion } from "framer-motion"
-
-import PublicNavbar from "../../../components/layout/PublicNavbar"
+import { Skeleton } from "../../../components/Skeleton"
 
 import type { NavigateFn } from "../../../types"
 
@@ -22,10 +21,12 @@ export default function LandingHeroSection({
   navigate,
 
   data,
+  loading,
 }: {
   navigate: NavigateFn
 
   data?: LandingCatalogSummary
+  loading: boolean
 }) {
   const [search, setSearch] = useState("")
 
@@ -39,7 +40,6 @@ export default function LandingHeroSection({
 
   return (
     <section className="relative isolate overflow-hidden bg-[radial-gradient(ellipse_at_18%_20%,rgba(66,168,121,.14),transparent_34%),radial-gradient(ellipse_at_84%_78%,rgba(232,241,232,.8),transparent_36%),linear-gradient(125deg,#fff_0%,#f8fbf7_55%,#edf5ef_100%)]">
-      <PublicNavbar currentView="landing" navigate={navigate} />
       <div className="pointer-events-none absolute inset-0 opacity-[.14] [background-image:linear-gradient(rgba(23,107,67,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(23,107,67,.12)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]" />
 
       <div className="relative mx-auto grid min-h-[620px] w-full min-w-0 max-w-7xl grid-cols-1 items-center gap-5 px-5 pb-12 pt-28 sm:px-8 sm:pt-32 lg:min-h-[680px] lg:grid-cols-2 lg:gap-10 lg:pb-16">
@@ -66,7 +66,7 @@ export default function LandingHeroSection({
 
           <form
             onSubmit={submitSearch}
-            className="mt-7 flex min-w-0 max-w-xl items-center gap-2 rounded-xl border border-stroke bg-white p-2 shadow-nuwa-md focus-within:border-nuwa-bright"
+            className="mt-7 flex min-w-0 max-w-xl items-center gap-2 rounded-xl border border-stroke bg-white p-2 shadow-nuwa-md transition-colors duration-200 focus-within:border-nuwa-base"
           >
             <Search
               className="ms-2 shrink-0 text-ink-muted"
@@ -78,7 +78,7 @@ export default function LandingHeroSection({
               onChange={(event) => setSearch(event.target.value)}
               aria-label="ابحث عن دورة"
               placeholder="عن أي موضوع تحب أن تتعلّم؟"
-              className="h-11 min-w-0 flex-1 bg-transparent px-1 text-sm text-ink outline-none placeholder:text-ink-muted/75"
+              className="search-focus-input h-11 min-w-0 flex-1 bg-transparent px-1 text-sm text-ink outline-none placeholder:text-ink-muted/75"
             />
             <button
               type="submit"
@@ -92,13 +92,17 @@ export default function LandingHeroSection({
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-ink-muted">
             <span className="inline-flex items-center gap-1.5">
               <BookOpen size={15} className="text-nuwa-base" />
-              {data
+              {loading
+                ? <Skeleton className="h-4 w-28" />
+                : data
                 ? `${data.courseCount.toLocaleString("ar-EG")} دورة تعليمية`
                 : "دورات متنوعة"}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <UsersRound size={15} className="text-nuwa-base" />
-              {data
+              {loading
+                ? <Skeleton className="h-4 w-24" />
+                : data
                 ? `${data.teacherCount.toLocaleString("ar-EG")} معلمون`
                 : "معلمون متخصصون"}
             </span>
