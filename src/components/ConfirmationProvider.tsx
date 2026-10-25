@@ -177,7 +177,6 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
     if (!activeRequest) return
 
     const previousOverflow = document.body.style.overflow
-
     document.body.style.overflow = "hidden"
 
     const focusFrame = window.requestAnimationFrame(() => {

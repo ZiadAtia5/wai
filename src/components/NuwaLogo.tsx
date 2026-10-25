@@ -1,20 +1,20 @@
-import logo from "../assets/waiLogo.png"
+// import logo from "../assets/newlogo.png";
 
 interface NuwaLogoProps {
-  size?: "sm" | "md" | "lg"
+  size?: "sm" | "md" | "lg";
 
-  variant?: "full" | "mark" | "wordmark"
+  variant?: "full" | "mark" | "wordmark";
 
-  color?: "default" | "white" | "deep"
+  color?: "default" | "white" | "deep";
 
-  className?: string
+  className?: string;
 }
 
 const logoSizes = {
   sm: { height: 32, width: 73 },
   md: { height: 40, width: 91 },
   lg: { height: 48, width: 110 },
-}
+};
 
 export default function NuwaLogo({
   size = "md",
@@ -23,10 +23,10 @@ export default function NuwaLogo({
 }: NuwaLogoProps) {
   return (
     <img
-      src={logo}
+      src="https://res.cloudinary.com/ddmbpv5xq/image/upload/v1792793652/newlogo_u59jhb.png"
       alt="شعار وَعي"
       className={`inline-block shrink-0 object-contain ${className}`}
       style={{ ...logoSizes[size], objectFit: "contain" }}
     />
-  )
+  );
 }

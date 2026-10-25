@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  RefreshCw,
   Settings2,
   ShieldCheck,
   UsersRound,
@@ -48,6 +49,7 @@ import ApiQueryState from "../components/ApiQueryState";
 import { useConfirmation } from "../components/ConfirmationProvider";
 
 import NuwaLogo from "../components/NuwaLogo";
+import PlatformFooter from "../components/layout/PlatformFooter";
 
 import PersonAvatar from "../components/PersonAvatar";
 import { Skeleton, SkeletonIcon, SkeletonText } from "../components/Skeleton";
@@ -193,6 +195,14 @@ function getSections(
       },
 
       { key: "profile", label: "ملفي الشخصي", load: teachersApi.me },
+
+      {
+        key: "students",
+
+        label: "طلابي",
+
+        load: async () => null,
+      },
 
       {
         key: "courses",
@@ -783,9 +793,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   );
 
   const sidebarNavRef = useRef<HTMLElement | null>(null);
-  const [sidebarIndicatorY, setSidebarIndicatorY] = useState<number | null>(
-    null,
-  );
+  const sidebarIndicatorRef = useRef<HTMLSpanElement | null>(null);
+  const [sidebarIndicatorMotion, setSidebarIndicatorMotion] = useState<{
+    y: number[];
+    scaleY: number[];
+  } | null>(null);
 
   useLayoutEffect(() => {
     const nav = sidebarNavRef.current;
@@ -793,10 +805,46 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       nav?.querySelectorAll<HTMLButtonElement>("[data-sidebar-item]") ?? [],
     ).find((item) => item.dataset.sidebarItem === activeKey);
 
-    if (activeItem) {
-      setSidebarIndicatorY(
-        activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2,
-      );
+    if (!nav || !activeItem) return;
+
+    const targetY = activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2;
+    const indicator = sidebarIndicatorRef.current;
+
+    if (!indicator) {
+      setSidebarIndicatorMotion({
+        y: [targetY],
+        scaleY: [1],
+      });
+      return;
+    }
+
+    const navTop = nav.getBoundingClientRect().top;
+    const indicatorRect = indicator.getBoundingClientRect();
+    const currentY = indicatorRect.top - navTop;
+    const currentHeight = indicatorRect.height;
+
+    if (
+      Math.abs(targetY - currentY) < 0.5 &&
+      Math.abs(currentHeight - 40) < 0.5
+    ) {
+      return;
+    }
+
+    if (targetY > currentY) {
+      setSidebarIndicatorMotion({
+        y: [currentY, currentY, targetY],
+        scaleY: [
+          currentHeight / 40,
+          (targetY + 40 - currentY) / 40,
+          1,
+        ],
+      });
+    } else {
+      const stretchScale = (currentY + currentHeight - targetY) / 40;
+      setSidebarIndicatorMotion({
+        y: [currentY, targetY, targetY],
+        scaleY: [currentHeight / 40, stretchScale, 1],
+      });
     }
   }, [activeKey]);
 
@@ -1134,7 +1182,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     !(role.includes("admin") && activeKey === "teachers") &&
     activeKey !== "profile" &&
     !(
-      role.includes("teacher") && ["overview", "courses"].includes(activeKey)
+      role.includes("teacher") &&
+      ["overview", "courses", "students"].includes(activeKey)
     ) &&
     studentOverview === null &&
     !(
@@ -1578,7 +1627,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     teachers: "المعلمون",
 
-    students: "الطلاب",
+    students: role.includes("teacher") ? "طلابي" : "الطلاب",
 
     pending: "طلاب بانتظار الاعتماد",
 
@@ -1590,9 +1639,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   };
 
   return (
-    <div className="dashboard-shell min-h-dvh bg-canvas pb-10 dir-rtl sm:pb-16">
-      {/* Top Header Navigation */}
-      <header className="relative z-30 border-b border-emerald-900/10 bg-surface/90 backdrop-blur-xl lg:sticky lg:top-0 lg:mr-[320px] lg:ml-4 lg:mt-4 lg:rounded-[28px] lg:border-0 lg:shadow-sm">
+    <div className="dashboard-shell flex min-h-dvh flex-col bg-canvas dir-rtl">
+      <header className="hidden">
         <div
           dir="ltr"
           className="mx-auto flex min-h-[68px] max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 lg:px-6"
@@ -1663,7 +1711,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       </header>
 
       {/* Main Content Area */}
-      <div className="flex min-h-[calc(100dvh-68px)]">
+      <div className="flex flex-1">
         {mobileNavOpen && (
           <button
             type="button"
@@ -1717,16 +1765,22 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
               className="relative grid gap-1"
               aria-label="أقسام لوحة التحكم"
             >
-              {sidebarIndicatorY !== null && (
+              {sidebarIndicatorMotion !== null && (
                 <m.span
                   aria-hidden="true"
-                  className="pointer-events-none absolute right-0 top-0 z-0 h-10 w-[5px] rounded-l-md bg-[#176b43]"
+                  className="pointer-events-none absolute right-0 top-0 z-10 h-10 w-[5px] rounded-l-md bg-[#176b43]"
+                  ref={sidebarIndicatorRef}
                   initial={false}
-                  animate={{ y: sidebarIndicatorY }}
+                  style={{ transformOrigin: "center top" }}
+                  animate={{
+                    y: sidebarIndicatorMotion.y,
+                    scaleY: sidebarIndicatorMotion.scaleY,
+                  }}
                   transition={{
                     type: "tween",
-                    duration: 0.5,
-                    ease: [0.65, 0, 0.35, 1],
+                    duration: 0.34,
+                    ease: [0.2, 0.8, 0.2, 1],
+                    times: [0, 0.4, 1],
                   }}
                 />
               )}
@@ -1744,7 +1798,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
                   teachers: Users,
 
-                  students: GraduationCap,
+                  students: role.includes("teacher")
+                    ? UsersRound
+                    : GraduationCap,
 
                   "student-progress": UsersRound,
 
@@ -1830,66 +1886,83 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             <span className="absolute bottom-5 left-5 size-3 rounded-full bg-emerald-300 shadow-[0_0_20px_rgb(110_231_183_/_80%)]" />
           </div>
         </aside>
-        <main
-          className={`min-w-0 flex-1 pb-8 pt-4 ${
+        <div
+          className={`flex min-w-0 flex-1 flex-col pb-8 pt-4 ${
             role.includes("teacher") && activeKey === "courses"
               ? "px-1 sm:px-3 sm:pt-6"
               : "px-3 sm:px-6 sm:pt-6"
           } lg:mr-[320px] lg:ml-4 lg:px-0 lg:pt-4`}
         >
-          <div className="mx-auto max-w-[1920px]">
-            {/* Action Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-stroke/70 bg-surface p-4 shadow-nuwa sm:gap-4 sm:p-6">
-              <div>
-                <h1 className="text-lg font-bold text-ink sm:text-xl">
-                  {roleBadge.title}
-                </h1>
-                <p className="mt-0.5 text-xs text-ink-muted sm:text-sm">
-                  {accountName ? `أهلًا ${accountName} · ` : "أهلًا بك · "}
-                  مرحبًا بك في منصة وَعي
-                </p>
+          <main className="mx-auto w-full max-w-[1920px] flex-1">
+            <header className="sticky top-3 z-30 mb-5 flex min-h-[76px] items-center justify-between gap-3 rounded-2xl border border-stroke/70 bg-surface/95 p-3 shadow-nuwa backdrop-blur-xl sm:top-4 sm:gap-4 sm:rounded-[24px] sm:p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(true)}
+                  className="grid size-10 shrink-0 place-items-center rounded-xl border border-stroke bg-white text-ink-muted transition hover:bg-canvas lg:hidden"
+                  aria-label="فتح القائمة"
+                  aria-expanded={mobileNavOpen}
+                  aria-controls="dashboard-sidebar"
+                >
+                  <Menu size={19} />
+                </button>
+                <PersonAvatar
+                  name={accountName || roleBadge.badge}
+                  imageUrl={accountImage}
+                  size="sm"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-ink sm:text-base">
+                    {accountName || roleBadge.title}
+                  </p>
+                  <p className="truncate text-[11px] text-ink-muted sm:text-xs">
+                    {roleBadge.title}
+                    <span aria-hidden="true"> · </span>
+                    {sectionLabels[activeKey] ?? roleBadge.title}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="flex shrink-0 items-center gap-2">
                 {activeKey === "notifications" && (
                   <>
                     <button
+                      type="button"
                       onClick={() => void handleMarkRead()}
                       disabled={actionLoading === "read-all"}
-                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-stroke bg-canvas px-3 py-2 text-xs font-semibold text-ink transition-all hover:bg-surface active:scale-95 disabled:opacity-50 sm:flex-none"
+                      aria-label="قراءة كل الإشعارات"
+                      title="قراءة الكل"
+                      className="grid size-10 place-items-center rounded-xl border border-stroke bg-white text-ink-muted transition hover:bg-nuwa-ice hover:text-nuwa-deep disabled:opacity-50"
                     >
-                      قراءة الكل
+                      <CheckCircle2 size={17} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => void handleDeleteAllNotifications()}
                       disabled={actionLoading === "delete-all-notifications"}
-                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50 sm:flex-none"
+                      aria-label="حذف كل الإشعارات"
+                      title="حذف الكل"
+                      className="grid size-10 place-items-center rounded-xl border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                     >
-                      <Trash2 size={14} /> حذف الكل
+                      <Trash2 size={16} />
                     </button>
                   </>
                 )}
                 <button
+                  type="button"
                   onClick={() => setReloadKey((key) => key + 1)}
-                  className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-nuwa-base px-3.5 py-2 text-xs font-semibold text-white transition-all hover:bg-nuwa-deep active:scale-95 sm:flex-none"
+                  disabled={loading}
+                  aria-label="تحديث البيانات"
+                  title="تحديث البيانات"
+                  className="grid size-10 place-items-center rounded-xl bg-nuwa-base text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
                 >
-                  <svg
-                    className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  تحديث البيانات
+                  <RefreshCw
+                    size={17}
+                    className={loading ? "animate-spin" : ""}
+                  />
                 </button>
               </div>
-            </div>
+            </header>
 
             {supportsSearch && (
               <form
@@ -3114,8 +3187,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 </nav>
               )}
             </div>
-          </div>
-        </main>
+          </main>
+          <PlatformFooter navigate={navigate} dashboard />
+        </div>
       </div>
     </div>
   );
