@@ -8,7 +8,11 @@ interface QueryState<T> {
   error: string | null
 
   loading: boolean
+
+  cacheKey?: string
 }
+
+const queryCache = new Map<string, unknown>()
 
 export function useApiQuery<T>(
   load: () => Promise<T>,
@@ -16,30 +20,49 @@ export function useApiQuery<T>(
   reloadKey = 0,
 
   keepPreviousData = false,
+
+  cacheKey?: string,
 ) {
   const [state, setState] = useState<QueryState<T>>({
-    data: null,
+    data:
+      cacheKey && queryCache.has(cacheKey)
+        ? queryCache.get(cacheKey) as T
+        : null,
 
     error: null,
 
-    loading: true,
+    loading: !cacheKey || !queryCache.has(cacheKey),
+
+    cacheKey,
   })
 
   useEffect(() => {
     let active = true
+    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey))
+    const cachedData =
+      hasCachedData && cacheKey ? queryCache.get(cacheKey) as T : null
 
     setState((current) => ({
-      data: keepPreviousData ? current.data : null,
+      data: hasCachedData
+        ? cachedData
+        : keepPreviousData
+          ? current.cacheKey === cacheKey
+            ? current.data
+            : null
+          : null,
 
       error: null,
 
-      loading: true,
+      loading: !hasCachedData,
+
+      cacheKey,
     }))
 
     load()
 
       .then((data) => {
-        if (active) setState({ data, error: null, loading: false })
+        if (cacheKey) queryCache.set(cacheKey, data)
+        if (active) setState({ data, error: null, loading: false, cacheKey })
       })
 
       .catch((error: unknown) => {
@@ -51,18 +74,33 @@ export function useApiQuery<T>(
             : "تعذر تحميل البيانات حاول مرة آخري."
 
         setState((current) => ({
-          data: keepPreviousData ? current.data : null,
+          data: hasCachedData
+            ? cachedData
+            : keepPreviousData && current.cacheKey === cacheKey
+              ? current.data
+              : null,
 
           error: message,
 
           loading: false,
+
+          cacheKey,
         }))
       })
 
     return () => {
       active = false
     }
-  }, [load, reloadKey])
+  }, [cacheKey, load, reloadKey])
+
+  if (state.cacheKey !== cacheKey) {
+    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey))
+    return {
+      data: hasCachedData && cacheKey ? queryCache.get(cacheKey) as T : null,
+      error: null,
+      loading: !hasCachedData,
+    }
+  }
 
   return state
 }

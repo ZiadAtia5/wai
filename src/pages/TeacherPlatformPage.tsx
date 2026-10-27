@@ -13,7 +13,9 @@ import { resolveApiAssetUrl } from "../api/client"
 import { teachersApi } from "../api/endpoints"
 
 import ApiQueryState from "../components/ApiQueryState"
+
 import { Skeleton, SkeletonButton, SkeletonText } from "../components/Skeleton"
+
 import { TeacherCoursesSkeleton } from "../components/loading/SkeletonLayouts"
 
 import { useApiQuery } from "../hooks/useApiQuery"
@@ -37,7 +39,9 @@ function asRecord(value: unknown): PublicRecord | null {
 function recordsFrom(value: unknown): PublicRecord[] {
   if (Array.isArray(value)) {
     return value
+
       .map(asRecord)
+
       .filter((item): item is PublicRecord => item !== null)
   }
 
@@ -52,6 +56,7 @@ function recordsFrom(value: unknown): PublicRecord[] {
   }
 
   if (record.data !== undefined) return recordsFrom(record.data)
+
   if (record.result !== undefined) return recordsFrom(record.result)
 
   throw new Error("استجابة دورات المعلم غير متوقعة.")
@@ -59,6 +64,7 @@ function recordsFrom(value: unknown): PublicRecord[] {
 
 function teacherRecordFrom(value: unknown): PublicRecord {
   const record = asRecord(value)
+
   if (!record) throw new Error("استجابة بيانات المعلم غير متوقعة.")
 
   for (const key of ["data", "teacher", "result"]) {
@@ -78,9 +84,41 @@ function teacherNameOf(record: PublicRecord): string {
   return typeof name === "string" && name.trim() ? name.trim() : "معلم"
 }
 
+function teacherSpecializationOf(record: PublicRecord): string {
+  const specialization =
+    record.specialization ??
+    record.specialty ??
+    record.subjectName ??
+    record.subject
+
+  if (typeof specialization === "string" && specialization.trim()) {
+    return specialization.trim()
+  }
+
+  if (Array.isArray(specialization)) {
+    return specialization
+
+      .map((item) => {
+        const subject = asRecord(item)
+
+        return String(
+          subject?.name ?? subject?.subjectName ?? item ?? "",
+        ).trim()
+      })
+
+      .filter(Boolean)
+
+      .join("، ")
+  }
+
+  return ""
+}
+
 function teacherImageOf(record: PublicRecord): string {
   const avatar = record.avatar
+
   const avatarRecord = asRecord(avatar)
+
   const candidate =
     record.avatarUrl ??
     record.avatar_url ??
@@ -107,9 +145,12 @@ async function loadTeacherPlatform(
 ): Promise<TeacherPlatformData> {
   const [teacherResponse, coursesResponse] = await Promise.all([
     teachersApi.byId(teacherId),
+
     teachersApi.courses(teacherId),
   ])
+
   const teacher = teacherRecordFrom(teacherResponse)
+
   const courses = recordsFrom(coursesResponse)
 
   return { teacher, courses }
@@ -125,11 +166,13 @@ export default function TeacherPlatformPage({
   navigate: NavigateFn
 }) {
   const [reloadKey, setReloadKey] = useState(0)
+
   const [failedTeacherImageUrl, setFailedTeacherImageUrl] =
     useState<string | null>(null)
 
   const loadPage = useCallback(
     () => loadTeacherPlatform(teacherId),
+
     [teacherId],
   )
 
@@ -138,6 +181,8 @@ export default function TeacherPlatformPage({
   const teacher = data?.teacher
 
   const teacherName = teacher ? teacherNameOf(teacher) : "منصة المعلم"
+
+  const teacherSpecialization = teacher ? teacherSpecializationOf(teacher) : ""
 
   const teacherImage = teacher ? teacherImageOf(teacher) : ""
 
@@ -178,10 +223,15 @@ export default function TeacherPlatformPage({
                   ) : (
                     <span className="text-7xl font-bold tracking-tight text-white/90 sm:text-8xl">
                       {teacherName
+
                         .trim()
+
                         .split(/\s+/)
+
                         .slice(0, 2)
+
                         .map((part) => part[0] ?? "")
+
                         .join("")}
                     </span>
                   )}
@@ -193,12 +243,14 @@ export default function TeacherPlatformPage({
               <div>
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
                   <GraduationCap size={15} />
-                  معلم على منصة وَعي
+                  {teacherSpecialization || "معلم على منصة وَعي"}
                 </span>
                 <p dir="auto" className="mt-3 text-2xl font-bold sm:text-3xl">
                   {loading ? (
                     <Skeleton className="h-8 w-48 bg-white/25 sm:h-9" />
-                  ) : teacherName}
+                  ) : (
+                    teacherName
+                  )}
                 </p>
               </div>
               {loading ? (
@@ -227,6 +279,12 @@ export default function TeacherPlatformPage({
             <p className="mt-7 text-sm font-semibold text-nuwa-base">
               رحلة تعلم تبدأ بخطوة
             </p>
+            {teacherSpecialization && (
+              <span className="mt-3 inline-flex w-fit items-center gap-2 rounded-full border border-nuwa-base/15 bg-nuwa-soft px-4 py-2 text-sm font-bold text-nuwa-deep">
+                <GraduationCap size={17} aria-hidden="true" />
+                التخصص: {teacherSpecialization}
+              </span>
+            )}
             <h1
               dir="auto"
               className="mt-2 text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl xl:text-5xl"
@@ -235,7 +293,9 @@ export default function TeacherPlatformPage({
               <span className="mt-1 block text-nuwa-base">
                 {loading ? (
                   <Skeleton className="h-10 w-52 bg-nuwa-soft sm:h-12" />
-                ) : teacherName}
+                ) : (
+                  teacherName
+                )}
               </span>
             </h1>
             <p
@@ -255,7 +315,9 @@ export default function TeacherPlatformPage({
                 disabled={loading}
                 onClick={() =>
                   document
+
                     .getElementById("teacher-courses")
+
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
                 className="inline-flex h-12 items-center gap-2 rounded-xl bg-nuwa-base px-5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep"
@@ -310,6 +372,7 @@ export default function TeacherPlatformPage({
                       course.imageUrl ??
                       "",
                   )
+
                   const coverImageUrl = coverImage
                     ? resolveApiAssetUrl(coverImage)
                     : ""

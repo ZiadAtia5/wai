@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { motion, useReducedMotion } from "framer-motion"
+
 import { Skeleton } from "../../../components/Skeleton"
 
 import type { NavigateFn } from "../../../types"
@@ -18,11 +19,13 @@ export default function CallToActionSection({
   navigate,
 
   data,
+
   loading,
 }: {
   navigate: NavigateFn
 
   data?: LandingCatalogSummary
+
   loading: boolean
 }) {
   const reduce = !!useReducedMotion()
@@ -79,10 +82,24 @@ export default function CallToActionSection({
             <Sparkles size={16} aria-hidden="true" />
             ابدأ من هنا
           </p>
-          <h2 className="mt-3 text-3xl font-bold leading-[1.35] sm:text-4xl">
+          <motion.h2
+            initial={
+              reduce ? false : { opacity: 0, y: 18, filter: "blur(8px)" }
+            }
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{
+              duration: 0.75,
+
+              delay: reduce ? 0 : 0.08,
+
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="mt-3 text-4xl font-extrabold leading-[1.3] tracking-tight sm:text-5xl lg:text-6xl"
+          >
             معرفة اليوم،
             <span className="block text-emerald-200">تصنع فرص الغد.</span>
-          </h2>
+          </motion.h2>
           <p className="mt-3 max-w-sm text-sm leading-7 text-white/75">
             اختر دورتك، تعلّم من خبرات معلمينا، واحتفل بكل خطوة تتقدمها.
           </p>

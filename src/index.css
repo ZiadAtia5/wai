@@ -84,6 +84,10 @@ body {
   border-radius: 4px;
 }
 
+h1:focus-visible {
+  outline: none;
+}
+
 .search-focus-input:focus-visible {
   outline: none;
 }

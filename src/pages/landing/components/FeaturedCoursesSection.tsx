@@ -1,23 +1,25 @@
-import { ArrowLeft, ArrowUpLeft, BookOpen, Star } from "lucide-react";
+import { ArrowLeft, BookOpen, Star } from "lucide-react"
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion"
 
-import { resolveApiAssetUrl } from "../../../api/client";
+import { resolveApiAssetUrl } from "../../../api/client"
 
-import ApiQueryState from "../../../components/ApiQueryState";
+import ApiQueryState from "../../../components/ApiQueryState"
 
-import type { NavigateFn } from "../../../types";
+import type { NavigateFn } from "../../../types"
 
-import type { LandingCatalogSummary } from "../types";
+import type { LandingCatalogSummary } from "../types"
 
-import { CourseGridSkeleton } from "./LandingSkeletons";
+import { CourseGridSkeleton } from "./LandingSkeletons"
 
-const INITIAL_VISIBLE_COURSES = 4;
+import { formatEgp } from "../../../utils/currency"
+
+const INITIAL_VISIBLE_COURSES = 4
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : {};
+    ? value as Record<string, unknown>
+    : {}
 }
 
 export default function FeaturedCoursesSection({
@@ -31,17 +33,17 @@ export default function FeaturedCoursesSection({
 
   navigate,
 }: {
-  data?: LandingCatalogSummary;
+  data?: LandingCatalogSummary
 
-  loading: boolean;
+  loading: boolean
 
-  error: string | null;
+  error: string | null
 
-  onRetry: () => void;
+  onRetry: () => void
 
-  navigate: NavigateFn;
+  navigate: NavigateFn
 }) {
-  const reduce = !!useReducedMotion();
+  const reduce = !!useReducedMotion()
 
   // one quiet fade-in when an element first scrolls into view, nothing else
 
@@ -49,20 +51,20 @@ export default function FeaturedCoursesSection({
     reduce
       ? {}
       : {
-          initial: { opacity: 0, y: 12 },
+          initial: { opacity: 0, y: 22 },
 
           whileInView: { opacity: 1, y: 0 },
 
           viewport: { once: true, margin: "-60px" },
 
           transition: {
-            duration: 0.5,
+            duration: 0.7,
 
             delay,
 
-            ease: [0.2, 0.7, 0.2, 1] as const,
+            ease: [0.22, 1, 0.36, 1] as const,
           },
-        };
+        }
 
   return (
     <section className="relative isolate overflow-hidden bg-white py-16 sm:py-20">
@@ -83,9 +85,21 @@ export default function FeaturedCoursesSection({
               </span>
               اختيارات من المنصة
             </p>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight text-[#143a2c] sm:text-3xl">
+            <motion.h2
+              initial={
+                reduce ? false : { opacity: 0, y: 16, filter: "blur(8px)" }
+              }
+              whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{
+                duration: 0.75,
+                delay: reduce ? 0 : 0.1,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="mt-4 text-3xl font-extrabold tracking-tight text-[#143a2c] sm:text-4xl lg:text-5xl"
+            >
               دورات تستحق أن تبدأ بها
-            </h2>
+            </motion.h2>
           </div>
           <button
             type="button"
@@ -109,26 +123,28 @@ export default function FeaturedCoursesSection({
           onRetry={onRetry}
         >
           {data && (
-            <div className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-9 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               {data.featured
 
                 .slice(0, INITIAL_VISIBLE_COURSES)
 
                 .map((item, index) => {
-                  const course = record(item);
+                  const course = record(item)
 
                   const cover =
                     typeof course.coverImageUrl === "string"
                       ? resolveApiAssetUrl(course.coverImageUrl)
-                      : "";
+                      : ""
+                  const subjectName =
+                    course.subjectName == null ? "" : String(course.subjectName)
 
                   return (
                     <motion.article
                       key={String(course.id ?? index)}
                       {...fade(Math.min(index, 5) * 0.05)}
-                      className="group overflow-hidden rounded-2xl border border-[#deebe1] bg-white shadow-[0_8px_24px_-16px_rgba(23,53,42,.28)] transition-colors hover:border-[#a9cfb3]"
+                      className="group relative flex min-h-80 flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] sm:rounded-3xl"
                     >
-                      <div className="relative flex h-44 items-end overflow-hidden bg-nuwa-deep p-5">
+                      <div className="relative h-36 w-full overflow-hidden bg-gradient-to-br from-[#072d1c] via-[#0e5233] to-[#187d4d] sm:h-52">
                         {cover ? (
                           <img
                             src={cover}
@@ -138,72 +154,107 @@ export default function FeaturedCoursesSection({
                             className="absolute inset-0 size-full object-cover"
                           />
                         ) : (
-                          <BookOpen
-                            className="absolute left-6 top-6 text-white/30"
-                            size={44}
-                            strokeWidth={1.5}
-                            aria-hidden="true"
-                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="absolute -right-10 -top-10 size-48 rounded-full border border-white/10 bg-white/5 blur-sm" />
+                            <div className="absolute -left-10 -bottom-10 size-36 rounded-full border border-white/10 bg-white/5 blur-sm" />
+                            <div className="relative z-10 grid size-16 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner backdrop-blur-md">
+                              <BookOpen
+                                size={30}
+                                className="text-emerald-200"
+                              />
+                            </div>
+                          </div>
                         )}
-                        <span className="relative rounded-lg bg-white/95 px-2.5 py-1 text-xs font-semibold text-nuwa-deep shadow-sm">
-                          {String(course.academicYear ?? "دورة تعليمية")}
-                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#091e15]/90 via-[#091e15]/30 to-black/20 transition-opacity duration-300 group-hover:opacity-85" />
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_50%_100%,rgba(52,211,153,.2),transparent_65%)] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+                        />
+                        <div className="absolute inset-x-2.5 top-2.5 z-10 flex items-center justify-between gap-2 sm:inset-x-3.5 sm:top-3.5">
+                          {subjectName ? (
+                            <span className="inline-flex max-w-[70%] items-center gap-1 rounded-full border border-white/20 bg-emerald-950/60 px-2.5 py-1 text-[10px] font-bold text-emerald-200 shadow-sm backdrop-blur-md sm:max-w-full sm:gap-1.5 sm:px-3 sm:text-[11px]">
+                              <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+                              <span className="truncate">{subjectName}</span>
+                            </span>
+                          ) : (
+                            <span />
+                          )}
+                          {course.academicYear != null &&
+                            course.academicYear !== "" && (
+                              <span className="inline-flex shrink-0 items-center rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-[10px] font-semibold text-white/90 shadow-sm backdrop-blur-md sm:px-3 sm:text-[11px]">
+                                {String(course.academicYear)}
+                              </span>
+                            )}
+                        </div>
+                        {course.price != null && (
+                          <div className="absolute bottom-2.5 right-2.5 z-10 sm:bottom-3.5 sm:right-3.5">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black shadow-xl backdrop-blur-md sm:rounded-xl sm:px-3.5 sm:py-1.5 sm:text-xs ${
+                                Number(course.price) === 0
+                                  ? "border border-emerald-400/50 bg-emerald-500/90 text-white shadow-emerald-950/40"
+                                  : "border border-white/30 bg-white/95 text-emerald-950 shadow-black/20"
+                              }`}
+                            >
+                              {formatEgp(course.price)}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="p-5">
-                        <h3 className="line-clamp-1 text-lg font-bold text-[#17392c]">
-                          {String(course.title ?? "دورة تعليمية")}
-                        </h3>
-                        <p className="mt-2 line-clamp-2 min-h-12 text-sm leading-6 text-[#718076]">
-                          {String(
-                            course.description ??
-                              "محتوى تعليمي منظم يساعدك على التقدم خطوة بخطوة.",
-                          )}
-                        </p>
-
-                        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#edf1ed] pt-4 text-sm">
-                          <span className="min-w-0 truncate text-[#718076]">
+                      <div className="relative z-10 flex flex-1 flex-col justify-between bg-surface p-3 transition-colors duration-300 group-hover:bg-emerald-50/20 sm:p-5">
+                        <div>
+                          <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-nuwa-base sm:text-base">
+                            {String(course.title ?? "دورة تعليمية")}
+                          </h3>
+                          <p className="mt-1.5 line-clamp-2 text-xs font-normal leading-relaxed text-ink-muted/90 sm:mt-2">
                             {String(
-                              course.teacherName ??
-                                course.subjectName ??
-                                "منصة وعي",
+                              course.description ??
+                                "محتوى تعليمي منظم يساعدك على التقدم خطوة بخطوة.",
                             )}
-                          </span>
-                          <span className="shrink-0 rounded-lg bg-nuwa-base/10 px-2.5 py-1 font-bold text-nuwa-base">
-                            {course.price === 0
-                              ? "مجانية"
-                              : typeof course.price === "number"
-                                ? `${course.price} ر.س`
-                                : "اكتشف الدورة"}
-                          </span>
+                          </p>
                         </div>
-
-                        <button
-                          type="button"
-                          disabled={
-                            course.id === undefined || course.id === null
-                          }
-                          onClick={() =>
-                            navigate("public:course-detail", {
-                              courseId: String(course.id),
-                            })
-                          }
-                          className="group/link mt-4 inline-flex items-center gap-2 rounded-md text-sm font-semibold text-nuwa-base transition-colors hover:text-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                        >
-                          تفاصيل الدورة
-                          <ArrowUpLeft
-                            size={15}
-                            className="transition-transform group-hover/link:-translate-x-0.5 group-hover/link:-translate-y-0.5"
-                          />
-                        </button>
+                        <div className="mt-3 flex flex-col items-stretch justify-between gap-2 border-t border-stroke/50 pt-3 sm:mt-5 sm:flex-row sm:items-center sm:gap-3 sm:pt-3.5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div className="relative grid size-8 shrink-0 place-items-center rounded-full bg-emerald-100/80 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20 transition-transform duration-300 group-hover:scale-105">
+                              <BookOpen size={15} />
+                            </div>
+                            <div className="flex min-w-0 flex-col">
+                              <span className="text-[10px] font-medium text-ink-muted/70">
+                                المعلم
+                              </span>
+                              <span className="truncate text-[11px] font-bold text-ink/90 sm:text-xs">
+                                {String(
+                                  course.teacherName ??
+                                    course.subjectName ??
+                                    "منصة وَعي",
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={
+                              course.id === undefined || course.id === null
+                            }
+                            onClick={() =>
+                              navigate("public:course-detail", {
+                                courseId: String(course.id),
+                              })
+                            }
+                            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-nuwa-soft px-2.5 py-1.5 text-[11px] font-bold text-nuwa-deep opacity-100 transition-[opacity,transform,background-color,color] duration-300 ease-out hover:bg-nuwa-base hover:text-white hover:shadow-md hover:shadow-emerald-900/10 focus-visible:translate-y-0 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default sm:gap-1.5 sm:rounded-full sm:px-3.5 sm:py-1.5 sm:text-xs sm:translate-y-1 sm:opacity-0 group-hover:translate-y-0 group-hover:bg-nuwa-base group-hover:text-white group-hover:opacity-100"
+                          >
+                            التفاصيل
+                            <ArrowLeft size={13} aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
                     </motion.article>
-                  );
+                  )
                 })}
             </div>
           )}
         </ApiQueryState>
       </div>
     </section>
-  );
+  )
 }

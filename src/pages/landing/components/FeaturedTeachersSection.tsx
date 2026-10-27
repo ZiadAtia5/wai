@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState } from "react"
 
-import { ArrowLeft, BadgeCheck, GraduationCap } from "lucide-react";
+import { ArrowLeft } from "lucide-react"
 
-import { resolveApiAssetUrl } from "../../../api/client";
+import { motion, useReducedMotion } from "framer-motion"
 
-import type { NavigateFn } from "../../../types";
-import { TeacherCardSkeleton } from "./LandingSkeletons";
+import { resolveApiAssetUrl } from "../../../api/client"
+
+import type { NavigateFn } from "../../../types"
+
+import { TeacherCardSkeleton } from "./LandingSkeletons"
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : {};
+    ? value as Record<string, unknown>
+    : {}
 }
 
 function teacherName(record: Record<string, unknown>): string {
@@ -18,9 +21,9 @@ function teacherName(record: Record<string, unknown>): string {
     record.fullName ??
     record.name ??
     record.displayName ??
-    [record.firstName, record.lastName].filter(Boolean).join(" ");
+    [record.firstName, record.lastName].filter(Boolean).join(" ")
 
-  return typeof name === "string" && name.trim() ? name.trim() : "معلم وَعي";
+  return typeof name === "string" && name.trim() ? name.trim() : "معلم وَعي"
 }
 
 function TeacherCard({
@@ -28,17 +31,17 @@ function TeacherCard({
 
   navigate,
 }: {
-  record: Record<string, unknown>;
+  record: Record<string, unknown>
 
-  navigate: NavigateFn;
+  navigate: NavigateFn
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false)
 
-  const id = record.id ?? record.teacherId;
+  const id = record.id ?? record.teacherId
 
-  const name = teacherName(record);
+  const name = teacherName(record)
 
-  const avatar = asRecord(record.avatar);
+  const avatar = asRecord(record.avatar)
 
   const imageCandidate =
     record.avatarUrl ??
@@ -48,25 +51,39 @@ function TeacherCard({
     record.imageUrl ??
     (typeof record.avatar === "string" ? record.avatar : undefined) ??
     avatar.url ??
-    avatar.src;
+    avatar.src
 
-  const imageUrl = typeof imageCandidate === "string" ? imageCandidate : "";
+  const imageUrl = typeof imageCandidate === "string" ? imageCandidate : ""
 
-  const imageSrc = imageUrl && !imageFailed ? resolveApiAssetUrl(imageUrl) : "";
+  const imageSrc = imageUrl && !imageFailed ? resolveApiAssetUrl(imageUrl) : ""
 
-  const subject = String(
-    record.specialty ??
-      record.specialization ??
-      record.subjectName ??
-      record.subject ??
-      "معلم متخصص",
-  );
+  const rawSubjects = record.subjects ?? record.teachingSubjects
+
+  const subjects = Array.isArray(rawSubjects)
+    ? rawSubjects
+        .map((subject) => {
+          const value = asRecord(subject)
+
+          return String(value.name ?? value.subjectName ?? subject ?? "").trim()
+        })
+        .filter(Boolean)
+    : []
+
+  const primarySubject =
+    record.subjectName ??
+    record.subject ??
+    record.specialization ??
+    record.specialty
+
+  if (primarySubject) subjects.unshift(String(primarySubject))
+
+  const uniqueSubjects = [...new Set(subjects)]
 
   const description = String(
     record.bio ??
       record.description ??
       "خبرة تعليمية تساعدك على الفهم والتقدم بثقة.",
-  );
+  )
 
   return (
     <button
@@ -74,9 +91,9 @@ function TeacherCard({
       disabled={id === undefined || id === null}
       onClick={() => navigate("teacher:platform", { teacherId: String(id) })}
       aria-label={`عرض ملف ${name}`}
-      className="group overflow-hidden rounded-xl border border-stroke bg-white text-start shadow-nuwa transition duration-300 hover:-translate-y-1 hover:border-nuwa-bright hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nuwa-base disabled:cursor-default"
+      className="group relative flex min-h-[20rem] flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] focus-visible:border-emerald-300/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default sm:min-h-[26rem] sm:rounded-3xl"
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-[#e5eee7]">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700">
         {imageSrc ? (
           <img
             src={imageSrc}
@@ -84,38 +101,60 @@ function TeacherCard({
             loading="lazy"
             decoding="async"
             onError={() => setImageFailed(true)}
-            className="size-full object-cover object-center transition duration-500 group-hover:scale-[1.04]"
+            className="size-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 bg-[linear-gradient(145deg,#e4f0e7,#cddfd2)]" />
+          <div className="grid size-full place-items-center pb-24">
+            <span className="grid size-28 place-items-center rounded-full border border-white/20 bg-white/10 text-5xl font-bold text-white/90">
+              {name.charAt(0)}
+            </span>
+          </div>
         )}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-nuwa-deep/60 to-transparent" />
-        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg border border-white/60 bg-white/95 px-2.5 py-1.5 text-[11px] font-bold text-nuwa-deep shadow-sm">
-          <BadgeCheck size={14} className="text-nuwa-base" aria-hidden="true" />
-          معلم وَعي
-        </span>
-        <span className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white">
-          <GraduationCap size={15} aria-hidden="true" />
-          {subject}
-        </span>
       </div>
 
-      <div className="p-4 sm:p-5">
-        <span className="block truncate text-base font-bold text-ink sm:text-lg">
-          {name}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/45 to-transparent" />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_50%_100%,rgba(52,211,153,.22),transparent_65%)] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+      />
+
+      <div className="absolute left-2 top-2 z-10 flex max-w-[70%] flex-wrap gap-1 sm:left-4 sm:top-4 sm:gap-1.5">
+        <span
+          className="truncate rounded-full border border-white/40 bg-white/90 px-2 py-1 text-[10px] font-bold text-emerald-950 shadow-sm sm:px-3 sm:py-1.5 sm:text-xs"
+          title={uniqueSubjects.join("، ") || "التخصص"}
+        >
+          {uniqueSubjects[0] ?? "معلم على منصة وَعي"}
         </span>
-        <span className="mt-2 block min-h-12 text-sm leading-6 text-ink-muted line-clamp-2">
-          {description}
-        </span>
-        <span className="mt-4 flex items-center justify-between border-t border-stroke pt-3 text-sm font-bold text-nuwa-base">
-          عرض الملف التعليمي
-          <span className="grid size-8 place-items-center rounded-full bg-nuwa-soft transition group-hover:bg-nuwa-base group-hover:text-white">
-            <ArrowLeft size={16} aria-hidden="true" />
+        {uniqueSubjects.length > 1 && (
+          <span className="rounded-full border border-white/30 bg-black/35 px-2 py-1 text-[10px] font-bold text-white backdrop-blur sm:px-2.5 sm:py-1.5 sm:text-xs">
+            +{uniqueSubjects.length - 1}
           </span>
+        )}
+      </div>
+
+      {record.courseCount !== undefined && (
+        <span className="absolute right-2 top-2 z-10 rounded-full border border-white/25 bg-black/35 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs">
+          {String(record.courseCount)} دورة
+        </span>
+      )}
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-emerald-950/90 via-emerald-950/55 to-transparent backdrop-blur-md [mask-image:linear-gradient(to_top,black_60%,transparent)] [-webkit-mask-image:linear-gradient(to_top,black_60%,transparent)]" />
+
+      <div className="relative z-10 mt-auto flex flex-col p-3 text-white sm:p-5">
+        <h3 className="text-base font-bold leading-6 sm:text-xl sm:leading-7">
+          {name}
+        </h3>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/80 sm:mt-2 sm:text-sm sm:leading-7">
+          {description}
+        </p>
+        <span className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white/15 py-2 text-xs font-bold text-white opacity-100 ring-1 ring-white/25 backdrop-blur transition-[opacity,transform,background-color,color] duration-300 ease-out sm:mt-4 sm:py-2.5 sm:text-sm sm:translate-y-1 sm:opacity-0 group-hover:translate-y-0 group-hover:bg-white group-hover:text-emerald-950 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:bg-white group-focus-visible:text-emerald-950 group-focus-visible:opacity-100">
+          استكشف
+          <ArrowLeft size={15} aria-hidden="true" />
         </span>
       </div>
     </button>
-  );
+  )
 }
 
 export default function FeaturedTeachersSection({
@@ -125,47 +164,66 @@ export default function FeaturedTeachersSection({
 
   navigate,
 }: {
-  teachers: unknown[];
+  teachers: unknown[]
 
-  loading: boolean;
+  loading: boolean
 
-  navigate: NavigateFn;
+  navigate: NavigateFn
 }) {
-  const visibleTeachers = teachers.slice(0, 4);
+  const visibleTeachers = teachers.slice(0, 4)
+  const reduce = !!useReducedMotion()
 
   const gridLayout =
     loading || visibleTeachers.length > 2
       ? "lg:grid-cols-4"
       : visibleTeachers.length === 2
         ? "lg:mx-auto lg:max-w-4xl lg:grid-cols-2"
-        : "lg:mx-auto lg:max-w-sm lg:grid-cols-1";
+        : "lg:mx-auto lg:max-w-sm lg:grid-cols-1"
 
-  if (!loading && visibleTeachers.length === 0) return null;
+  if (!loading && visibleTeachers.length === 0) return null
 
   return (
     <section className="border-y border-stroke bg-[#f5f8f5] py-14 sm:py-16">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
+          <motion.div
+            initial={
+              reduce ? false : { opacity: 0, y: 22, filter: "blur(8px)" }
+            }
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{
+              duration: 0.7,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
             <p className="text-sm font-semibold text-nuwa-base">
               خبرة تقود تعلّمك
             </p>
-            <h2 className="mt-2 text-2xl font-bold text-ink sm:text-3xl">
+            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl lg:text-5xl">
               تعرّف على معلمي وَعي
             </h2>
-          </div>
-          <button
+          </motion.div>
+          <motion.button
             type="button"
             onClick={() => navigate("public:teachers")}
+            initial={reduce ? false : { opacity: 0, x: -12 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{
+              duration: 0.55,
+              delay: reduce ? 0 : 0.15,
+              ease: [0.22, 1, 0.36, 1],
+            }}
             className="inline-flex items-center gap-2 text-sm font-bold text-nuwa-base transition hover:text-nuwa-deep"
           >
             جميع المعلمين
             <ArrowLeft size={16} aria-hidden="true" />
-          </button>
+          </motion.button>
         </div>
 
         <div
-          className={`mt-7 grid gap-4 sm:grid-cols-2 ${gridLayout}`}
+          className={`mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 ${gridLayout}`}
           style={{
             maxWidth:
               loading || visibleTeachers.length > 2
@@ -178,11 +236,9 @@ export default function FeaturedTeachersSection({
           }}
         >
           {loading
-            ? [0, 1, 2, 3].map((item) => (
-                <TeacherCardSkeleton key={item} />
-              ))
+            ? [0, 1, 2, 3].map((item) => <TeacherCardSkeleton key={item} />)
             : visibleTeachers.map((item, index) => {
-                const record = asRecord(item);
+                const record = asRecord(item)
 
                 return (
                   <TeacherCard
@@ -190,10 +246,10 @@ export default function FeaturedTeachersSection({
                     record={record}
                     navigate={navigate}
                   />
-                );
+                )
               })}
         </div>
       </div>
     </section>
-  );
+  )
 }

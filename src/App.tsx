@@ -1,10 +1,4 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-} from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 
 import { AnimatePresence, MotionConfig } from "framer-motion"
 
@@ -17,9 +11,7 @@ import PublicNavbar from "./components/layout/PublicNavbar"
 
 import PlatformFooter from "./components/layout/PlatformFooter"
 import PageTransition from "./components/motion/PageTransition"
-import {
-  PublicCatalogPageSkeleton,
-} from "./components/loading/SkeletonLayouts"
+import { PublicCatalogPageSkeleton } from "./components/loading/SkeletonLayouts"
 import { LandingPageSkeleton } from "./pages/landing/components/LandingSkeletons"
 
 const LandingPage = lazy(() => import("./pages/landing/LandingPage"))
@@ -187,7 +179,7 @@ export default function App() {
           ? "public:course-detail"
           : "teacher:platform"
         : typeof state?.view === "string"
-          ? (state.view as View)
+          ? state.view as View
           : null
 
       if (nextView) {
@@ -239,7 +231,10 @@ export default function App() {
 
     const targetSearchParams = new URLSearchParams(window.location.search)
 
-    if (targetView === "public:courses" && params?.search !== undefined) {
+    if (
+      (targetView === "public:courses" || targetView === "public:teachers") &&
+      params?.search !== undefined
+    ) {
       const search = params.search.trim()
 
       if (search) targetSearchParams.set("search", search)
@@ -308,11 +303,19 @@ export default function App() {
             mode="wait"
             initial={false}
             onExitComplete={() =>
-              window.scrollTo({ top: 0, behavior: "smooth" })
+              window.scrollTo({
+                top: 0,
+                behavior:
+                  view === "public:courses" || view === "public:teachers"
+                    ? "auto"
+                    : "smooth",
+              })
             }
           >
             <PageTransition
-              key={`${view}:${view === "public:course-detail" ? selectedCourseId ?? "" : ""}`}
+              key={`${view}:${
+                view === "public:course-detail" ? (selectedCourseId ?? "") : ""
+              }`}
               direction={transitionDirection}
               animatePage={
                 view !== "public:courses" && view !== "public:teachers"
@@ -322,9 +325,7 @@ export default function App() {
                 <Suspense
                   fallback={
                     <PublicPageFallback
-                      kind={
-                        view === "public:teachers" ? "person" : "course"
-                      }
+                      kind={view === "public:teachers" ? "person" : "course"}
                       catalog={
                         view === "public:courses" || view === "public:teachers"
                       }
@@ -375,9 +376,7 @@ export default function App() {
                       <AuthPage mode="login" navigate={navigate} />
                     ))}
                 </Suspense>
-                {view !== "dashboard" && (
-                  <PlatformFooter navigate={navigate} />
-                )}
+                {view !== "dashboard" && <PlatformFooter navigate={navigate} />}
               </div>
             </PageTransition>
           </AnimatePresence>

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react"
+import { LoaderCircle } from "lucide-react"
 
 import { teachersApi } from "../../api/endpoints"
 import { useConfirmation } from "../ConfirmationProvider"
-
-const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted"
+import FileUploadField from "./FileUploadField"
 
 export default function TeacherAvatarForm({
   busy,
@@ -20,6 +20,7 @@ export default function TeacherAvatarForm({
 }) {
   const confirm = useConfirmation()
   const [deleting, setDeleting] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -29,6 +30,7 @@ export default function TeacherAvatarForm({
     if (!(file instanceof File) || !file.size) return
 
     onFeedback("")
+    setUploading(true)
 
     try {
       await teachersApi.uploadProfileImage(file)
@@ -38,6 +40,8 @@ export default function TeacherAvatarForm({
       onSaved()
     } catch (cause) {
       onFeedback(cause instanceof Error ? cause.message : "تعذر رفع الصورة.")
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -68,25 +72,25 @@ export default function TeacherAvatarForm({
       onSubmit={(event) => void upload(event)}
       className="mt-4 flex flex-wrap items-end gap-3 border-t border-stroke pt-4"
     >
-      <label className={labelClass}>
-        الصورة الشخصية
-        <input
+      <div className="min-w-0 flex-1">
+        <FileUploadField
           name="file"
-          type="file"
+          title="اختيار صورة شخصية"
           accept="image/*"
           required
-          className="max-w-full text-sm"
+          disabled={busy || deleting || uploading}
         />
-      </label>
+      </div>
       <button
-        disabled={busy || deleting}
-        className="rounded-lg border border-stroke px-4 py-2 text-sm font-semibold text-ink disabled:opacity-50"
+        disabled={busy || deleting || uploading}
+        className="inline-flex items-center gap-2 rounded-lg border border-stroke px-4 py-2 text-sm font-semibold text-ink disabled:opacity-50"
       >
-        رفع الصورة
+        {uploading && <LoaderCircle size={15} className="animate-spin" />}
+        {uploading ? "جارٍ رفع الصورة…" : "رفع الصورة"}
       </button>
       <button
         type="button"
-        disabled={busy || deleting}
+        disabled={busy || deleting || uploading}
         onClick={() => void remove()}
         className="rounded-lg px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50"
       >
