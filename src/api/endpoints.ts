@@ -151,6 +151,9 @@ export const studentsApi = {
   enrollment: (id: string | number) =>
     get<unknown>(`/students/me/enrollments/${idPath(id)}`),
 
+  courseDetail: (courseId: string | number) =>
+    get<unknown>(`/students/me/courses/${idPath(courseId)}`),
+
   courseProgress: (courseId: string | number) =>
     get<unknown>(`/students/me/courses/${idPath(courseId)}/progress`),
 
@@ -324,7 +327,7 @@ export const notificationsApi = {
 
   remove: (id: string | number) => del<void>(`/notifications/${idPath(id)}`),
 
-  removeAll: () => del<void>("/notifications"),
+  removeAll: () => del<void>("/notifications/all"),
 }
 
 export const quizzesApi = {

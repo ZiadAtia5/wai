@@ -3,9 +3,7 @@ import { useEffect, useRef } from "react"
 type VideoRecord = Record<string, unknown>
 
 function asRecord(value: unknown): VideoRecord {
-  return typeof value === "object" && value !== null
-    ? value as VideoRecord
-    : {}
+  return typeof value === "object" && value !== null ? value as VideoRecord : {}
 }
 
 export function youtubeVideoId(value: unknown): string | null {
@@ -21,11 +19,38 @@ export function youtubeVideoId(value: unknown): string | null {
       const id = url.pathname.split("/").filter(Boolean)[0]
       return id && /^[\w-]{11}$/.test(id) ? id : null
     }
-    if (!["youtube.com", "m.youtube.com", "youtube-nocookie.com"].includes(host)) return null
+    if (
+      !["youtube.com", "m.youtube.com", "youtube-nocookie.com"].includes(host)
+    )
+      return null
     const path = url.pathname.split("/").filter(Boolean)
-    const id = url.searchParams.get("v") ??
+    const id =
+      url.searchParams.get("v") ??
       (["embed", "shorts", "live"].includes(path[0] ?? "") ? path[1] : null)
     return id && /^[\w-]{11}$/.test(id) ? id : null
+  } catch {
+    return null
+  }
+}
+
+function streamtapeEmbedUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null
+
+  try {
+    const url = new URL(value.trim())
+    const host = url.hostname.toLowerCase().replace(/^www\./, "")
+    if (
+      url.protocol !== "https:" ||
+      host !== "streamtape.com" ||
+      url.username ||
+      url.password
+    )
+      return null
+
+    const match = url.pathname.match(/^\/(?:v|e)\/([A-Za-z0-9_-]+)\/?$/i)
+    if (!match) return null
+
+    return `https://streamtape.com/e/${encodeURIComponent(match[1])}/`
   } catch {
     return null
   }
@@ -58,10 +83,14 @@ export default function LessonVideoPlayer({
   onEnded?: (seconds: number) => void
 }) {
   const video = asRecord(value)
-  const youtubeId = youtubeVideoId(video.providerVideoId) ?? youtubeVideoId(video.videoUrl)
+  const streamtapeUrl = streamtapeEmbedUrl(video.videoUrl)
+  const youtubeId = streamtapeUrl
+    ? null
+    : (youtubeVideoId(video.providerVideoId) ?? youtubeVideoId(video.videoUrl))
   const src = youtubeId
-    ? `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&modestbranding=1`
-    : safeMediaUrl(video.videoUrl)
+    ? `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&playsinline=1&controls=0&fs=0`
+    : (streamtapeUrl ?? safeMediaUrl(video.videoUrl))
+  const embeddedVideo = Boolean(youtubeId || streamtapeUrl)
   const playerRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -88,11 +117,11 @@ export default function LessonVideoPlayer({
       <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
         <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
         <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-emerald-50">
-          {youtubeId ? "مشاهدة عبر يوتيوب" : "فيديو الدرس"}
+          فيديو الدرس
         </span>
       </div>
       <div className="aspect-video w-full bg-black">
-        {youtubeId ? (
+        {embeddedVideo ? (
           <iframe
             src={src}
             title={title}
