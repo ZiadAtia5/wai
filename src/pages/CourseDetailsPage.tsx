@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   CircleDollarSign,
   GraduationCap,
   LockKeyhole,
@@ -14,9 +15,10 @@ import {
 
 import { ApiError, getAuthToken, resolveApiAssetUrl } from "../api/client"
 
-import { coursesApi, studentsApi } from "../api/endpoints"
+import { coursesApi, quizzesApi, studentsApi } from "../api/endpoints"
 
 import LessonVideoPlayer from "../components/dashboard/LessonVideoPlayer"
+
 import {
   Skeleton,
   SkeletonButton,
@@ -61,15 +63,221 @@ function list(value: unknown): RecordValue[] {
 
   for (const key of [
     "items",
+
     "modules",
+
     "courseModules",
+
     "lessons",
+
     "enrollments",
   ]) {
     if (Array.isArray(item[key])) return (item[key] as unknown[]).map(record)
   }
 
   return []
+}
+
+function progressRows(value: unknown): RecordValue[] {
+  const result = record(unwrap(value))
+
+  const nested = record(result.courseProgress ?? result.progress)
+
+  const direct = list(
+    result.lessons ??
+      result.lessonProgress ??
+      nested.lessons ??
+      nested.lessonProgress,
+  )
+
+  if (direct.length) return direct
+
+  return list(result.modules ?? nested.modules).flatMap((module) =>
+    list(module.lessons ?? module.courseLessons).map((lesson) => ({
+      ...lesson,
+
+      moduleTitle: module.title ?? module.name,
+    })),
+  )
+}
+
+function isTrue(value: unknown): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    (typeof value === "string" && /^(true|1|yes|completed|done)$/i.test(value))
+  )
+}
+
+function lessonId(lesson: RecordValue): string {
+  const id = lesson.id ?? lesson.lessonId
+
+  return id === undefined || id === null ? "" : String(id)
+}
+
+function lessonCompleted(
+  lesson: RecordValue,
+
+  progressByLesson: Map<string, RecordValue>,
+): boolean {
+  const progress = progressByLesson.get(lessonId(lesson)) ?? {}
+
+  const nested = record(progress.progress ?? progress.lessonProgress)
+
+  return isTrue(
+    progress.isCompleted ??
+      progress.completed ??
+      nested.isCompleted ??
+      nested.completed ??
+      lesson.isCompleted ??
+      lesson.completed,
+  )
+}
+
+function quizPassed(attempt: RecordValue): boolean {
+  return attempt.passed === true || attempt.isPassed === true
+}
+
+function attemptRecords(value: unknown): RecordValue[] {
+  const root = record(value)
+  const records = [root, record(root.data), record(unwrap(value))]
+
+  for (const result of records) {
+    for (const key of ["items", "attempts", "results"]) {
+      const candidate = result[key]
+      if (Array.isArray(candidate)) return candidate.map(record)
+    }
+  }
+
+  if (Array.isArray(value)) return value.map(record)
+  return list(value)
+}
+
+function attemptBelongsToStudent(
+  attempt: RecordValue,
+
+  profile: RecordValue,
+): boolean {
+  const student = record(
+    attempt.student ?? attempt.studentProfile ?? attempt.user,
+  )
+
+  const profileUser = record(profile.user)
+
+  const attemptIds = [
+    attempt.studentId,
+
+    attempt.userId,
+
+    student.id,
+
+    student.studentId,
+
+    student.userId,
+  ]
+
+    .filter((id) => id !== undefined && id !== null)
+
+    .map(String)
+
+  const profileIds = [
+    profile.studentId,
+
+    profile.userId,
+
+    profile.id,
+
+    profileUser.studentId,
+
+    profileUser.id,
+
+    profileUser.userId,
+  ]
+
+    .filter((id) => id !== undefined && id !== null)
+
+    .map(String)
+
+  if (attemptIds.some((id) => profileIds.includes(id))) return true
+
+  const attemptEmail = String(
+    attempt.studentEmail ?? attempt.email ?? student.email ?? "",
+  )
+
+    .trim()
+
+    .toLowerCase()
+
+  const profileEmail = String(profile.email ?? profileUser.email ?? "")
+
+    .trim()
+
+    .toLowerCase()
+
+  return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail)
+}
+
+function passedQuizFromDetails(quiz: RecordValue): boolean | null {
+  for (const key of ["hasPassed", "isPassed"]) {
+    const value = quiz[key]
+
+    if (typeof value === "boolean") return value
+  }
+
+  for (const key of [
+    "myAttempt",
+
+    "currentUserAttempt",
+
+    "currentAttempt",
+  ]) {
+    const attempt = record(quiz[key])
+
+    if (Object.keys(attempt).length) return quizPassed(attempt)
+  }
+
+  for (const key of ["myAttempts", "currentUserAttempts"]) {
+    const attempts = quiz[key]
+
+    if (
+      Array.isArray(attempts) &&
+      attempts.some((attempt) => quizPassed(record(attempt)))
+    )
+      return true
+  }
+
+  return null
+}
+
+async function studentPassedLessonQuiz(
+  lesson: RecordValue,
+
+  profile: RecordValue,
+): Promise<boolean> {
+  const id = lessonId(lesson)
+
+  if (!id) throw new Error("تعذر التعرف على الدرس المرتبط بالاختبار.")
+
+  const response = record(unwrap(await quizzesApi.forLesson(id)))
+
+  const quiz = record(response.quiz ?? response)
+
+  const knownResult = passedQuizFromDetails(quiz)
+
+  if (knownResult !== null) return knownResult
+
+  const quizId = quiz.id ?? quiz.quizId
+
+  if (quizId === undefined || quizId === null)
+    throw new Error("لم يُعِد الخادم بيانات الاختبار المتوقعة.")
+
+  const attemptResponse = await quizzesApi.attempts(String(quizId))
+  const attempts = attemptRecords(attemptResponse)
+
+  return attempts.some(
+    (attempt) =>
+      attemptBelongsToStudent(attempt, profile) && quizPassed(attempt),
+  )
 }
 
 function courseRecord(value: unknown): RecordValue {
@@ -89,17 +297,26 @@ function approvedEnrollment(value: RecordValue): boolean {
   if (value.isApproved === true) return true
 
   const status = String(value.status ?? value.enrollmentStatus ?? "")
+
     .trim()
+
     .toLowerCase()
 
   return [
     "1",
+
     "3",
+
     "approved",
+
     "accepted",
+
     "active",
+
     "enrolled",
+
     "completed",
+
     "complete",
   ].includes(status)
 }
@@ -110,7 +327,9 @@ function enrollmentState(value: RecordValue | undefined): AccessState {
   if (approvedEnrollment(value)) return "approved"
 
   const status = String(value.status ?? value.enrollmentStatus ?? "")
+
     .trim()
+
     .toLowerCase()
 
   if (["2", "rejected", "declined", "cancelled", "canceled"].includes(status))
@@ -234,16 +453,41 @@ export default function CourseDetailsPage({
 
   const [requesting, setRequesting] = useState(false)
 
+  const [lessonProgress, setLessonProgress] = useState(
+    () => new Map<string, RecordValue>(),
+  )
+
+  const [progressVerified, setProgressVerified] = useState(false)
+
+  const [quizPassByLesson, setQuizPassByLesson] =
+    useState<Record<string, boolean>>({})
+
+  const [progressError, setProgressError] = useState("")
+
+  const [savingLessonId, setSavingLessonId] = useState("")
+
+  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null)
+
   async function loadPage(active = () => true) {
     setLoading(true)
 
     setError("")
 
+    setProgressError("")
+
+    setLessonProgress(new Map())
+
+    setProgressVerified(false)
+
+    setQuizPassByLesson({})
+
+    setExpandedLessonId(null)
+
     const token = getAuthToken()
 
-    const role = (
-      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
-    ).toLowerCase()
+    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+
+      .toLowerCase()
 
     let nextAccess: AccessState = !token
       ? "guest"
@@ -257,6 +501,7 @@ export default function CourseDetailsPage({
       try {
         const enrollmentResponse = await studentsApi.enrollments({
           page: 1,
+
           pageSize: 100,
         })
 
@@ -283,14 +528,118 @@ export default function CourseDetailsPage({
     try {
       const response =
         nextAccess === "approved"
-          ? await coursesApi.detail(courseId)
+          ? await studentsApi.courseDetail(courseId)
           : await coursesApi.publicDetail(courseId)
 
       if (!active()) return
 
-      setCourse(courseRecord(response))
+      const loadedCourse = courseRecord(response)
+
+      setCourse(loadedCourse)
 
       setAccess(nextAccess)
+
+      if (nextAccess === "approved") {
+        try {
+          const progressResponse = await studentsApi.courseProgress(courseId)
+
+          if (!active()) return
+
+          const rows = progressRows(progressResponse)
+
+          setProgressVerified(true)
+
+          setLessonProgress(
+            new Map(
+              rows.flatMap((row) => {
+                const nestedLesson = record(row.lesson ?? row.lessonInfo)
+
+                const id = String(
+                  row.lessonId ??
+                    nestedLesson.id ??
+                    nestedLesson.lessonId ??
+                    row.id ??
+                    "",
+                )
+
+                return id ? [[id, row] as const] : []
+              }),
+            ),
+          )
+        } catch {
+          if (!active()) return
+
+          setProgressError(
+            "تعذر تحميل تقدم الدروس. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
+          )
+        }
+
+        const quizLessons = list(
+          loadedCourse.modules ?? loadedCourse.courseModules,
+        ).flatMap((module) =>
+          list(module.lessons ?? module.courseLessons).filter((lesson) =>
+            isTrue(lesson.hasQuiz),
+          ),
+        )
+
+        if (quizLessons.length) {
+          try {
+            const profile = record(unwrap(await studentsApi.me()))
+
+            if (!active()) return
+
+            const results = await Promise.allSettled(
+              quizLessons.map(async (lesson) => ({
+                id: lessonId(lesson),
+
+                passed: await studentPassedLessonQuiz(lesson, profile),
+              })),
+            )
+
+            if (!active()) return
+
+            const passes: Record<string, boolean> = {}
+
+            let quizCheckFailed = false
+
+            results.forEach((result, index) => {
+              const fallbackId = lessonId(quizLessons[index])
+
+              if (result.status === "fulfilled" && result.value.id) {
+                passes[result.value.id] = result.value.passed
+              } else {
+                if (fallbackId) passes[fallbackId] = false
+
+                quizCheckFailed = true
+              }
+            })
+
+            setQuizPassByLesson(passes)
+
+            if (quizCheckFailed) {
+              setProgressError(
+                "تعذر التحقق من اجتياز بعض الاختبارات. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
+              )
+            }
+          } catch {
+            if (!active()) return
+
+            setQuizPassByLesson(
+              Object.fromEntries(
+                quizLessons.flatMap((lesson) => {
+                  const id = lessonId(lesson)
+
+                  return id ? [[id, false]] : []
+                }),
+              ),
+            )
+
+            setProgressError(
+              "تعذر التحقق من الاختبارات. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
+            )
+          }
+        }
+      }
     } catch (cause) {
       if (!active()) return
 
@@ -321,9 +670,9 @@ export default function CourseDetailsPage({
       return
     }
 
-    const role = (
-      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
-    ).toLowerCase()
+    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+
+      .toLowerCase()
 
     if (!role.includes("student")) {
       notifyError(new Error("طلب الالتحاق متاح لحساب الطالب فقط."))
@@ -350,19 +699,64 @@ export default function CourseDetailsPage({
     }
   }
 
+  async function completeLesson(id: string, lastPosition = 0) {
+    if (!id || savingLessonId) return
+
+    setSavingLessonId(id)
+
+    try {
+      await studentsApi.updateLessonProgress(id, {
+        isCompleted: true,
+
+        lastPosition: Math.max(0, Math.floor(lastPosition)),
+      })
+
+      setLessonProgress((current) => {
+        const next = new Map(current)
+        next.set(id, { ...next.get(id), lessonId: id, isCompleted: true })
+        return next
+      })
+      setExpandedLessonId(null)
+      notifySuccess("تم تسجيل إكمال الدرس.")
+    } catch (cause) {
+      notifyError(cause, "تعذر تسجيل إكمال الدرس.")
+    } finally {
+      setSavingLessonId("")
+    }
+  }
+
   const modules = list(course?.modules ?? course?.courseModules)
 
   const lessonCount = modules.reduce(
     (count, module) =>
       count + list(module.lessons ?? module.courseLessons).length,
+
     0,
   )
 
   const canWatch = access === "approved"
 
+  function moduleIsComplete(module: RecordValue): boolean {
+    if (!progressVerified) return false
+    const lessons = list(module.lessons ?? module.courseLessons)
+    return lessons.every((lesson) => {
+      return lessonIsComplete(lesson)
+    })
+  }
+
+  function lessonIsComplete(lesson: RecordValue): boolean {
+    if (!progressVerified || !lessonCompleted(lesson, lessonProgress))
+      return false
+    const id = lessonId(lesson)
+    return (
+      !isTrue(lesson.hasQuiz) || (id !== "" && quizPassByLesson[id] === true)
+    )
+  }
+
   const coverSource = String(
     course?.coverImageUrl ?? course?.thumbnailUrl ?? course?.imageUrl ?? "",
   )
+
   const cover = coverSource ? resolveApiAssetUrl(coverSource) : ""
 
   const subject = String(course?.subjectName ?? course?.subject ?? "")
@@ -465,6 +859,22 @@ export default function CourseDetailsPage({
                   </span>
                 </div>
 
+                {canWatch && progressError && (
+                  <div
+                    role="alert"
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"
+                  >
+                    <p>{progressError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadPage()}
+                      className="mt-2 font-bold underline"
+                    >
+                      إعادة التحقق
+                    </button>
+                  </div>
+                )}
+
                 {modules.length ? (
                   <div className="mt-5 space-y-4">
                     {modules.map((module, moduleIndex) => {
@@ -472,16 +882,37 @@ export default function CourseDetailsPage({
                         module.lessons ?? module.courseLessons,
                       )
 
+                      const locked =
+                        canWatch &&
+                        moduleIndex > 0 &&
+                        !modules.slice(0, moduleIndex).every(moduleIsComplete)
+
+                      const completed = canWatch && moduleIsComplete(module)
+
                       return (
                         <details
                           key={String(module.id ?? moduleIndex)}
-                          open
+                          open={!locked}
                           className="group overflow-hidden rounded-2xl border border-stroke bg-[#fbfdfb]"
                         >
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 sm:p-5">
                             <span className="flex min-w-0 items-center gap-3">
-                              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
-                                <BookOpen size={19} />
+                              <span
+                                className={`grid size-10 shrink-0 place-items-center rounded-xl ${
+                                  locked
+                                    ? "bg-neutral-100 text-neutral-500"
+                                    : completed
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-nuwa-soft text-nuwa-base"
+                                }`}
+                              >
+                                {locked ? (
+                                  <LockKeyhole size={18} />
+                                ) : completed ? (
+                                  <CheckCircle2 size={19} />
+                                ) : (
+                                  <BookOpen size={19} />
+                                )}
                               </span>
                               <span className="min-w-0">
                                 <span className="block text-xs font-semibold text-ink-muted">
@@ -496,81 +927,232 @@ export default function CourseDetailsPage({
                                 </span>
                               </span>
                             </span>
-                            <span className="shrink-0 text-xs text-ink-muted">
-                              {lessons.length} دروس
+                            <span className="shrink-0 text-xs font-semibold text-ink-muted">
+                              {locked
+                                ? "مقفولة"
+                                : completed
+                                  ? "مكتملة"
+                                  : `${lessons.length} دروس`}
                             </span>
                           </summary>
-                          <div className="divide-y divide-stroke border-t border-stroke bg-white px-4 sm:px-5">
-                            {lessons.length ? (
-                              lessons.map((lesson, lessonIndex) => {
-                                const video = videoFromLesson(lesson)
-
-                                return (
-                                  <article
-                                    key={String(
-                                      lesson.id ??
-                                        lesson.lessonId ??
-                                        lessonIndex,
-                                    )}
-                                    className="py-4"
-                                  >
-                                    <div className="flex items-start gap-3">
-                                      <span
-                                        className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${
-                                          canWatch
-                                            ? "bg-emerald-50 text-emerald-700"
-                                            : "bg-neutral-100 text-neutral-500"
-                                        }`}
-                                      >
-                                        {canWatch ? (
-                                          <Play size={16} />
-                                        ) : (
-                                          <LockKeyhole size={16} />
-                                        )}
-                                      </span>
-                                      <div className="min-w-0 flex-1">
-                                        <h3 className="font-bold text-ink">
-                                          {String(
-                                            lesson.title ??
-                                              lesson.name ??
-                                              `الدرس ${lessonIndex + 1}`,
-                                          )}
-                                        </h3>
-                                        {Boolean(lesson.description) && (
-                                          <p className="mt-1 whitespace-pre-line text-sm leading-6 text-ink-muted">
-                                            {String(lesson.description)}
-                                          </p>
-                                        )}
-                                        {!canWatch && (
-                                          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted">
-                                            <LockKeyhole size={13} /> الفيديو
-                                            مقفل حتى قبول طلب الالتحاق
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {canWatch && video && (
-                                      <LessonVideoPlayer
-                                        video={video}
-                                        title={String(
-                                          lesson.title ?? "فيديو الدرس",
-                                        )}
-                                      />
-                                    )}
-                                    {canWatch && !video && (
-                                      <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                        لم يضف المدرّس فيديو لهذا الدرس بعد.
-                                      </p>
-                                    )}
-                                  </article>
-                                )
-                              })
-                            ) : (
-                              <p className="py-5 text-sm text-ink-muted">
-                                لا توجد دروس مضافة لهذه الوحدة حتى الآن.
+                          {locked ? (
+                            <div className="border-t border-stroke bg-white px-4 py-5 text-sm leading-6 text-ink-muted sm:px-5">
+                              <p>
+                                أكمل دروس الوحدة السابقة واجتز اختبارات الدروس
+                                الموجودة فيها لفتح هذه الوحدة.
                               </p>
-                            )}
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() => navigate("dashboard")}
+                                className="mt-3 rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-bold text-nuwa-base"
+                              >
+                                الانتقال إلى لوحة التحكم
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-stroke border-t border-stroke bg-white px-4 sm:px-5">
+                              {lessons.length ? (
+                                lessons.map((lesson, lessonIndex) => {
+                                  const video = videoFromLesson(lesson)
+
+                                  const id = lessonId(lesson)
+
+                                  const lessonLocked =
+                                    canWatch &&
+                                    (locked ||
+                                      (lessonIndex > 0 &&
+                                        !lessons
+                                          .slice(0, lessonIndex)
+                                          .every(lessonIsComplete)))
+
+                                  const completedLesson = lessonCompleted(
+                                    lesson,
+
+                                    lessonProgress,
+                                  )
+
+                                  const completedIncludingQuiz =
+                                    lessonIsComplete(lesson)
+
+                                  const hasQuiz = isTrue(lesson.hasQuiz)
+
+                                  const passedQuiz =
+                                    !hasQuiz || quizPassByLesson[id] === true
+
+                                  const isExpanded =
+                                    expandedLessonId === id && !lessonLocked
+
+                                  return (
+                                    <article
+                                      key={String(id || lessonIndex)}
+                                      className="py-4"
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        <span
+                                          className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${
+                                            lessonLocked
+                                              ? "bg-neutral-100 text-neutral-500"
+                                              : completedIncludingQuiz
+                                                ? "bg-emerald-50 text-emerald-700"
+                                                : "bg-neutral-100 text-neutral-500"
+                                          }`}
+                                        >
+                                          {lessonLocked ? (
+                                            <LockKeyhole size={16} />
+                                          ) : completedIncludingQuiz ? (
+                                            <CheckCircle2 size={16} />
+                                          ) : (
+                                            <Play size={16} />
+                                          )}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            {canWatch ? (
+                                              <button
+                                                type="button"
+                                                disabled={lessonLocked || !id}
+                                                aria-expanded={isExpanded}
+                                                onClick={() =>
+                                                  setExpandedLessonId(
+                                                    isExpanded ? null : id,
+                                                  )
+                                                }
+                                                className="inline-flex items-center gap-2 text-start font-bold text-ink disabled:cursor-not-allowed disabled:opacity-65"
+                                              >
+                                                <span>
+                                                  {String(
+                                                    lesson.title ??
+                                                      lesson.name ??
+                                                      `الدرس ${lessonIndex + 1}`,
+                                                  )}
+                                                </span>
+                                                {lessonLocked ? (
+                                                  <LockKeyhole
+                                                    size={15}
+                                                    aria-hidden="true"
+                                                  />
+                                                ) : (
+                                                  <ChevronDown
+                                                    size={16}
+                                                    className={`transition-transform ${
+                                                      isExpanded
+                                                        ? "rotate-180"
+                                                        : ""
+                                                    }`}
+                                                    aria-hidden="true"
+                                                  />
+                                                )}
+                                              </button>
+                                            ) : (
+                                              <h3 className="font-bold text-ink">
+                                                {String(
+                                                  lesson.title ??
+                                                    lesson.name ??
+                                                    `الدرس ${lessonIndex + 1}`,
+                                                )}
+                                              </h3>
+                                            )}
+                                            {completedLesson && (
+                                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                                مكتمل
+                                              </span>
+                                            )}
+                                            {hasQuiz && passedQuiz && (
+                                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                                تم اجتياز الاختبار
+                                              </span>
+                                            )}
+                                          </div>
+                                          {lessonLocked && (
+                                            <p className="mt-2 text-xs leading-5 text-ink-muted">
+                                              أكمل الدرس السابق واجتز اختباره إن
+                                              وُجد لفتح هذا الدرس.
+                                            </p>
+                                          )}
+                                          {Boolean(lesson.description) && (
+                                            <p className="mt-1 whitespace-pre-line text-sm leading-6 text-ink-muted">
+                                              {String(lesson.description)}
+                                            </p>
+                                          )}
+                                          {hasQuiz && !passedQuiz && (
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                              <span className="text-xs text-amber-800">
+                                                اجتز اختبار هذا الدرس من لوحة
+                                                التحكم لفتح الوحدة التالية.
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  navigate("dashboard")
+                                                }
+                                                className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-bold text-nuwa-base"
+                                              >
+                                                الذهاب للاختبار
+                                              </button>
+                                            </div>
+                                          )}
+                                          {!canWatch && (
+                                            <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                                              <LockKeyhole size={13} /> الفيديو
+                                              مقفل حتى قبول طلب الالتحاق
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {isExpanded && (
+                                        <div className="mt-3 border-t border-stroke pt-4">
+                                          {video ? (
+                                            <LessonVideoPlayer
+                                              video={video}
+                                              title={String(
+                                                lesson.title ?? "فيديو الدرس",
+                                              )}
+                                              onEnded={(seconds) =>
+                                                void completeLesson(id, seconds)
+                                              }
+                                            />
+                                          ) : (
+                                            <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                              لم يضف المدرّس فيديو لهذا الدرس
+                                              بعد.
+                                            </p>
+                                          )}
+                                          {id && (
+                                            <button
+                                              type="button"
+                                              disabled={
+                                                completedLesson ||
+                                                savingLessonId === id
+                                              }
+                                              onClick={() =>
+                                                void completeLesson(
+                                                  id,
+                                                  Number(
+                                                    lesson.lastPosition ?? 0,
+                                                  ),
+                                                )
+                                              }
+                                              className="mt-3 rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:cursor-default disabled:opacity-60"
+                                            >
+                                              {savingLessonId === id
+                                                ? "جارٍ الحفظ..."
+                                                : completedLesson
+                                                  ? "تم إكمال الدرس"
+                                                  : "تحديد الدرس كمكتمل"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </article>
+                                  )
+                                })
+                              ) : (
+                                <p className="py-5 text-sm text-ink-muted">
+                                  لا توجد دروس مضافة لهذه الوحدة حتى الآن.
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </details>
                       )
                     })}

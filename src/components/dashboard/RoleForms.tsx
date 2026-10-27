@@ -25,7 +25,6 @@ import {
   studentsApi,
   subjectsApi,
   teachersApi,
-  coursesApi,
   type ApiObject,
 } from "../../api/endpoints"
 
@@ -427,7 +426,7 @@ async function loadStudentCourseProgress(
 ): Promise<RecordValue> {
   const [progressResult, courseResult] = await Promise.allSettled([
     studentsApi.courseProgress(courseId),
-    coursesApi.detail(courseId),
+    studentsApi.courseDetail(courseId),
   ])
 
   if (progressResult.status === "rejected") throw progressResult.reason
