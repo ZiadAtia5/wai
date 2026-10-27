@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   ImagePlus,
+  LoaderCircle,
   Pencil,
   Plus,
   Trash2,
@@ -32,8 +33,11 @@ import TeacherCourseContent from "./TeacherCourseContent"
 import LessonVideoPlayer from "./LessonVideoPlayer"
 
 import { useConfirmation } from "../ConfirmationProvider"
+import { formatEgp } from "../../utils/currency"
 
 import ProfileImageEditor from "./ProfileImageEditor"
+import FileUploadField from "./FileUploadField"
+import ImageCropDialog from "../ImageCropDialog"
 
 import PersonAvatar from "../PersonAvatar"
 import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
@@ -80,7 +84,8 @@ function courseIsPublished(course: RecordValue): boolean {
   if (status === "0" || status === "2") return false
   if (/draft|unpublish|not.?publish/.test(status)) return false
   if (/publish|public|live/.test(status)) return true
-  if (course.publishedAt != null && String(course.publishedAt).trim()) return true
+  if (course.publishedAt != null && String(course.publishedAt).trim())
+    return true
   return false
 }
 
@@ -361,7 +366,9 @@ function mergeCourseContentWithProgress(
   const course = courseCandidates[0] ?? asRecord(unwrapApiResponse(courseValue))
   const alternateLessons = new Map<string, RecordValue>()
   for (const alternate of courseCandidates.slice(1)) {
-    for (const module of listFrom(alternate.modules ?? alternate.courseModules)) {
+    for (const module of listFrom(
+      alternate.modules ?? alternate.courseModules,
+    )) {
       for (const lesson of listFrom(module.lessons ?? module.courseLessons)) {
         const id = String(lesson.id ?? lesson.lessonId ?? "")
         if (id) alternateLessons.set(id, lesson)
@@ -370,30 +377,40 @@ function mergeCourseContentWithProgress(
   }
   const progressRows = progressLessons(progress)
   const progressById = new Map(
-    progressRows.map((lesson) => [String(lesson.lessonId ?? lesson.id ?? ""), lesson]),
+    progressRows.map((lesson) => [
+      String(lesson.lessonId ?? lesson.id ?? ""),
+      lesson,
+    ]),
   )
-  const modules = listFrom(course.modules ?? course.courseModules).map((module) => ({
-    ...module,
-    lessons: listFrom(module.lessons ?? module.courseLessons).map((lesson) => {
-      const id = String(lesson.id ?? lesson.lessonId ?? "")
-      const supplementalLesson = alternateLessons.get(id) ?? {}
-      const combinedLesson = { ...supplementalLesson, ...lesson }
-      const savedProgress = progressById.get(id) ?? {}
-      const lessonVideo =
-        getLessonVideo(lesson) ?? getLessonVideo(supplementalLesson)
-      return {
-        ...combinedLesson,
-        ...savedProgress,
-        id: combinedLesson.id ?? combinedLesson.lessonId,
-        lessonId: combinedLesson.id ?? combinedLesson.lessonId,
-        title: combinedLesson.title ?? combinedLesson.name ?? savedProgress.title,
-        video: lessonVideo,
-        moduleTitle: module.title ?? module.name,
-        isCompleted: Boolean(savedProgress.isCompleted),
-        lastPosition: Number(savedProgress.lastPosition ?? 0),
-      }
+  const modules = listFrom(course.modules ?? course.courseModules).map(
+    (module) => ({
+      ...module,
+      lessons: listFrom(module.lessons ?? module.courseLessons).map(
+        (lesson) => {
+          const id = String(lesson.id ?? lesson.lessonId ?? "")
+          const supplementalLesson = alternateLessons.get(id) ?? {}
+          const combinedLesson = { ...supplementalLesson, ...lesson }
+          const savedProgress = progressById.get(id) ?? {}
+          const lessonVideo =
+            getLessonVideo(lesson) ?? getLessonVideo(supplementalLesson)
+          return {
+            ...combinedLesson,
+            ...savedProgress,
+            id: combinedLesson.id ?? combinedLesson.lessonId,
+            lessonId: combinedLesson.id ?? combinedLesson.lessonId,
+            title:
+              combinedLesson.title ??
+              combinedLesson.name ??
+              savedProgress.title,
+            video: lessonVideo,
+            moduleTitle: module.title ?? module.name,
+            isCompleted: Boolean(savedProgress.isCompleted),
+            lastPosition: Number(savedProgress.lastPosition ?? 0),
+          }
+        },
+      ),
     }),
-  }))
+  )
   const lessons = modules.flatMap((module) => listFrom(module.lessons))
   const availableLessons = lessons.length
     ? lessons
@@ -419,8 +436,8 @@ async function loadStudentCourseProgress(
     courseResult.status === "fulfilled" &&
     Object.keys(findCourseContent(courseResult.value)).length > 0
       ? courseResult.value
-      : enrollmentCourse ??
-        (courseResult.status === "fulfilled" ? courseResult.value : null)
+      : (enrollmentCourse ??
+        (courseResult.status === "fulfilled" ? courseResult.value : null))
   const merged = mergeCourseContentWithProgress(
     progressResult.value,
     detailSource,
@@ -429,12 +446,15 @@ async function loadStudentCourseProgress(
 
   if (
     progressLessons(merged).length > 0 &&
-    !listFrom(merged.modules).some((module) => listFrom(module.lessons).length > 0)
+    !listFrom(merged.modules).some(
+      (module) => listFrom(module.lessons).length > 0,
+    )
   ) {
     return {
       ...merged,
       contentLoadError:
-        courseResult.status === "rejected" && courseResult.reason instanceof Error
+        courseResult.status === "rejected" &&
+        courseResult.reason instanceof Error
           ? courseResult.reason.message
           : "الخادم أعاد تقدم الطالب دون تفاصيل وحدات الدورة ودروسها.",
     }
@@ -473,7 +493,11 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
     }
   }
 
-  if (value === "0" || isApproved === false || /pending|await|review/.test(value)) {
+  if (
+    value === "0" ||
+    isApproved === false ||
+    /pending|await|review/.test(value)
+  ) {
     return {
       label: "بانتظار موافقة المعلم",
 
@@ -493,7 +517,11 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
     }
   }
 
-  if (value === "1" || isApproved === true || /approv|active|accept|enroll/.test(value)) {
+  if (
+    value === "1" ||
+    isApproved === true ||
+    /approv|active|accept|enroll/.test(value)
+  ) {
     return {
       label: "مشترك",
 
@@ -561,16 +589,15 @@ function hasSubmittedAttempt(quiz: RecordValue): boolean {
   }
 
   const attempt = asRecord(
-    quiz.myAttempt ??
-      quiz.currentUserAttempt ??
-      quiz.currentAttempt,
+    quiz.myAttempt ?? quiz.currentUserAttempt ?? quiz.currentAttempt,
   )
 
   return isSubmittedAttempt(attempt)
 }
 
 function isSubmittedAttempt(attempt: RecordValue): boolean {
-  if (!Object.keys(attempt).length || attempt.isSubmitted === false) return false
+  if (!Object.keys(attempt).length || attempt.isSubmitted === false)
+    return false
   if (
     attempt.isSubmitted === true ||
     attempt.submittedAt != null ||
@@ -617,10 +644,12 @@ function attemptBelongsToStudent(
 
   const attemptEmail = String(
     attempt.studentEmail ?? attempt.email ?? student.email ?? "",
-  ).trim().toLowerCase()
-  const profileEmail = String(
-    profile.email ?? profileUser.email ?? "",
-  ).trim().toLowerCase()
+  )
+    .trim()
+    .toLowerCase()
+  const profileEmail = String(profile.email ?? profileUser.email ?? "")
+    .trim()
+    .toLowerCase()
 
   return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail)
 }
@@ -674,7 +703,9 @@ function AcademicYearsChecklist({
       {disabled && years.length === 0 ? (
         <span className="text-xs text-ink-muted">جارٍ تحميل الصفوف...</span>
       ) : years.length === 0 ? (
-        <span className="text-xs text-ink-muted">لا توجد صفوف دراسية متاحة.</span>
+        <span className="text-xs text-ink-muted">
+          لا توجد صفوف دراسية متاحة.
+        </span>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {years.map((year) => (
@@ -736,7 +767,9 @@ export default function RoleForms({
 
   const [editingAdminName, setEditingAdminName] = useState(false)
 
-  const [adminNameOverride, setAdminNameOverride] = useState<string | null>(null)
+  const [adminNameOverride, setAdminNameOverride] = useState<string | null>(
+    null,
+  )
 
   const [profileImageOverride, setProfileImageOverride] =
     useState<string | null>(null)
@@ -754,6 +787,12 @@ export default function RoleForms({
   const [isCourseFree, setIsCourseFree] = useState(false)
 
   const [busy, setBusy] = useState(false)
+  const [coverCrop, setCoverCrop] = useState<{
+    courseId: string
+    file: File
+  } | null>(null)
+  const [uploadingCoverCourseId, setUploadingCoverCourseId] =
+    useState<string | null>(null)
 
   const [deletedCourseIds, setDeletedCourseIds] = useState<Set<string>>(
     () => new Set(),
@@ -762,9 +801,8 @@ export default function RoleForms({
   const [publishedOverrides, setPublishedOverrides] =
     useState<Record<string, boolean>>({})
 
-  const [teacherCourseFilter, setTeacherCourseFilter] = useState<
-    "all" | "published" | "draft"
-  >( "all")
+  const [teacherCourseFilter, setTeacherCourseFilter] =
+    useState<"all" | "published" | "draft">("all")
 
   const [editingCourse, setEditingCourse] = useState<RecordValue | null>(null)
 
@@ -859,11 +897,11 @@ export default function RoleForms({
     return publishedOverrides[id] ?? courseIsPublished(course)
   }
 
-  const visibleTeacherCourses = teacherCourses.filter((course) =>
-    teacherCourseFilter === "all" ||
-    (getTeacherCoursePublished(course)
-      ? "published"
-      : "draft") === teacherCourseFilter,
+  const visibleTeacherCourses = teacherCourses.filter(
+    (course) =>
+      teacherCourseFilter === "all" ||
+      (getTeacherCoursePublished(course) ? "published" : "draft") ===
+        teacherCourseFilter,
   )
 
   useEffect(() => {
@@ -970,14 +1008,13 @@ export default function RoleForms({
 
       bio: String(form.get("bio") ?? "").trim(),
 
+      specialization: String(form.get("specialization") ?? "").trim(),
+
       academicYears,
     }
 
     if (
-      await mutate(
-        () => adminApi.createTeacher(body),
-        "تم إنشاء حساب المعلم.",
-      )
+      await mutate(() => adminApi.createTeacher(body), "تم إنشاء حساب المعلم.")
     ) {
       formElement.reset()
       setAddingTeacher(false)
@@ -1008,6 +1045,8 @@ export default function RoleForms({
 
       bio: String(form.get("bio") ?? "").trim(),
 
+      specialization: String(form.get("specialization") ?? "").trim(),
+
       academicYears,
     }
 
@@ -1026,7 +1065,9 @@ export default function RoleForms({
     event.preventDefault()
 
     if (!selectedSubjectId || selectedSubjectId === "__add_new__") {
-      onFeedback("Ø§Ø®ØªØ± Ø§Ù„Ù…Ø§Ø¯Ø© Ø£Ùˆ Ø£Ø¶ÙÙ‡Ø§ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¯ÙˆØ±Ø©.")
+      onFeedback(
+        "Ø§Ø®ØªØ± Ø§Ù„Ù…Ø§Ø¯Ø© Ø£Ùˆ Ø£Ø¶ÙÙ‡Ø§ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¯ÙˆØ±Ø©.",
+      )
       return
     }
 
@@ -1065,29 +1106,29 @@ export default function RoleForms({
 
     const existing = subjects.find(
       (subject) =>
-        String(subject.name ?? subject.title ?? "").trim().toLocaleLowerCase() ===
-        name.toLocaleLowerCase() &&
+        String(subject.name ?? subject.title ?? "")
+          .trim()
+          .toLocaleLowerCase() === name.toLocaleLowerCase() &&
         Number(subject.academicYear ?? subject.academicYearId) === academicYear,
     )
     if (existing?.id !== undefined) {
       setSelectedSubjectId(String(existing.id))
       setAddingSubject(false)
-      onFeedback("Ø§Ù„Ù…Ø§Ø¯Ø© Ù…ÙˆØ¬ÙˆØ¯Ø© Ø¨Ø§Ù„ÙØ¹Ù„ØŒ ØªÙ… Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§.")
+      onFeedback(
+        "Ø§Ù„Ù…Ø§Ø¯Ø© Ù…ÙˆØ¬ÙˆØ¯Ø© Ø¨Ø§Ù„ÙØ¹Ù„ØŒ ØªÙ… Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§.",
+      )
       return
     }
 
     let createResponse: unknown
-    const created = await mutate(
-      async () => {
-        createResponse = await adminApi.createSubject({
-          name,
-          academicYear,
-          isActive: true,
-        })
-        return createResponse
-      },
-      "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©.",
-    )
+    const created = await mutate(async () => {
+      createResponse = await adminApi.createSubject({
+        name,
+        academicYear,
+        isActive: true,
+      })
+      return createResponse
+    }, "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©.")
     if (!created) return
 
     setNewSubjectName("")
@@ -1097,14 +1138,20 @@ export default function RoleForms({
       setSubjects(refreshed)
       const createdSubject = refreshed.find(
         (subject) =>
-          String(subject.name ?? subject.title ?? "").trim().toLocaleLowerCase() ===
-            name.toLocaleLowerCase() &&
-          Number(subject.academicYear ?? subject.academicYearId) === academicYear,
+          String(subject.name ?? subject.title ?? "")
+            .trim()
+            .toLocaleLowerCase() === name.toLocaleLowerCase() &&
+          Number(subject.academicYear ?? subject.academicYearId) ===
+            academicYear,
       )
       const response = asRecord(unwrapApiResponse(createResponse))
-      const id = createdSubject?.id ?? response.id ?? asRecord(response.subject).id
+      const id =
+        createdSubject?.id ?? response.id ?? asRecord(response.subject).id
       if (id !== undefined) setSelectedSubjectId(String(id))
-      else onFeedback("ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©ØŒ Ù„ÙƒÙ† Ø£Ø¹Ø¯ Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§ Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.")
+      else
+        onFeedback(
+          "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©ØŒ Ù„ÙƒÙ† Ø£Ø¹Ø¯ Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§ Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.",
+        )
     } catch (cause) {
       onFeedback(
         cause instanceof Error
@@ -1150,14 +1197,16 @@ export default function RoleForms({
     event.preventDefault()
 
     const file = new FormData(event.currentTarget).get("file")
+    event.currentTarget.reset()
 
     if (!(file instanceof File) || !file.size) return
 
-    await mutate(
-      () => teachersApi.uploadCourseCover(courseId, file),
+    if (!file.type.startsWith("image/")) {
+      onFeedback("اختر ملف صورة صالحًا.")
+      return
+    }
 
-      "تم تحديث غلاف الدورة.",
-    )
+    setCoverCrop({ courseId, file })
   }
 
   async function updateProfile(event: FormEvent<HTMLFormElement>) {
@@ -1232,37 +1281,40 @@ export default function RoleForms({
     }
   }
 
-  const openProgress = useCallback(async (courseId: string, enrollmentCourse?: unknown) => {
-    setProgressCourse(courseId)
+  const openProgress = useCallback(
+    async (courseId: string, enrollmentCourse?: unknown) => {
+      setProgressCourse(courseId)
 
-    setProgress(null)
+      setProgress(null)
 
-    setProgressError(null)
+      setProgressError(null)
 
-    setProgressLoading(true)
+      setProgressLoading(true)
 
-    setActiveQuizLesson(null)
+      setActiveQuizLesson(null)
 
-    setQuiz(null)
+      setQuiz(null)
 
-    setQuizError(null)
+      setQuizError(null)
 
-    setQuizValidationError(null)
+      setQuizValidationError(null)
 
-    setQuizSubmitted(false)
+      setQuizSubmitted(false)
 
-    setQuizAnswers({})
+      setQuizAnswers({})
 
-    try {
-      setProgress(await loadStudentCourseProgress(courseId, enrollmentCourse))
-    } catch (cause) {
-      setProgressError(
-        cause instanceof Error ? cause.message : "تعذر تحميل تقدم الدورة.",
-      )
-    } finally {
-      setProgressLoading(false)
-    }
-  }, [])
+      try {
+        setProgress(await loadStudentCourseProgress(courseId, enrollmentCourse))
+      } catch (cause) {
+        setProgressError(
+          cause instanceof Error ? cause.message : "تعذر تحميل تقدم الدورة.",
+        )
+      } finally {
+        setProgressLoading(false)
+      }
+    },
+    [],
+  )
 
   async function toggleLesson(lesson: RecordValue) {
     const lessonId = lesson.lessonId ?? asRecord(lesson.lesson).id ?? lesson.id
@@ -1301,7 +1353,11 @@ export default function RoleForms({
     }
   }
 
-  async function saveVideoPosition(lessonId: string, seconds: number, completed = false) {
+  async function saveVideoPosition(
+    lessonId: string,
+    seconds: number,
+    completed = false,
+  ) {
     try {
       const lastPosition = Math.max(0, Math.floor(seconds))
       await studentsApi.updateLessonProgress(lessonId, {
@@ -1312,13 +1368,21 @@ export default function RoleForms({
         if (!current) return current
         const lessons = progressLessons(current).map((lesson) =>
           String(lesson.lessonId ?? lesson.id ?? "") === lessonId
-            ? { ...lesson, lessonId, id: lessonId, isCompleted: completed || lesson.isCompleted, lastPosition }
+            ? {
+                ...lesson,
+                lessonId,
+                id: lessonId,
+                isCompleted: completed || lesson.isCompleted,
+                lastPosition,
+              }
             : lesson,
         )
         return { ...current, lessons }
       })
     } catch (cause) {
-      onFeedback(cause instanceof Error ? cause.message : "تعذر حفظ تقدم مشاهدة الدرس.")
+      onFeedback(
+        cause instanceof Error ? cause.message : "تعذر حفظ تقدم مشاهدة الدرس.",
+      )
     }
   }
 
@@ -1627,6 +1691,14 @@ export default function RoleForms({
               نبذة
               <input name="bio" className={fieldClass} />
             </label>
+            <label className={labelClass}>
+              التخصص
+              <input
+                name="specialization"
+                placeholder="مثال: رياضيات"
+                className={fieldClass}
+              />
+            </label>
             <AcademicYearsChecklist years={years} disabled={yearsLoading} />
             <button
               disabled={busy || yearsLoading || !years.length}
@@ -1641,178 +1713,199 @@ export default function RoleForms({
         ) : (
           <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {listFrom(data).map((teacher) => {
-            const isEditingTeacher =
-              editingTeacher &&
-              String(editingTeacher.id) === String(teacher.id)
-            const teacherDetails = isEditingTeacher ? editingTeacher : teacher
+              const isEditingTeacher =
+                editingTeacher &&
+                String(editingTeacher.id) === String(teacher.id)
+              const teacherDetails = isEditingTeacher ? editingTeacher : teacher
 
-            return (
-            <article
-              key={String(teacher.id)}
-              className="rounded-[24px] border border-stroke bg-white p-5 text-sm shadow-nuwa transition hover:-translate-y-0.5 hover:shadow-nuwa-md"
-            >
-              {isEditingTeacher && editingTeacher && (
-                  <form
-                    ref={teacherEditorRef}
-                    onSubmit={(event) => void updateTeacher(event)}
-                    className="scroll-mt-6 mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
-                  >
-                    <h3 className="sm:col-span-2 font-bold text-ink">
-                      تعديل بيانات المعلم
-                    </h3>
-                    <label className={labelClass}>
-                      الاسم الأول
-                      <input
-                        name="firstName"
-                        required
-                        defaultValue={String(editingTeacher.firstName ?? "")}
-                        className={fieldClass}
-                      />
-                    </label>
-                    <label className={labelClass}>
-                      اسم العائلة
-                      <input
-                        name="lastName"
-                        required
-                        defaultValue={String(editingTeacher.lastName ?? "")}
-                        className={fieldClass}
-                      />
-                    </label>
-                    <label className={labelClass}>
-                      رقم الهاتف
-                      <input
-                        name="phoneNumber"
-                        type="tel"
-                        required
-                        defaultValue={String(editingTeacher.phoneNumber ?? "")}
-                        className={fieldClass}
-                      />
-                    </label>
-                    <label className={labelClass}>
-                      نبذة
-                      <input
-                        name="bio"
-                        defaultValue={String(editingTeacher.bio ?? "")}
-                        className={fieldClass}
-                      />
-                    </label>
-                    <AcademicYearsChecklist
-                      years={years}
-                      disabled={yearsLoading}
-                      selectedValues={editingTeacher.academicYears}
-                    />
-                    <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                      <button
-                        disabled={busy}
-                        className="rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                      >
-                        حفظ بيانات المعلم
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingTeacher(null)}
-                        className="rounded-lg border border-stroke px-4 py-2.5 text-sm"
-                      >
-                        إلغاء
-                      </button>
-                    </div>
-                  </form>
-                )}
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <PersonAvatar
-                  name={String(
-                    teacher.fullName ?? teacher.name ?? teacher.email ?? "مدرس",
-                  )}
-                  imageUrl={String(
-                    teacher.avatarUrl ??
-                      teacher.profileImageUrl ??
-                      teacher.imageUrl ??
-                      "",
-                  )}
-                  size="lg"
-                  status={teacher.isActive === true ? "active" : undefined}
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (
-                      editingTeacher &&
-                      String(editingTeacher.id) === String(teacher.id)
-                    ) {
-                      setEditingTeacher(null)
-                      return
-                    }
-                    try {
-                      setEditingTeacher(
-                        asRecord(await adminApi.teacher(String(teacher.id))),
-                      )
-                    } catch (cause) {
-                      onFeedback(
-                        cause instanceof Error
-                          ? cause.message
-                          : "تعذر تحميل بيانات المعلم.",
-                      )
-                    }
-                  }}
-                  className="inline-flex max-w-[60%] shrink-0 items-center gap-2 rounded-xl border border-nuwa-base/20 bg-nuwa-ice px-3 py-2 text-xs font-semibold text-nuwa-deep transition hover:bg-nuwa-soft sm:max-w-none"
+              return (
+                <article
+                  key={String(teacher.id)}
+                  className="rounded-[24px] border border-stroke bg-white p-5 text-sm shadow-nuwa transition hover:-translate-y-0.5 hover:shadow-nuwa-md"
                 >
-                  <Pencil size={14} />
-                  {isEditingTeacher
-                    ? "إغلاق التعديل"
-                    : "تعديل المعلم"}
-                </button>
-              </div>
-              <h3 className="font-bold text-ink">
-                {String(
-                  teacher.fullName ??
-                    teacher.name ??
-                    teacher.email ??
-                    teacher.id,
-                )}
-              </h3>
-              {teacherDetails.email != null &&
-                String(teacherDetails.email).trim() !== "" && (
-                <p className="mt-1 break-all text-xs text-ink-muted">
-                  {String(teacherDetails.email)}
-                </p>
-              )}
-              {teacherDetails.phoneNumber != null &&
-                String(teacherDetails.phoneNumber).trim() !== "" && (
-                <p className="mt-1 text-xs text-ink-muted">
-                  {String(teacherDetails.phoneNumber)}
-                </p>
-              )}
-              {teacherDetails.bio != null &&
-                String(teacherDetails.bio).trim() !== "" && (
-                <p className="mt-3 line-clamp-3 text-xs leading-6 text-ink-muted">
-                  {String(teacherDetails.bio)}
-                </p>
-              )}
-              {Array.isArray(teacherDetails.academicYears) &&
-                teacherDetails.academicYears.length > 0 && (
-                  <p className="mt-2 text-xs text-ink-muted">
-                    الصفوف: {teacherDetails.academicYears
-                      .map((year) =>
-                        typeof year === "object" && year !== null
-                          ? String(
-                              (year as RecordValue).arabicName ??
-                                (year as RecordValue).name ??
-                                (year as RecordValue).value ??
-                                "",
-                            )
-                          : String(year),
-                      )
-                      .filter(Boolean)
-                      .join("، ")}
-                  </p>
-                )}
-              <span className="mt-3 inline-flex rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
-                {String(
-                  teacher.subjectName ?? teacher.specialization ?? "حساب مدرس",
-                )}
-              </span>
-            </article>
-            )
+                  {isEditingTeacher && editingTeacher && (
+                    <form
+                      ref={teacherEditorRef}
+                      onSubmit={(event) => void updateTeacher(event)}
+                      className="scroll-mt-6 mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
+                    >
+                      <h3 className="sm:col-span-2 font-bold text-ink">
+                        تعديل بيانات المعلم
+                      </h3>
+                      <label className={labelClass}>
+                        الاسم الأول
+                        <input
+                          name="firstName"
+                          required
+                          defaultValue={String(editingTeacher.firstName ?? "")}
+                          className={fieldClass}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        اسم العائلة
+                        <input
+                          name="lastName"
+                          required
+                          defaultValue={String(editingTeacher.lastName ?? "")}
+                          className={fieldClass}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        رقم الهاتف
+                        <input
+                          name="phoneNumber"
+                          type="tel"
+                          required
+                          defaultValue={String(
+                            editingTeacher.phoneNumber ?? "",
+                          )}
+                          className={fieldClass}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        نبذة
+                        <input
+                          name="bio"
+                          defaultValue={String(editingTeacher.bio ?? "")}
+                          className={fieldClass}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        التخصص
+                        <input
+                          name="specialization"
+                          defaultValue={String(
+                            editingTeacher.specialization ??
+                              editingTeacher.subjectName ??
+                              "",
+                          )}
+                          placeholder="مثال: رياضيات"
+                          className={fieldClass}
+                        />
+                      </label>
+                      <AcademicYearsChecklist
+                        years={years}
+                        disabled={yearsLoading}
+                        selectedValues={editingTeacher.academicYears}
+                      />
+                      <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                        <button
+                          disabled={busy}
+                          className="rounded-lg bg-nuwa-base px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          حفظ بيانات المعلم
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTeacher(null)}
+                          className="rounded-lg border border-stroke px-4 py-2.5 text-sm"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <PersonAvatar
+                      name={String(
+                        teacher.fullName ??
+                          teacher.name ??
+                          teacher.email ??
+                          "مدرس",
+                      )}
+                      imageUrl={String(
+                        teacher.avatarUrl ??
+                          teacher.profileImageUrl ??
+                          teacher.imageUrl ??
+                          "",
+                      )}
+                      size="lg"
+                      status={teacher.isActive === true ? "active" : undefined}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (
+                          editingTeacher &&
+                          String(editingTeacher.id) === String(teacher.id)
+                        ) {
+                          setEditingTeacher(null)
+                          return
+                        }
+                        try {
+                          setEditingTeacher(
+                            asRecord(
+                              await adminApi.teacher(String(teacher.id)),
+                            ),
+                          )
+                        } catch (cause) {
+                          onFeedback(
+                            cause instanceof Error
+                              ? cause.message
+                              : "تعذر تحميل بيانات المعلم.",
+                          )
+                        }
+                      }}
+                      className="inline-flex max-w-[60%] shrink-0 items-center gap-2 rounded-xl border border-nuwa-base/20 bg-nuwa-ice px-3 py-2 text-xs font-semibold text-nuwa-deep transition hover:bg-nuwa-soft sm:max-w-none"
+                    >
+                      <Pencil size={14} />
+                      {isEditingTeacher ? "إغلاق التعديل" : "تعديل المعلم"}
+                    </button>
+                  </div>
+                  <h3 className="font-bold text-ink">
+                    {String(
+                      teacher.fullName ??
+                        teacher.name ??
+                        teacher.email ??
+                        teacher.id,
+                    )}
+                  </h3>
+                  {teacherDetails.email != null &&
+                    String(teacherDetails.email).trim() !== "" && (
+                      <p className="mt-1 break-all text-xs text-ink-muted">
+                        {String(teacherDetails.email)}
+                      </p>
+                    )}
+                  {teacherDetails.phoneNumber != null &&
+                    String(teacherDetails.phoneNumber).trim() !== "" && (
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {String(teacherDetails.phoneNumber)}
+                      </p>
+                    )}
+                  {teacherDetails.bio != null &&
+                    String(teacherDetails.bio).trim() !== "" && (
+                      <p className="mt-3 line-clamp-3 text-xs leading-6 text-ink-muted">
+                        {String(teacherDetails.bio)}
+                      </p>
+                    )}
+                  {Array.isArray(teacherDetails.academicYears) &&
+                    teacherDetails.academicYears.length > 0 && (
+                      <p className="mt-2 text-xs text-ink-muted">
+                        الصفوف:{" "}
+                        {teacherDetails.academicYears
+                          .map((year) =>
+                            typeof year === "object" && year !== null
+                              ? String(
+                                  (year as RecordValue).arabicName ??
+                                    (year as RecordValue).name ??
+                                    (year as RecordValue).value ??
+                                    "",
+                                )
+                              : String(year),
+                          )
+                          .filter(Boolean)
+                          .join("، ")}
+                      </p>
+                    )}
+                  <span className="mt-3 inline-flex rounded-full bg-nuwa-soft px-3 py-1 text-xs font-semibold text-nuwa-deep">
+                    {String(
+                      teacher.subjectName ??
+                        teacher.specialization ??
+                        "التخصص غير محدد",
+                    )}
+                  </span>
+                </article>
+              )
             })}
           </div>
         )}
@@ -1845,163 +1938,182 @@ export default function RoleForms({
               onClick={() => setIsCreatingCourse((open) => !open)}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-nuwa-base px-5 text-sm font-bold text-white shadow-sm transition hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-base focus-visible:ring-offset-2"
             >
-              <Plus size={17} className={isCreatingCourse ? "rotate-45 transition-transform" : "transition-transform"} />
+              <Plus
+                size={17}
+                className={
+                  isCreatingCourse
+                    ? "rotate-45 transition-transform"
+                    : "transition-transform"
+                }
+              />
               {isCreatingCourse ? "إخفاء النموذج" : "إضافة دورة"}
             </button>
           </div>
           {isCreatingCourse && (
-          <form
-            onSubmit={(event) => void createCourse(event)}
-            className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"
-          >
-            <label className={labelClass}>
-              عنوان الدورة
-              <input
-                name="title"
-                required
-                maxLength={160}
-                aria-label="عنوان الدورة كما سيظهر للطلاب"
-                placeholder="مثال: أساسيات الرياضيات"
-                className={fieldClass}
-              />
-            </label>
-            <label className={`${labelClass} sm:col-span-2`}>
-              وصف الدورة
-              <textarea
-                name="description"
-                required
-                maxLength={2000}
-                rows={2}
-                aria-label="نبذة عن محتوى الدورة وما سيتعلمه الطالب"
-                placeholder="اكتب نبذة تساعد الطالب على معرفة محتوى الدورة"
-                className="w-full resize-y rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
-              />
-            </label>
-            <label className={labelClass}>
-              المادة
-              <select
-                name="subjectId"
-                required
-                aria-label="المادة الدراسية للدورة"
-                className={fieldClass}
-                value={addingSubject ? "__add_new__" : selectedSubjectId}
-                onChange={(event) => {
-                  const value = event.currentTarget.value
-                  if (value === "__add_new__") {
-                    setAddingSubject(true)
-                    setSelectedSubjectId("")
-                    setNewSubjectYear((current) => current || String(years[0]?.value ?? ""))
-                    return
-                  }
-                  setAddingSubject(false)
-                  setSelectedSubjectId(value)
-                }}
-              >
-                <option value="" disabled>
-                  {subjects.length ? "اختر المادة" : "لا توجد مواد متاحة"}
-                </option>
-                {subjects.map((subject) => (
-                  <option key={String(subject.id)} value={String(subject.id)}>
-                    {String(subject.name ?? subject.title ?? subject.id)}
+            <form
+              onSubmit={(event) => void createCourse(event)}
+              className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"
+            >
+              <label className={labelClass}>
+                عنوان الدورة
+                <input
+                  name="title"
+                  required
+                  maxLength={160}
+                  aria-label="عنوان الدورة كما سيظهر للطلاب"
+                  placeholder="مثال: أساسيات الرياضيات"
+                  className={fieldClass}
+                />
+              </label>
+              <label className={`${labelClass} sm:col-span-2`}>
+                وصف الدورة
+                <textarea
+                  name="description"
+                  required
+                  maxLength={2000}
+                  rows={2}
+                  aria-label="نبذة عن محتوى الدورة وما سيتعلمه الطالب"
+                  placeholder="اكتب نبذة تساعد الطالب على معرفة محتوى الدورة"
+                  className="w-full resize-y rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
+                />
+              </label>
+              <label className={labelClass}>
+                المادة
+                <select
+                  name="subjectId"
+                  required
+                  aria-label="المادة الدراسية للدورة"
+                  className={fieldClass}
+                  value={addingSubject ? "__add_new__" : selectedSubjectId}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    if (value === "__add_new__") {
+                      setAddingSubject(true)
+                      setSelectedSubjectId("")
+                      setNewSubjectYear(
+                        (current) => current || String(years[0]?.value ?? ""),
+                      )
+                      return
+                    }
+                    setAddingSubject(false)
+                    setSelectedSubjectId(value)
+                  }}
+                >
+                  <option value="" disabled>
+                    {subjects.length ? "اختر المادة" : "لا توجد مواد متاحة"}
                   </option>
-                ))}
-                <option value="__add_new__">＋ إضافة مادة جديدة</option>
-              </select>
-            </label>
-            {addingSubject && (
-              <div className="rounded-2xl border border-nuwa-base/20 bg-nuwa-soft/40 p-4 sm:col-span-2 xl:col-span-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+                  {subjects.map((subject) => (
+                    <option key={String(subject.id)} value={String(subject.id)}>
+                      {String(subject.name ?? subject.title ?? subject.id)}
+                    </option>
+                  ))}
+                  <option value="__add_new__">＋ إضافة مادة جديدة</option>
+                </select>
+              </label>
+              {addingSubject && (
+                <div className="rounded-2xl border border-nuwa-base/20 bg-nuwa-soft/40 p-4 sm:col-span-2 xl:col-span-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className={labelClass}>
+                      اسم المادة الجديدة
+                      <input
+                        autoFocus
+                        value={newSubjectName}
+                        onChange={(event) =>
+                          setNewSubjectName(event.currentTarget.value)
+                        }
+                        maxLength={100}
+                        placeholder="مثال: اللغة العربية"
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      الصف الدراسي
+                      <select
+                        value={newSubjectYear || String(years[0]?.value ?? "")}
+                        disabled={yearsLoading || !years.length}
+                        aria-busy={yearsLoading}
+                        onChange={(event) =>
+                          setNewSubjectYear(event.currentTarget.value)
+                        }
+                        className={fieldClass}
+                        required
+                      >
+                        {yearsLoading && (
+                          <option value="">جارٍ تحميل الصفوف...</option>
+                        )}
+                        {years.map((year) => (
+                          <option key={year.id} value={String(year.value)}>
+                            {year.arabicName || year.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void createSubjectFromCourseForm()}
+                      disabled={busy || !newSubjectName.trim() || !years.length}
+                      className="rounded-lg bg-nuwa-base px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      إضافة المادة واختيارها
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingSubject(false)
+                        setNewSubjectName("")
+                      }}
+                      className="rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-muted"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-3">
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-stroke bg-white px-3 py-2.5 text-sm font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={isCourseFree}
+                    onChange={(event) =>
+                      setIsCourseFree(event.currentTarget.checked)
+                    }
+                    className="size-4 accent-emerald-700"
+                  />
+                  الدورة مجانية
+                </label>
+                {!isCourseFree && (
                   <label className={labelClass}>
-                    اسم المادة الجديدة
+                    السعر بالجنيه المصري
                     <input
-                      autoFocus
-                      value={newSubjectName}
-                      onChange={(event) => setNewSubjectName(event.currentTarget.value)}
-                      maxLength={100}
-                      placeholder="مثال: اللغة العربية"
+                      name="price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      defaultValue="0"
+                      aria-label="سعر الدورة"
                       className={fieldClass}
                     />
                   </label>
-                  <label className={labelClass}>
-                    الصف الدراسي
-                    <select
-                      value={newSubjectYear || String(years[0]?.value ?? "")}
-                      disabled={yearsLoading || !years.length}
-                      aria-busy={yearsLoading}
-                      onChange={(event) => setNewSubjectYear(event.currentTarget.value)}
-                      className={fieldClass}
-                      required
-                    >
-                      {yearsLoading && <option value="">جارٍ تحميل الصفوف...</option>}
-                      {years.map((year) => (
-                        <option key={year.id} value={String(year.value)}>
-                          {year.arabicName || year.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void createSubjectFromCourseForm()}
-                    disabled={busy || !newSubjectName.trim() || !years.length}
-                    className="rounded-lg bg-nuwa-base px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    إضافة المادة واختيارها
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddingSubject(false)
-                      setNewSubjectName("")
-                    }}
-                    className="rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-muted"
-                  >
-                    إلغاء
-                  </button>
-                </div>
+                )}
+                {isCourseFree && (
+                  <p className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-medium text-nuwa-deep">
+                    سيتم إنشاء الدورة بسعر صفر.
+                  </p>
+                )}
               </div>
-            )}
-            <div className="space-y-3">
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-stroke bg-white px-3 py-2.5 text-sm font-semibold text-ink">
-                <input
-                  type="checkbox"
-                  checked={isCourseFree}
-                  onChange={(event) => setIsCourseFree(event.currentTarget.checked)}
-                  className="size-4 accent-emerald-700"
-                />
-                الدورة مجانية
-              </label>
-              {!isCourseFree && <label className={labelClass}>
-              السعر
-              <input
-                name="price"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                defaultValue="0"
-                aria-label="سعر الدورة"
-                className={fieldClass}
-              />
-            </label>}
-              {isCourseFree && (
-                <p className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-medium text-nuwa-deep">
-                  سيتم إنشاء الدورة بسعر صفر.
-                </p>
-              )}
-            </div>
-            <div className="flex items-end">
-              <button
-                disabled={busy || !subjects.length}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-nuwa-base px-4 text-sm font-semibold text-white transition hover:bg-nuwa-deep disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus size={17} />
-                إنشاء كمسودة
-              </button>
-            </div>
-          </form>
+              <div className="flex items-end">
+                <button
+                  disabled={busy || !subjects.length}
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-nuwa-base px-4 text-sm font-semibold text-white transition hover:bg-nuwa-deep disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus size={17} />
+                  إنشاء كمسودة
+                </button>
+              </div>
+            </form>
           )}
         </section>
 
@@ -2028,7 +2140,9 @@ export default function RoleForms({
             [
               "draft",
               "مسودات",
-              teacherCourses.filter((course) => !getTeacherCoursePublished(course)).length,
+              teacherCourses.filter(
+                (course) => !getTeacherCoursePublished(course),
+              ).length,
             ],
           ] as const).map(([filter, label, count]) => (
             <button
@@ -2036,10 +2150,20 @@ export default function RoleForms({
               type="button"
               aria-pressed={teacherCourseFilter === filter}
               onClick={() => setTeacherCourseFilter(filter)}
-              className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${teacherCourseFilter === filter ? "bg-nuwa-base text-white" : "bg-canvas text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"}`}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                teacherCourseFilter === filter
+                  ? "bg-nuwa-base text-white"
+                  : "bg-canvas text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"
+              }`}
             >
               {label}
-              <span className={`rounded-full px-2 py-0.5 text-xs ${teacherCourseFilter === filter ? "bg-white/15 text-white" : "bg-white text-ink-muted"}`}>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  teacherCourseFilter === filter
+                    ? "bg-white/15 text-white"
+                    : "bg-white text-ink-muted"
+                }`}
+              >
                 {count}
               </span>
             </button>
@@ -2058,12 +2182,11 @@ export default function RoleForms({
               أنشئ دورة جديدة؛ هتظهر كمسودة وتقدر تنشرها وقت ما تكون جاهزة.
             </p>
           </div>
+        ) : visibleTeacherCourses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-10 text-center text-sm text-ink-muted">
+            لا توجد دورات في هذا القسم حاليًا.
+          </div>
         ) : (
-          visibleTeacherCourses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-10 text-center text-sm text-ink-muted">
-              لا توجد دورات في هذا القسم حاليًا.
-            </div>
-          ) : (
           <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {visibleTeacherCourses.map((course) => {
               const id = String(course.id ?? course.courseId ?? "")
@@ -2084,7 +2207,9 @@ export default function RoleForms({
               return (
                 <article
                   key={id}
-                  className={`min-w-0 overflow-hidden rounded-2xl border border-stroke bg-white shadow-sm transition duration-200 hover:border-nuwa-base/30 hover:shadow-nuwa-md ${isShowingContent ? "md:col-span-2 2xl:col-span-3" : ""}`}
+                  className={`min-w-0 overflow-hidden rounded-2xl border border-stroke bg-white shadow-sm transition duration-200 hover:border-nuwa-base/30 hover:shadow-nuwa-md ${
+                    isShowingContent ? "md:col-span-2 2xl:col-span-3" : ""
+                  }`}
                 >
                   <div className="relative flex h-36 items-end overflow-hidden bg-gradient-to-br from-nuwa-deep via-nuwa-base to-emerald-400 p-4">
                     {coverUrl ? (
@@ -2143,7 +2268,7 @@ export default function RoleForms({
                           {typeof course.price === "number" &&
                           course.price === 0
                             ? "مجانية"
-                            : `${String(course.price ?? 0)} ر.س`}
+                            : formatEgp(course.price)}
                         </span>
                       </div>
                     </div>
@@ -2268,14 +2393,16 @@ export default function RoleForms({
                           onSubmit={(event) => void uploadCover(id, event)}
                           className="flex flex-wrap items-center gap-2"
                         >
-                          <input
-                            name="file"
-                            type="file"
-                            accept="image/*"
-                            required
-                            aria-label="اختر صورة غلاف الدورة"
-                            className="min-w-0 flex-1 text-xs file:me-2 file:rounded-md file:border-0 file:bg-white file:px-2 file:py-1.5 file:text-xs file:font-semibold file:text-ink"
-                          />
+                          <div className="min-w-0 flex-1">
+                            <FileUploadField
+                              name="file"
+                              title="اختيار صورة غلاف الدورة"
+                              accept="image/*"
+                              required
+                              disabled={busy}
+                              helperText="اختر صورة من جهازك لقصّها قبل الحفظ"
+                            />
+                          </div>
                           <button
                             disabled={busy}
                             className="rounded-lg border border-stroke bg-white px-3 py-2 text-xs font-semibold text-ink hover:bg-canvas disabled:opacity-50"
@@ -2283,6 +2410,35 @@ export default function RoleForms({
                             رفع الغلاف
                           </button>
                         </form>
+                        {uploadingCoverCourseId === id && (
+                          <p
+                            role="status"
+                            className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-nuwa-base"
+                          >
+                            <LoaderCircle size={15} className="animate-spin" />
+                            جارٍ رفع غلاف الدورة…
+                          </p>
+                        )}
+                        {coverCrop?.courseId === id && (
+                          <ImageCropDialog
+                            file={coverCrop.file}
+                            aspectRatio={16 / 9}
+                            title="تعديل مقاس غلاف الدورة"
+                            onCancel={() => setCoverCrop(null)}
+                            onApply={(croppedFile) => {
+                              setCoverCrop(null)
+                              setUploadingCoverCourseId(id)
+                              void mutate(
+                                () =>
+                                  teachersApi.uploadCourseCover(
+                                    id,
+                                    croppedFile,
+                                  ),
+                                "تم تحديث غلاف الدورة.",
+                              ).finally(() => setUploadingCoverCourseId(null))
+                            }}
+                          />
+                        )}
                         {coverUrl && (
                           <button
                             type="button"
@@ -2350,7 +2506,7 @@ export default function RoleForms({
                         </label>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                           <label className={labelClass}>
-                            السعر
+                            السعر بالجنيه المصري
                             <input
                               name="price"
                               type="number"
@@ -2412,7 +2568,6 @@ export default function RoleForms({
               )
             })}
           </div>
-          )
         )}
       </div>
     )
@@ -2440,142 +2595,146 @@ export default function RoleForms({
       <div className="mb-5 space-y-4">
         {loading ? (
           <EnrollmentGridSkeleton />
-        ) : studentEnrollments.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {studentEnrollments.map((enrollment, index) => {
-              const course = asRecord(enrollment.course)
+        ) : (
+          studentEnrollments.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {studentEnrollments.map((enrollment, index) => {
+                const course = asRecord(enrollment.course)
 
-              const teacher = asRecord(enrollment.teacher ?? course.teacher)
+                const teacher = asRecord(enrollment.teacher ?? course.teacher)
 
-              const courseId =
-                enrollment.courseId ?? course.id ?? course.courseId
+                const courseId =
+                  enrollment.courseId ?? course.id ?? course.courseId
 
-              const title =
-                enrollment.courseTitle ??
-                enrollment.courseName ??
-                course.title ??
-                course.name ??
-                `دورة ${index + 1}`
+                const title =
+                  enrollment.courseTitle ??
+                  enrollment.courseName ??
+                  course.title ??
+                  course.name ??
+                  `دورة ${index + 1}`
 
-              const teacherName =
-                enrollment.teacherName ??
-                course.teacherName ??
-                teacher.fullName ??
-                teacher.name
+                const teacherName =
+                  enrollment.teacherName ??
+                  course.teacherName ??
+                  teacher.fullName ??
+                  teacher.name
 
-              const subject =
-                enrollment.subjectName ??
-                course.subjectName ??
-                asRecord(course.subject).name
+                const subject =
+                  enrollment.subjectName ??
+                  course.subjectName ??
+                  asRecord(course.subject).name
 
-              const status = enrollmentStatus(
-                enrollment.status ?? enrollment.enrollmentStatus,
+                const status = enrollmentStatus(
+                  enrollment.status ?? enrollment.enrollmentStatus,
 
-                enrollment.isApproved,
-              )
+                  enrollment.isApproved,
+                )
 
-              const enrollmentProgress = asRecord(enrollment.progress)
+                const enrollmentProgress = asRecord(enrollment.progress)
 
-              const rawProgress = Number(
-                enrollment.progressPercentage ??
-                  enrollment.progressPercent ??
-                  enrollmentProgress.progressPercentage ??
-                  enrollmentProgress.percentage ??
-                  0,
-              )
+                const rawProgress = Number(
+                  enrollment.progressPercentage ??
+                    enrollment.progressPercent ??
+                    enrollmentProgress.progressPercentage ??
+                    enrollmentProgress.percentage ??
+                    0,
+                )
 
-              const percent = Number.isFinite(rawProgress)
-                ? Math.max(0, Math.min(100, rawProgress))
-                : 0
+                const percent = Number.isFinite(rawProgress)
+                  ? Math.max(0, Math.min(100, rawProgress))
+                  : 0
 
-              const canLearn = courseId !== undefined && status.canLearn
+                const canLearn = courseId !== undefined && status.canLearn
 
-              return (
-                <article
-                  key={String(enrollment.id ?? courseId ?? index)}
-                  className={`flex flex-col rounded-2xl border border-stroke bg-white p-5 shadow-nuwa transition hover:-translate-y-0.5 hover:border-nuwa-base/40 hover:shadow-nuwa-md ${
-                    String(progressCourse) === String(courseId)
-                      ? "ring-2 ring-nuwa-base/25"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-base font-bold leading-6 text-ink">
-                        {String(title)}
-                      </h3>
-                      {subject !== undefined &&
-                        subject !== null &&
-                        String(subject).trim() && (
-                          <p className="mt-1 text-xs font-medium text-ink-muted">
-                            {String(subject)}
-                          </p>
-                        )}
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${status.tone}`}
-                    >
-                      {status.label}
-                    </span>
-                  </div>
-                  {teacherName !== undefined &&
-                    teacherName !== null &&
-                    String(teacherName).trim() && (
-                      <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted">
-                        المعلم:{" "}
-                        <span className="font-semibold text-ink">
-                          {String(teacherName)}
-                        </span>
-                      </p>
-                    )}
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-ink-muted">
-                        تقدمك في الدورة
-                      </span>
-                      <span className="font-bold tabular-nums text-ink">
-                        {Math.round(percent)}%
-                      </span>
-                    </div>
-                    <div
-                      className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
-                      role="progressbar"
-                      aria-label={`التقدم في دورة ${String(title)}`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Math.round(percent)}
-                    >
-                      <div
-                        className="h-full rounded-full bg-nuwa-base transition-[width]"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-auto pt-5">
-                    {canLearn ? (
-                      <button
-                        type="button"
-                        disabled={progressLoading}
-                        onClick={() => void openProgress(String(courseId), course)}
-                        className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep disabled:cursor-wait disabled:opacity-60"
+                return (
+                  <article
+                    key={String(enrollment.id ?? courseId ?? index)}
+                    className={`flex flex-col rounded-2xl border border-stroke bg-white p-5 shadow-nuwa transition hover:-translate-y-0.5 hover:border-nuwa-base/40 hover:shadow-nuwa-md ${
+                      String(progressCourse) === String(courseId)
+                        ? "ring-2 ring-nuwa-base/25"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-base font-bold leading-6 text-ink">
+                          {String(title)}
+                        </h3>
+                        {subject !== undefined &&
+                          subject !== null &&
+                          String(subject).trim() && (
+                            <p className="mt-1 text-xs font-medium text-ink-muted">
+                              {String(subject)}
+                            </p>
+                          )}
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${status.tone}`}
                       >
-                        {progressLoading &&
-                        String(progressCourse) === String(courseId)
-                          ? "جارٍ فتح الدورة..."
-                          : "متابعة التعلم"}
-                      </button>
-                    ) : (
-                      <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-center text-xs leading-5 text-amber-900">
-                        {status.canLearn
-                          ? "لا يتوفر معرّف الدورة لفتح محتواها."
-                          : "ستتمكن من متابعة المحتوى بعد اعتماد طلبك من المعلم."}
-                      </p>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-          </div>
+                        {status.label}
+                      </span>
+                    </div>
+                    {teacherName !== undefined &&
+                      teacherName !== null &&
+                      String(teacherName).trim() && (
+                        <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted">
+                          المعلم:{" "}
+                          <span className="font-semibold text-ink">
+                            {String(teacherName)}
+                          </span>
+                        </p>
+                      )}
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-ink-muted">
+                          تقدمك في الدورة
+                        </span>
+                        <span className="font-bold tabular-nums text-ink">
+                          {Math.round(percent)}%
+                        </span>
+                      </div>
+                      <div
+                        className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
+                        role="progressbar"
+                        aria-label={`التقدم في دورة ${String(title)}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(percent)}
+                      >
+                        <div
+                          className="h-full rounded-full bg-nuwa-base transition-[width]"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-auto pt-5">
+                      {canLearn ? (
+                        <button
+                          type="button"
+                          disabled={progressLoading}
+                          onClick={() =>
+                            void openProgress(String(courseId), course)
+                          }
+                          className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {progressLoading &&
+                          String(progressCourse) === String(courseId)
+                            ? "جارٍ فتح الدورة..."
+                            : "متابعة التعلم"}
+                        </button>
+                      ) : (
+                        <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-center text-xs leading-5 text-amber-900">
+                          {status.canLearn
+                            ? "لا يتوفر معرّف الدورة لفتح محتواها."
+                            : "ستتمكن من متابعة المحتوى بعد اعتماد طلبك من المعلم."}
+                        </p>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )
         )}
         {!loading && studentEnrollments.length === 0 && (
           <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-8 text-center text-sm text-ink-muted">
@@ -2672,7 +2831,8 @@ export default function RoleForms({
                     role="alert"
                     className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
                   >
-                    تعذر تحميل تفاصيل الدروس والفيديوهات: {progress.contentLoadError}
+                    تعذر تحميل تفاصيل الدروس والفيديوهات:{" "}
+                    {progress.contentLoadError}
                   </p>
                 )}
                 {lessons.length ? (
@@ -2683,10 +2843,7 @@ export default function RoleForms({
                       )
 
                       return (
-                        <li
-                          key={lessonId}
-                          className="py-4"
-                        >
+                        <li key={lessonId} className="py-4">
                           <div className="min-w-0">
                             <p className="font-semibold text-ink">
                               {String(
@@ -2727,10 +2884,20 @@ export default function RoleForms({
                           {lesson.video ? (
                             <LessonVideoPlayer
                               video={lesson.video}
-                              title={String(lesson.title ?? lesson.name ?? "فيديو الدرس")}
+                              title={String(
+                                lesson.title ?? lesson.name ?? "فيديو الدرس",
+                              )}
                               lastPosition={Number(lesson.lastPosition ?? 0)}
-                              onPause={(seconds) => void saveVideoPosition(lessonId, seconds, Boolean(lesson.isCompleted))}
-                              onEnded={(seconds) => void saveVideoPosition(lessonId, seconds, true)}
+                              onPause={(seconds) =>
+                                void saveVideoPosition(
+                                  lessonId,
+                                  seconds,
+                                  Boolean(lesson.isCompleted),
+                                )
+                              }
+                              onEnded={(seconds) =>
+                                void saveVideoPosition(lessonId, seconds, true)
+                              }
                             />
                           ) : (
                             <p className="mt-3 rounded-xl border border-dashed border-stroke bg-canvas px-4 py-3 text-sm text-ink-muted">
@@ -3106,7 +3273,10 @@ export default function RoleForms({
           </form>
         )}
         {editingProfile && (
-          <div ref={profileEditorRef} className="scroll-mt-6 min-w-0 p-4 pt-0 sm:px-7 sm:pb-7">
+          <div
+            ref={profileEditorRef}
+            className="scroll-mt-6 min-w-0 p-4 pt-0 sm:px-7 sm:pb-7"
+          >
             <ProfileImageEditor
               role="admin"
               name={adminName}
@@ -3233,7 +3403,10 @@ export default function RoleForms({
           </div>
         </section>
         {editingProfile && (
-          <section ref={profileEditorRef} className="scroll-mt-6 min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7">
+          <section
+            ref={profileEditorRef}
+            className="scroll-mt-6 min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7"
+          >
             <div className="mb-5">
               <h3 className="text-xl font-bold text-ink">الملف الشخصي</h3>
               <p className="mt-1 text-sm text-ink-muted">
@@ -3376,7 +3549,9 @@ export default function RoleForms({
                     aria-busy={yearsLoading}
                     className={fieldClass}
                   >
-                    {yearsLoading && <option value="">جارٍ تحميل الصفوف...</option>}
+                    {yearsLoading && (
+                      <option value="">جارٍ تحميل الصفوف...</option>
+                    )}
                     {years.map((year) => (
                       <option key={year.id} value={year.value}>
                         {year.arabicName}
@@ -3397,7 +3572,9 @@ export default function RoleForms({
                     aria-busy={yearsLoading}
                     className="min-h-20 rounded-lg border border-stroke bg-white px-3 py-2 text-sm text-ink"
                   >
-                    {yearsLoading && <option disabled>جارٍ تحميل الصفوف...</option>}
+                    {yearsLoading && (
+                      <option disabled>جارٍ تحميل الصفوف...</option>
+                    )}
                     {years.map((year) => (
                       <option key={year.id} value={year.value}>
                         {year.arabicName}

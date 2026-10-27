@@ -27,6 +27,7 @@ import {
 import { notifyError, notifySuccess } from "../utils/notifications"
 
 import type { NavigateFn } from "../types"
+import { formatEgp } from "../utils/currency"
 
 type RecordValue = Record<string, unknown>
 
@@ -137,18 +138,6 @@ function videoFromLesson(lesson: RecordValue): RecordValue | null {
     return video
 
   return null
-}
-
-function coursePrice(value: unknown): string {
-  const price = Number(value)
-
-  if (!Number.isFinite(price) || price <= 0) return "مجانية"
-
-  return new Intl.NumberFormat("ar-EG", {
-    style: "currency",
-    currency: "EGP",
-    maximumFractionDigits: 0,
-  }).format(price)
 }
 
 function CourseDetailsSkeleton() {
@@ -456,7 +445,7 @@ export default function CourseDetailsPage({
                 </div>
               </div>
               <span className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/15 px-3 py-2 text-sm font-bold backdrop-blur sm:left-8 sm:top-8">
-                <CircleDollarSign size={17} /> {coursePrice(course.price)}
+                <CircleDollarSign size={17} /> {formatEgp(course.price)}
               </span>
             </section>
 

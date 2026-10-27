@@ -1,5 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { FileVideo2, Link2, Upload } from "lucide-react"
+import {
+  ChevronDown,
+  FileVideo2,
+  Link2,
+  LoaderCircle,
+  Upload,
+} from "lucide-react"
 
 import { ApiError } from "../../api/client"
 import { useConfirmation } from "../ConfirmationProvider"
@@ -7,6 +13,7 @@ import { useConfirmation } from "../ConfirmationProvider"
 import { quizzesApi, teachersApi } from "../../api/endpoints"
 import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
 import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
+import FileUploadField from "./FileUploadField"
 
 type DataRecord = Record<string, unknown>
 
@@ -59,15 +66,20 @@ export default function TeacherCourseContent({
 
   const [busy, setBusy] = useState(false)
 
-  const [videoInputModes, setVideoInputModes] = useState<
-    Record<string, "upload" | "youtube" | null>
-  >({})
+  const [openContentPanel, setOpenContentPanel] = useState<string | null>(null)
+
+  const [videoInputModes, setVideoInputModes] =
+    useState<Record<string, "upload" | "youtube" | null>>({})
 
   const [quizLessonId, setQuizLessonId] = useState<string | null>(null)
 
   const [quiz, setQuiz] = useState<DataRecord | null>(null)
 
   const [quizMissing, setQuizMissing] = useState(false)
+
+  const [quizLoading, setQuizLoading] = useState(false)
+
+  const [quizError, setQuizError] = useState("")
 
   const [addingQuestion, setAddingQuestion] = useState(false)
 
@@ -107,9 +119,7 @@ export default function TeacherCourseContent({
       .catch((cause: unknown) => {
         if (active) {
           setCourseError(
-            cause instanceof Error
-              ? cause.message
-              : "تعذر تحميل محتوى الدورة.",
+            cause instanceof Error ? cause.message : "تعذر تحميل محتوى الدورة.",
           )
 
           setCourseLoading(false)
@@ -272,16 +282,22 @@ export default function TeacherCourseContent({
     setQuiz(null)
 
     setQuizMissing(false)
+    setQuizError("")
+    setQuizLoading(true)
 
     try {
       setQuiz(unwrapRecord(await quizzesApi.forLesson(lessonId), "quiz"))
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 404)
         setQuizMissing(true)
-      else
-        onFeedback(
-          cause instanceof Error ? cause.message : "تعذر تحميل الاختبار.",
-        )
+      else {
+        const message =
+          cause instanceof Error ? cause.message : "تعذر تحميل الاختبار."
+        setQuizError(message)
+        onFeedback(message)
+      }
+    } finally {
+      setQuizLoading(false)
     }
   }
 
@@ -299,7 +315,7 @@ export default function TeacherCourseContent({
 
       passingScore: Number(form.get("passingScore")),
 
-      maxAttempts: 1,
+      maxAttempts: Number(form.get("maxAttempts")),
     }
 
     if (
@@ -327,7 +343,7 @@ export default function TeacherCourseContent({
 
       passingScore: Number(form.get("passingScore")),
 
-      maxAttempts: 1,
+      maxAttempts: Number(form.get("maxAttempts")),
     }
 
     if (
@@ -346,7 +362,8 @@ export default function TeacherCourseContent({
 
     if (!quiz || quiz.id === undefined) return
 
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
 
     const body = {
       text: String(form.get("text") ?? "").trim(),
@@ -366,6 +383,7 @@ export default function TeacherCourseContent({
       )
     ) {
       setAddingQuestion(false)
+      formElement.reset()
 
       await openQuiz(String(quizLessonId))
     }
@@ -378,7 +396,8 @@ export default function TeacherCourseContent({
   ) {
     event.preventDefault()
 
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
 
     const body = {
       text: String(form.get("text") ?? "").trim(),
@@ -395,7 +414,8 @@ export default function TeacherCourseContent({
         "تمت إضافة الاختيار.",
       )
     ) {
-      await openQuiz(String(quizLessonId))
+      formElement.reset()
+      if (quizLessonId) await openQuiz(quizLessonId)
     }
   }
 
@@ -552,6 +572,23 @@ export default function TeacherCourseContent({
 
     const publish = !Boolean(quiz.isPublished)
 
+    if (publish) {
+      const questions = records(quiz.questions)
+      if (!questions.length) {
+        onFeedback("أضف سؤالًا واحدًا على الأقل قبل نشر الاختبار.")
+        return
+      }
+
+      const incompleteQuestion = questions.find((question) => {
+        const options = records(question.options)
+        return !options.length || !options.some((option) => option.isCorrect)
+      })
+      if (incompleteQuestion) {
+        onFeedback("أضف اختيارات وحدد إجابة صحيحة لكل سؤال قبل نشر الاختبار.")
+        return
+      }
+    }
+
     if (
       await mutate(
         () =>
@@ -563,6 +600,24 @@ export default function TeacherCourseContent({
       )
     ) {
       await openQuiz(String(quizLessonId))
+    }
+  }
+
+  async function deleteQuiz() {
+    if (!quiz || quiz.id === undefined || !quizLessonId) return
+
+    const confirmed = await confirmMutation(
+      "حذف الاختبار وأسئلته؟",
+      "سيتم حذف الاختبار وجميع أسئلته ومحاولات الطلاب المرتبطة به.",
+      () => quizzesApi.delete(String(quiz.id)),
+      "تم حذف الاختبار.",
+      "حذف الاختبار",
+    )
+
+    if (confirmed) {
+      setQuiz(null)
+      setQuizMissing(true)
+      setAttempts(null)
     }
   }
 
@@ -636,32 +691,65 @@ export default function TeacherCourseContent({
         </h3>
         <span className="text-xs text-ink-muted">{modules.length} وحدة</span>
       </div>
-      <form
-        onSubmit={(event) => void createModule(event)}
-        className="mb-5 grid gap-3 rounded-2xl border border-stroke bg-white p-4 shadow-sm sm:grid-cols-[1fr_140px_auto] sm:items-end"
+      <details
+        name="teacher-course-content"
+        open={openContentPanel === "add-module"}
+        onToggle={(event) => {
+          if (event.currentTarget.open) setOpenContentPanel("add-module")
+          else
+            setOpenContentPanel((current) =>
+              current === "add-module" ? null : current,
+            )
+        }}
+        className="mb-5 rounded-2xl border border-nuwa-base/20 bg-white shadow-sm"
       >
-        <label className={field}>
-          عنوان الوحدة
-          <input name="title" required placeholder="مثال: الوحدة الأولى — أساسيات المادة" className={control} />
-        </label>
-        <label className={field}>
-          الترتيب
-          <input
-            name="order"
-            type="number"
-            min="1"
-            required
-            defaultValue={modules.length + 1}
-            className={control}
-          />
-        </label>
-        <button
-          disabled={busy}
-          className="h-10 rounded-lg bg-nuwa-base px-4 text-sm font-semibold text-white disabled:opacity-50"
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 text-lg font-bold text-nuwa-deep [&::-webkit-details-marker]:hidden">
+          <span>إضافة وحدة جديدة</span>
+          <ChevronDown size={20} aria-hidden="true" />
+        </summary>
+        <form
+          onSubmit={(event) => void createModule(event)}
+          className="grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end"
         >
-          إضافة وحدة
-        </button>
-      </form>
+          <label className={field}>
+            عنوان الوحدة
+            <input
+              name="title"
+              required
+              placeholder="مثال: الوحدة الأولى — أساسيات المادة"
+              className={control}
+            />
+          </label>
+          <label className={field}>
+            الترتيب
+            <input
+              name="order"
+              type="number"
+              min="1"
+              required
+              defaultValue={modules.length + 1}
+              className={control}
+            />
+          </label>
+          <label className={field}>
+            الترتيب
+            <input
+              name="order"
+              type="number"
+              min="1"
+              required
+              defaultValue={modules.length + 1}
+              className={control}
+            />
+          </label>
+          <button
+            disabled={busy}
+            className="h-10 rounded-lg bg-nuwa-base px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            إضافة وحدة
+          </button>
+        </form>
+      </details>
       {modules.length === 0 ? (
         <p className="rounded-lg bg-white p-4 text-sm text-ink-muted">
           لا توجد وحدات بعد. أضف أول وحدة للبدء.
@@ -678,6 +766,9 @@ export default function TeacherCourseContent({
                 key={moduleId}
                 className="min-w-0 rounded-2xl border border-stroke bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:p-5"
               >
+                <h4 className="mb-3 text-xl font-bold text-nuwa-deep sm:text-2xl">
+                  الوحدة {moduleIndex + 1}
+                </h4>
                 <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
                   <div className="flex shrink-0 gap-1">
                     <button
@@ -708,7 +799,7 @@ export default function TeacherCourseContent({
                       required
                       defaultValue={String(module.title ?? "")}
                       aria-label="عنوان الوحدة"
-                      className={control}
+                      className={`${control} text-base font-bold`}
                     />
                     <button
                       disabled={busy}
@@ -743,976 +834,1267 @@ export default function TeacherCourseContent({
                     const resources = records(lesson.resources)
 
                     return (
-                      <li key={lessonId} className="min-w-0 rounded-xl border border-stroke/70 bg-white p-3 sm:p-4">
-                          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              type="button"
-                              disabled={busy || lessonIndex === 0}
-                              aria-label="رفع ترتيب الدرس"
-                              onClick={() =>
-                                void moveLesson(
-                                  moduleId,
-
-                                  lessons,
-
-                                  lessonIndex,
-
-                                  -1,
-                                )
-                              }
-                              className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                busy || lessonIndex === lessons.length - 1
-                              }
-                              aria-label="خفض ترتيب الدرس"
-                              onClick={() =>
-                                void moveLesson(
-                                  moduleId,
-
-                                  lessons,
-
-                                  lessonIndex,
-
-                                  1,
-                                )
-                              }
-                              className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
-                            >
-                              ↓
-                            </button>
-                          </div>
-                          <form
-                            onSubmit={(event) =>
-                              void updateLesson(lessonId, event)
-                            }
-                            className="col-span-2 grid min-w-0 gap-2 sm:col-span-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]"
-                          >
-                            <input
-                              name="title"
-                              required
-                              defaultValue={String(lesson.title ?? "")}
-                              aria-label="عنوان الدرس"
-                              className={control}
-                            />
-                            <input
-                              name="description"
-                              defaultValue={String(lesson.description ?? "")}
-                              aria-label="وصف الدرس"
-                              className={control}
-                            />
-                            <button
-                              disabled={busy}
-                              className="min-h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
-                            >
-                              حفظ الدرس
-                            </button>
-                          </form>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              void confirmMutation(
-                                "حذف الدرس؟",
-                                "سيتم حذف الدرس ومحتواه المرتبط به من الدورة.",
-                                () => teachersApi.deleteLesson(lessonId),
-                                "تم حذف الدرس.",
-                                "حذف الدرس",
+                      <li
+                        key={lessonId}
+                        className="min-w-0 rounded-xl border border-stroke/70 bg-white"
+                      >
+                        <details
+                          name="teacher-course-content"
+                          open={openContentPanel === `lesson-${lessonId}`}
+                          onToggle={(event) => {
+                            if (event.currentTarget.open)
+                              setOpenContentPanel(`lesson-${lessonId}`)
+                            else
+                              setOpenContentPanel((current) =>
+                                current === `lesson-${lessonId}`
+                                  ? null
+                                  : current,
                               )
-                            }}
-                            className="col-span-2 min-h-10 justify-self-start rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50 sm:col-span-1 sm:col-start-3"
-                          >
-                            حذف الدرس
-                          </button>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-                          {Boolean(video.videoUrl) && (
-                            <a
-                              href={String(video.videoUrl)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-nuwa-base underline"
-                            >
-                              عرض الفيديو الحالي
-                            </a>
-                          )}
-                          {resources.map((resource) => (
-                            <span
-                              key={String(resource.id)}
-                              className="inline-flex max-w-full break-all items-center gap-1 rounded bg-canvas px-2 py-1"
-                            >
-                              {String(resource.name ?? "مورد")}
-                              <button
-                                type="button"
-                                aria-label="حذف المورد"
-                                onClick={() => {
-                                  void confirmMutation(
-                                    "حذف المورد؟",
-                                    `سيتم حذف المورد «${String(resource.name ?? "المورد")}» من الدرس.`,
-                                    () =>
-                                      teachersApi.deleteResource(
-                                        String(resource.id),
-                                      ),
-                                    "تم حذف المورد.",
-                                    "حذف المورد",
-                                  )
-                                }}
-                                className="text-danger"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                        {Boolean(video.videoUrl || video.providerVideoId) && (
-                          <LessonVideoPlayer
-                            video={video}
-                            title={String(lesson.title ?? "معاينة فيديو الدرس")}
-                          />
-                        )}
-                        <section className="mt-4 rounded-2xl border border-stroke bg-white p-4 shadow-sm">
-                          <div className="flex items-start gap-3">
-                            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
-                              <FileVideo2 size={19} />
-                            </span>
-                            <div>
-                              <h5 className="text-sm font-bold text-ink">فيديو الدرس</h5>
-                              <p className="mt-1 text-xs leading-5 text-ink-muted">اختر طريقة عرض الفيديو. سيظهر الحقل المناسب بعد الاختيار.</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {([
-                              { mode: "youtube", title: "رابط من YouTube", description: "أضف رابط فيديو ليعمل داخل صفحة الدرس.", Icon: Link2 },
-                              { mode: "upload", title: "رفع فيديو من الجهاز", description: "اختر ملف فيديو محفوظًا على جهازك.", Icon: Upload },
-                            ] as const).map(({ mode, title, description, Icon }) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                aria-pressed={videoInputModes[lessonId] === mode}
-                                onClick={() => setVideoInputModes((current) => ({ ...current, [lessonId]: mode }))}
-                                className={`flex min-h-20 items-center gap-3 rounded-xl border p-3 text-start transition ${videoInputModes[lessonId] === mode ? "border-nuwa-base bg-nuwa-soft/70 text-nuwa-deep ring-2 ring-nuwa-base/10" : "border-stroke bg-canvas/60 text-ink hover:border-nuwa-base/40 hover:bg-white"}`}
-                              >
-                                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white text-nuwa-base shadow-sm"><Icon size={19} /></span>
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-bold">{title}</span>
-                                  <span className="mt-1 block text-xs leading-5 text-ink-muted">{description}</span>
+                          }}
+                        >
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl p-4 text-base font-bold text-ink [&::-webkit-details-marker]:hidden sm:text-lg">
+                            <span className="min-w-0">
+                              <span className="text-nuwa-base">
+                                الدرس {lessonIndex + 1}:
+                              </span>{" "}
+                              {String(lesson.title ?? "درس بدون عنوان")}
+                              {Boolean(lesson.description) && (
+                                <span className="mt-1 block truncate text-sm font-normal text-ink-muted">
+                                  {String(lesson.description)}
                                 </span>
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-                        <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                          {videoInputModes[lessonId] === "upload" && (
-                          <form
-                            onSubmit={async (event) => {
-                              event.preventDefault()
-                              const form = event.currentTarget
+                              )}
+                            </span>
+                            <ChevronDown
+                              className="shrink-0 text-nuwa-base"
+                              size={20}
+                              aria-hidden="true"
+                            />
+                          </summary>
+                          <div className="border-t border-stroke p-3 sm:p-4">
+                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+                              <div className="flex shrink-0 gap-1">
+                                <button
+                                  type="button"
+                                  disabled={busy || lessonIndex === 0}
+                                  aria-label="رفع ترتيب الدرس"
+                                  onClick={() =>
+                                    void moveLesson(
+                                      moduleId,
 
-                              const file = new FormData(
-                                form,
-                              ).get("file")
+                                      lessons,
 
-                              if (file instanceof File && file.size) {
-                                const saved = await mutate(
-                                  () =>
-                                    teachersApi.uploadLessonVideo(
-                                      lessonId,
+                                      lessonIndex,
 
-                                      file,
-                                    ),
+                                      -1,
+                                    )
+                                  }
+                                  className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={
+                                    busy || lessonIndex === lessons.length - 1
+                                  }
+                                  aria-label="خفض ترتيب الدرس"
+                                  onClick={() =>
+                                    void moveLesson(
+                                      moduleId,
 
-                                  "تم رفع فيديو الدرس.",
-                                )
-                                if (saved) form.reset()
-                              }
-                            }}
-                            className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
-                          >
-                            <label className={`${field} w-full min-w-0`}>
-                              رفع ملف فيديو
-                              <input
-                                name="file"
-                                type="file"
-                                accept="video/*"
-                                required
-                                className="w-full max-w-full text-xs"
-                              />
-                            </label>
-                            <button
-                              disabled={busy}
-                              className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                            >
-                              رفع الفيديو
-                            </button>
-                          </form>
-                          )}
-                          {videoInputModes[lessonId] === "youtube" && (
-                          <form
-                            onSubmit={async (event) => {
-                              event.preventDefault()
-                              const form = event.currentTarget
+                                      lessons,
 
-                              const url = String(
-                                new FormData(form).get(
-                                  "youTubeUrl",
-                                ) ?? "",
-                              ).trim()
+                                      lessonIndex,
 
-                              if (!youtubeVideoId(url)) {
-                                onFeedback("أدخل رابط فيديو صحيحًا من YouTube.")
-                                return
-                              }
-
-                              const saved = await mutate(
-                                () =>
-                                  teachersApi.setLessonYoutubeVideo(lessonId, {
-                                    youTubeUrl: url,
-                                  }),
-
-                                "تم ربط فيديو YouTube.",
-                              )
-
-                              if (saved) form.reset()
-                            }}
-                            className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
-                          >
-                            <label className={`${field} w-full min-w-0`}>
-                              رابط YouTube
-                              <input
-                                name="youTubeUrl"
-                                type="url"
-                                required
-                                placeholder="https://www.youtube.com/watch?v=..."
-                                className={control}
-                              />
-                            </label>
-                            <button
-                              disabled={busy}
-                              className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-                            >
-                              حفظ الرابط
-                            </button>
-                            {video.id !== undefined && (
+                                      1,
+                                    )
+                                  }
+                                  className="grid size-10 place-items-center rounded-lg border border-stroke text-xs disabled:opacity-40"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                              <form
+                                onSubmit={(event) =>
+                                  void updateLesson(lessonId, event)
+                                }
+                                className="col-span-2 grid min-w-0 gap-2 sm:col-span-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]"
+                              >
+                                <input
+                                  name="title"
+                                  required
+                                  defaultValue={String(lesson.title ?? "")}
+                                  aria-label="عنوان الدرس"
+                                  className={control}
+                                />
+                                <input
+                                  name="description"
+                                  defaultValue={String(
+                                    lesson.description ?? "",
+                                  )}
+                                  aria-label="وصف الدرس"
+                                  className={control}
+                                />
+                                <button
+                                  disabled={busy}
+                                  className="min-h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                                >
+                                  حفظ الدرس
+                                </button>
+                              </form>
                               <button
                                 type="button"
                                 disabled={busy}
                                 onClick={() => {
                                   void confirmMutation(
-                                    "حذف فيديو الدرس؟",
-                                    "سيتم إزالة الفيديو الحالي من هذا الدرس.",
-                                    () =>
-                                      teachersApi.deleteLessonVideo(lessonId),
-                                    "تم حذف الفيديو.",
-                                    "حذف الفيديو",
+                                    "حذف الدرس؟",
+                                    "سيتم حذف الدرس ومحتواه المرتبط به من الدورة.",
+                                    () => teachersApi.deleteLesson(lessonId),
+                                    "تم حذف الدرس.",
+                                    "حذف الدرس",
                                   )
                                 }}
-                                className="rounded-lg px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
+                                className="col-span-2 min-h-10 justify-self-start rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50 sm:col-span-1 sm:col-start-3"
                               >
-                                حذف الفيديو
+                                حذف الدرس
                               </button>
-                            )}
-                          </form>
-                          )}
-                        </div>
-                        {video.id !== undefined && videoInputModes[lessonId] !== "youtube" && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              void confirmMutation(
-                                "حذف فيديو الدرس؟",
-                                "سيتم إزالة الفيديو الحالي من هذا الدرس.",
-                                () => teachersApi.deleteLessonVideo(lessonId),
-                                "تم حذف الفيديو.",
-                                "حذف الفيديو",
-                              )
-                            }}
-                            className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            حذف فيديو الدرس
-                          </button>
-                        )}
-                        <div className="mt-5 border-t border-stroke pt-4">
-                          <h5 className="text-sm font-bold text-ink">ملفات وروابط مساعدة للدرس</h5>
-                          <p className="mt-1 text-xs text-ink-muted">أضف ملفًا قابلًا للتنزيل أو رابطًا خارجيًا مرتبطًا بهذا الدرس.</p>
-                        <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                          <form
-                            onSubmit={async (event) => {
-                              event.preventDefault()
-
-                              const formElement = event.currentTarget
-                              const form = new FormData(formElement)
-
-                              const file = form.get("file")
-
-                              if (file instanceof File && file.size) {
-                                const saved = await mutate(
-                                  () =>
-                                    teachersApi.uploadLessonResource(
-                                      lessonId,
-
-                                      file,
-
-                                      String(form.get("name") ?? "").trim(),
-                                    ),
-
-                                  "تم رفع المورد.",
-                                )
-                                if (saved) formElement.reset()
-                              }
-                            }}
-                            className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
-                          >
-                            <label className={field}>
-                              اسم المورد
-                              <input name="name" required className={control} />
-                            </label>
-                            <label className={field}>
-                              الملف
-                              <input
-                                name="file"
-                                type="file"
-                                required
-                                className="max-w-full text-xs"
-                              />
-                            </label>
-                            <button
-                              disabled={busy}
-                              className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-                            >
-                              رفع مورد
-                            </button>
-                          </form>
-                          <form
-                            onSubmit={async (event) => {
-                              event.preventDefault()
-
-                              const formElement = event.currentTarget
-                              const form = new FormData(formElement)
-
-                              const saved = await mutate(
-                                () =>
-                                  teachersApi.addExternalLessonResource(
-                                    lessonId,
-
-                                    String(form.get("name") ?? "").trim(),
-
-                                    String(
-                                      form.get("externalUrl") ?? "",
-                                    ).trim(),
-                                  ),
-
-                                "تمت إضافة الرابط.",
-                              )
-
-                              if (saved) formElement.reset()
-                            }}
-                            className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
-                          >
-                            <label className={field}>
-                              اسم الرابط
-                              <input name="name" required className={control} />
-                            </label>
-                            <label className={field}>
-                              الرابط
-                              <input
-                                name="externalUrl"
-                                type="url"
-                                required
-                                className={control}
-                              />
-                            </label>
-                            <button
-                              disabled={busy}
-                              className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-                            >
-                              إضافة مورد خارجي
-                            </button>
-                          </form>
-                        </div>
-                        </div>
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            onClick={() => void openQuiz(lessonId)}
-                            className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-semibold text-nuwa-base"
-                          >
-                            إدارة اختبار الدرس
-                          </button>
-                          {quizLessonId === lessonId && (
-                            <div className="mt-3 rounded-lg border border-stroke p-3">
-                              {quizMissing && (
-                                <form
-                                  onSubmit={(event) => void createQuiz(event)}
-                                  className="grid gap-2 sm:grid-cols-2"
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                              {Boolean(video.videoUrl) && (
+                                <a
+                                  href={String(video.videoUrl)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-nuwa-base underline"
                                 >
-                                  <label className={field}>
-                                    عنوان الاختبار
-                                    <input
-                                      name="title"
+                                  عرض الفيديو الحالي
+                                </a>
+                              )}
+                              {resources.map((resource) => (
+                                <span
+                                  key={String(resource.id)}
+                                  className="inline-flex max-w-full break-all items-center gap-1 rounded bg-canvas px-2 py-1"
+                                >
+                                  {String(resource.name ?? "مورد")}
+                                  <button
+                                    type="button"
+                                    aria-label="حذف المورد"
+                                    onClick={() => {
+                                      void confirmMutation(
+                                        "حذف المورد؟",
+                                        `سيتم حذف المورد «${String(resource.name ?? "المورد")}» من الدرس.`,
+                                        () =>
+                                          teachersApi.deleteResource(
+                                            String(resource.id),
+                                          ),
+                                        "تم حذف المورد.",
+                                        "حذف المورد",
+                                      )
+                                    }}
+                                    className="text-danger"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            {Boolean(
+                              video.videoUrl || video.providerVideoId,
+                            ) && (
+                              <LessonVideoPlayer
+                                video={video}
+                                title={String(
+                                  lesson.title ?? "معاينة فيديو الدرس",
+                                )}
+                              />
+                            )}
+                            <section className="mt-4 rounded-2xl border border-stroke bg-white p-4 shadow-sm">
+                              <div className="flex items-start gap-3">
+                                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                                  <FileVideo2 size={19} />
+                                </span>
+                                <div>
+                                  <h5 className="text-sm font-bold text-ink">
+                                    فيديو الدرس
+                                  </h5>
+                                  <p className="mt-1 text-xs leading-5 text-ink-muted">
+                                    اختر طريقة عرض الفيديو. سيظهر الحقل المناسب
+                                    بعد الاختيار.
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                {([
+                                  {
+                                    mode: "youtube",
+                                    title: "رابط من YouTube",
+                                    description:
+                                      "أضف رابط فيديو ليعمل داخل صفحة الدرس.",
+                                    Icon: Link2,
+                                  },
+                                  {
+                                    mode: "upload",
+                                    title: "رفع فيديو من الجهاز",
+                                    description:
+                                      "اختر ملف فيديو محفوظًا على جهازك.",
+                                    Icon: Upload,
+                                  },
+                                ] as const).map(
+                                  ({ mode, title, description, Icon }) => (
+                                    <button
+                                      key={mode}
+                                      type="button"
+                                      aria-pressed={
+                                        videoInputModes[lessonId] === mode
+                                      }
+                                      onClick={() =>
+                                        setVideoInputModes((current) => ({
+                                          ...current,
+                                          [lessonId]: mode,
+                                        }))
+                                      }
+                                      className={`flex min-h-20 items-center gap-3 rounded-xl border p-3 text-start transition ${
+                                        videoInputModes[lessonId] === mode
+                                          ? "border-nuwa-base bg-nuwa-soft/70 text-nuwa-deep ring-2 ring-nuwa-base/10"
+                                          : "border-stroke bg-canvas/60 text-ink hover:border-nuwa-base/40 hover:bg-white"
+                                      }`}
+                                    >
+                                      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white text-nuwa-base shadow-sm">
+                                        <Icon size={19} />
+                                      </span>
+                                      <span className="min-w-0">
+                                        <span className="block text-sm font-bold">
+                                          {title}
+                                        </span>
+                                        <span className="mt-1 block text-xs leading-5 text-ink-muted">
+                                          {description}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  ),
+                                )}
+                              </div>
+                            </section>
+                            <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                              {videoInputModes[lessonId] === "upload" && (
+                                <form
+                                  onSubmit={async (event) => {
+                                    event.preventDefault()
+                                    const form = event.currentTarget
+
+                                    const file = new FormData(form).get("file")
+
+                                    if (file instanceof File && file.size) {
+                                      const saved = await mutate(
+                                        () =>
+                                          teachersApi.uploadLessonVideo(
+                                            lessonId,
+
+                                            file,
+                                          ),
+
+                                        "تم رفع فيديو الدرس.",
+                                      )
+                                      if (saved) form.reset()
+                                    }
+                                  }}
+                                  className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
+                                >
+                                  <div className="w-full min-w-0">
+                                    <FileUploadField
+                                      name="file"
+                                      title="اختيار فيديو الدرس"
+                                      helperText="اختر ملف فيديو من جهازك"
+                                      accept="video/*"
                                       required
-                                      className={control}
+                                      disabled={busy}
                                     />
-                                  </label>
-                                  <label className={field}>
-                                    الوصف
-                                    <input
-                                      name="description"
-                                      required
-                                      className={control}
-                                    />
-                                  </label>
-                                  <label className={field}>
-                                    درجة النجاح
-                                    <input
-                                      name="passingScore"
-                                      type="number"
-                                      min="0"
-                                      required
-                                      className={control}
-                                    />
-                                  </label>
-                                  <div className="flex items-center rounded-lg bg-nuwa-soft px-3 text-xs font-semibold text-nuwa-deep">
-                                    محاولة واحدة لكل طالب
                                   </div>
                                   <button
                                     disabled={busy}
-                                    className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                                   >
-                                    إنشاء اختبار
+                                    {busy && (
+                                      <LoaderCircle
+                                        size={14}
+                                        className="animate-spin"
+                                      />
+                                    )}
+                                    {busy ? "جارٍ رفع الفيديو…" : "رفع الفيديو"}
                                   </button>
                                 </form>
                               )}
-                              {quiz && (
-                                <div className="space-y-4">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm font-semibold text-ink">
-                                      {String(quiz.title)} ·{" "}
-                                      {quiz.isPublished ? "منشور" : "مسودة"}
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => void toggleQuizPublish()}
-                                        className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-                                      >
-                                        {quiz.isPublished
-                                          ? "إلغاء النشر"
-                                          : "نشر الاختبار"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => void loadAttempts()}
-                                        className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink"
-                                      >
-                                        محاولات الطلاب
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => {
-                                          void confirmMutation(
-                                            "حذف الاختبار وأسئلته؟",
-                                            "سيتم حذف الاختبار وجميع أسئلته ومحاولات الطلاب المرتبطة به.",
-                                            () =>
-                                              quizzesApi.delete(
-                                                String(quiz.id),
-                                              ),
-                                            "تم حذف الاختبار.",
-                                            "حذف الاختبار",
-                                          )
-                                        }}
-                                        className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
-                                      >
-                                        حذف الاختبار
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <form
-                                    onSubmit={(event) => void updateQuiz(event)}
-                                    className="grid gap-2 sm:grid-cols-2"
+                              {videoInputModes[lessonId] === "youtube" && (
+                                <form
+                                  onSubmit={async (event) => {
+                                    event.preventDefault()
+                                    const form = event.currentTarget
+
+                                    const url = String(
+                                      new FormData(form).get("youTubeUrl") ??
+                                        "",
+                                    ).trim()
+
+                                    if (!youtubeVideoId(url)) {
+                                      onFeedback(
+                                        "أدخل رابط فيديو صحيحًا من YouTube.",
+                                      )
+                                      return
+                                    }
+
+                                    const saved = await mutate(
+                                      () =>
+                                        teachersApi.setLessonYoutubeVideo(
+                                          lessonId,
+                                          {
+                                            youTubeUrl: url,
+                                          },
+                                        ),
+
+                                      "تم ربط فيديو YouTube.",
+                                    )
+
+                                    if (saved) form.reset()
+                                  }}
+                                  className="flex flex-wrap items-end gap-3 rounded-2xl border border-stroke bg-canvas p-4 shadow-sm"
+                                >
+                                  <label className={`${field} w-full min-w-0`}>
+                                    رابط YouTube
+                                    <input
+                                      name="youTubeUrl"
+                                      type="url"
+                                      required
+                                      placeholder="https://www.youtube.com/watch?v=..."
+                                      className={control}
+                                    />
+                                  </label>
+                                  <button
+                                    disabled={busy}
+                                    className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
                                   >
-                                    <label className={field}>
-                                      عنوان الاختبار
-                                      <input
-                                        name="title"
-                                        required
-                                        defaultValue={String(quiz.title ?? "")}
-                                        className={control}
-                                      />
-                                    </label>
-                                    <label className={field}>
-                                      الوصف
-                                      <input
-                                        name="description"
-                                        required
-                                        defaultValue={String(
-                                          quiz.description ?? "",
-                                        )}
-                                        className={control}
-                                      />
-                                    </label>
-                                    <label className={field}>
-                                      درجة النجاح
-                                      <input
-                                        name="passingScore"
-                                        type="number"
-                                        required
-                                        defaultValue={String(
-                                          quiz.passingScore ?? 0,
-                                        )}
-                                        className={control}
-                                      />
-                                    </label>
-                                    <div className="flex items-center rounded-lg bg-nuwa-soft px-3 text-xs font-semibold text-nuwa-deep">
-                                      محاولة واحدة لكل طالب
-                                    </div>
+                                    حفظ الرابط
+                                  </button>
+                                  {video.id !== undefined && (
                                     <button
+                                      type="button"
                                       disabled={busy}
-                                      className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                      onClick={() => {
+                                        void confirmMutation(
+                                          "حذف فيديو الدرس؟",
+                                          "سيتم إزالة الفيديو الحالي من هذا الدرس.",
+                                          () =>
+                                            teachersApi.deleteLessonVideo(
+                                              lessonId,
+                                            ),
+                                          "تم حذف الفيديو.",
+                                          "حذف الفيديو",
+                                        )
+                                      }}
+                                      className="rounded-lg px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
                                     >
-                                      حفظ إعدادات الاختبار
+                                      حذف الفيديو
                                     </button>
-                                  </form>
-                                  <div className="space-y-3">
-                                    {records(quiz.questions).map(
-                                      (question, questionIndex) => (
-                                        <article
-                                          key={String(question.id)}
-                                          className="rounded-lg border border-stroke p-3"
+                                  )}
+                                </form>
+                              )}
+                            </div>
+                            {video.id !== undefined &&
+                              videoInputModes[lessonId] !== "youtube" && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    void confirmMutation(
+                                      "حذف فيديو الدرس؟",
+                                      "سيتم إزالة الفيديو الحالي من هذا الدرس.",
+                                      () =>
+                                        teachersApi.deleteLessonVideo(lessonId),
+                                      "تم حذف الفيديو.",
+                                      "حذف الفيديو",
+                                    )
+                                  }}
+                                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  حذف فيديو الدرس
+                                </button>
+                              )}
+                            <div className="mt-5 border-t border-stroke pt-4">
+                              <h5 className="text-sm font-bold text-ink">
+                                ملفات وروابط مساعدة للدرس
+                              </h5>
+                              <p className="mt-1 text-xs text-ink-muted">
+                                أضف ملفًا قابلًا للتنزيل أو رابطًا خارجيًا مرتبطًا
+                                بهذا الدرس.
+                              </p>
+                              <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                                <form
+                                  onSubmit={async (event) => {
+                                    event.preventDefault()
+
+                                    const formElement = event.currentTarget
+                                    const form = new FormData(formElement)
+
+                                    const file = form.get("file")
+
+                                    if (file instanceof File && file.size) {
+                                      const saved = await mutate(
+                                        () =>
+                                          teachersApi.uploadLessonResource(
+                                            lessonId,
+
+                                            file,
+
+                                            String(
+                                              form.get("name") ?? "",
+                                            ).trim(),
+                                          ),
+
+                                        "تم رفع المورد.",
+                                      )
+                                      if (saved) formElement.reset()
+                                    }
+                                  }}
+                                  className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
+                                >
+                                  <label className={field}>
+                                    اسم المورد
+                                    <input
+                                      name="name"
+                                      required
+                                      className={control}
+                                    />
+                                  </label>
+                                  <FileUploadField
+                                    name="file"
+                                    title="اختيار ملف المورد"
+                                    required
+                                    disabled={busy}
+                                  />
+                                  <button
+                                    disabled={busy}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                  >
+                                    {busy && (
+                                      <LoaderCircle
+                                        size={14}
+                                        className="animate-spin"
+                                      />
+                                    )}
+                                    {busy ? "جارٍ رفع المورد…" : "رفع مورد"}
+                                  </button>
+                                </form>
+                                <form
+                                  onSubmit={async (event) => {
+                                    event.preventDefault()
+
+                                    const formElement = event.currentTarget
+                                    const form = new FormData(formElement)
+
+                                    const saved = await mutate(
+                                      () =>
+                                        teachersApi.addExternalLessonResource(
+                                          lessonId,
+
+                                          String(form.get("name") ?? "").trim(),
+
+                                          String(
+                                            form.get("externalUrl") ?? "",
+                                          ).trim(),
+                                        ),
+
+                                      "تمت إضافة الرابط.",
+                                    )
+
+                                    if (saved) formElement.reset()
+                                  }}
+                                  className="grid min-w-0 gap-3 rounded-2xl border border-stroke bg-canvas p-4 sm:grid-cols-2"
+                                >
+                                  <label className={field}>
+                                    اسم الرابط
+                                    <input
+                                      name="name"
+                                      required
+                                      className={control}
+                                    />
+                                  </label>
+                                  <label className={field}>
+                                    الرابط
+                                    <input
+                                      name="externalUrl"
+                                      type="url"
+                                      required
+                                      className={control}
+                                    />
+                                  </label>
+                                  <button
+                                    disabled={busy}
+                                    className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                  >
+                                    إضافة مورد خارجي
+                                  </button>
+                                </form>
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                disabled={quizLoading}
+                                onClick={() => void openQuiz(lessonId)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-semibold text-nuwa-base disabled:opacity-60"
+                              >
+                                {quizLoading && quizLessonId === lessonId && (
+                                  <LoaderCircle
+                                    size={14}
+                                    className="animate-spin"
+                                  />
+                                )}
+                                {quizLoading && quizLessonId === lessonId
+                                  ? "جارٍ تحميل الاختبار…"
+                                  : "إدارة اختبار الدرس"}
+                              </button>
+                              {quizLessonId === lessonId && (
+                                <div className="mt-3 rounded-lg border border-stroke p-3">
+                                  {quizLoading && (
+                                    <div
+                                      role="status"
+                                      className="flex items-center gap-2 py-3 text-xs font-medium text-ink-muted"
+                                    >
+                                      <LoaderCircle
+                                        size={16}
+                                        className="animate-spin text-nuwa-base"
+                                      />
+                                      جارٍ تحميل تفاصيل الاختبار…
+                                    </div>
+                                  )}
+                                  {quizError && !quizLoading && (
+                                    <div
+                                      role="alert"
+                                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger/20 bg-danger-light p-3 text-xs text-danger"
+                                    >
+                                      <span>{quizError}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => void openQuiz(lessonId)}
+                                        className="font-bold underline"
+                                      >
+                                        إعادة المحاولة
+                                      </button>
+                                    </div>
+                                  )}
+                                  {quizMissing && (
+                                    <form
+                                      onSubmit={(event) =>
+                                        void createQuiz(event)
+                                      }
+                                      className="grid gap-2 sm:grid-cols-2"
+                                    >
+                                      <label
+                                        className={`${field} sm:col-span-2`}
+                                      >
+                                        عنوان الاختبار
+                                        <input
+                                          name="title"
+                                          required
+                                          className={control}
+                                        />
+                                      </label>
+                                      <label className={field}>
+                                        الوصف
+                                        <textarea
+                                          name="description"
+                                          required
+                                          rows={3}
+                                          className={`${control} h-auto py-2`}
+                                        />
+                                      </label>
+                                      <label className={field}>
+                                        درجة النجاح
+                                        <input
+                                          name="passingScore"
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          required
+                                          className={control}
+                                        />
+                                      </label>
+                                      <label className={field}>
+                                        عدد المحاولات المسموح بها لكل طالب
+                                        <input
+                                          name="maxAttempts"
+                                          type="number"
+                                          min="1"
+                                          step="1"
+                                          required
+                                          defaultValue="1"
+                                          className={control}
+                                        />
+                                      </label>
+                                      <p className="text-[11px] leading-5 text-ink-muted sm:col-span-2">
+                                        أضف الاختبار أولًا، ثم أضف الأسئلة وحدد
+                                        نقاط كل سؤال واختياراته والإجابة
+                                        الصحيحة.
+                                      </p>
+                                      <button
+                                        disabled={busy}
+                                        className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 sm:col-span-2"
+                                      >
+                                        إنشاء اختبار
+                                      </button>
+                                    </form>
+                                  )}
+                                  {quiz && !quizLoading && (
+                                    <div className="space-y-4">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                          <p className="text-sm font-semibold text-ink">
+                                            {String(quiz.title)} ·{" "}
+                                            {quiz.isPublished
+                                              ? "منشور"
+                                              : "مسودة"}
+                                          </p>
+                                          <p className="mt-1 text-[11px] text-ink-muted">
+                                            {records(quiz.questions).length}{" "}
+                                            سؤال ·{" "}
+                                            {records(quiz.questions).reduce(
+                                              (total, question) =>
+                                                total +
+                                                (Number(question.points) || 0),
+                                              0,
+                                            )}{" "}
+                                            نقطة إجمالية
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            onClick={() =>
+                                              void toggleQuizPublish()
+                                            }
+                                            className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                          >
+                                            {quiz.isPublished
+                                              ? "إلغاء النشر"
+                                              : "نشر الاختبار"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => void loadAttempts()}
+                                            className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink"
+                                          >
+                                            محاولات الطلاب
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            onClick={() => void deleteQuiz()}
+                                            className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger disabled:opacity-50"
+                                          >
+                                            حذف الاختبار
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <form
+                                        onSubmit={(event) =>
+                                          void updateQuiz(event)
+                                        }
+                                        className="grid gap-2 sm:grid-cols-2"
+                                      >
+                                        <label className={field}>
+                                          عنوان الاختبار
+                                          <input
+                                            name="title"
+                                            required
+                                            defaultValue={String(
+                                              quiz.title ?? "",
+                                            )}
+                                            className={control}
+                                          />
+                                        </label>
+                                        <label className={field}>
+                                          الوصف
+                                          <textarea
+                                            name="description"
+                                            required
+                                            rows={3}
+                                            defaultValue={String(
+                                              quiz.description ?? "",
+                                            )}
+                                            className={`${control} h-auto py-2`}
+                                          />
+                                        </label>
+                                        <label className={field}>
+                                          درجة النجاح
+                                          <input
+                                            name="passingScore"
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            required
+                                            defaultValue={String(
+                                              quiz.passingScore ?? 0,
+                                            )}
+                                            className={control}
+                                          />
+                                        </label>
+                                        <label className={field}>
+                                          عدد المحاولات المسموح بها لكل طالب
+                                          <input
+                                            name="maxAttempts"
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            required
+                                            defaultValue={String(
+                                              quiz.maxAttempts ?? 1,
+                                            )}
+                                            className={control}
+                                          />
+                                        </label>
+                                        <button
+                                          disabled={busy}
+                                          className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
                                         >
-                                          <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="text-sm font-semibold text-ink">
-                                              {String(question.text)} · النوع{" "}
-                                              {String(question.type)} ·{" "}
-                                              {String(question.points)} نقطة
-                                            </p>
-                                            <div className="flex gap-2">
-                                              <button
-                                                type="button"
-                                                disabled={
-                                                  busy || questionIndex === 0
-                                                }
-                                                aria-label="رفع ترتيب السؤال"
-                                                onClick={() =>
-                                                  void moveQuestion(
-                                                    records(quiz.questions),
-
-                                                    String(quiz.id),
-
-                                                    questionIndex,
-
-                                                    -1,
-                                                  )
-                                                }
-                                                className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
-                                              >
-                                                ↑
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={
-                                                  busy ||
-                                                  questionIndex ===
-                                                    records(quiz.questions)
-                                                      .length -
-                                                      1
-                                                }
-                                                aria-label="خفض ترتيب السؤال"
-                                                onClick={() =>
-                                                  void moveQuestion(
-                                                    records(quiz.questions),
-
-                                                    String(quiz.id),
-
-                                                    questionIndex,
-
-                                                    1,
-                                                  )
-                                                }
-                                                className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
-                                              >
-                                                ↓
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() => {
-                                                  void confirmMutation(
-                                                    "حذف السؤال؟",
-                                                    "سيتم حذف السؤال وإزالته من الاختبار.",
-                                                    () =>
-                                                      removeQuestion(
-                                                        String(question.id),
-                                                      ),
-                                                    "تم حذف السؤال.",
-                                                    "حذف السؤال",
-                                                  )
-                                                }}
-                                                className="text-xs font-semibold text-danger disabled:opacity-50"
-                                              >
-                                                حذف السؤال
-                                              </button>
-                                            </div>
-                                          </div>
-                                          <details className="mt-2">
-                                            <summary className="cursor-pointer text-xs font-semibold text-nuwa-base">
-                                              تعديل السؤال
-                                            </summary>
-                                            <form
-                                              onSubmit={(event) => {
-                                                event.preventDefault()
-
-                                                const form = new FormData(
-                                                  event.currentTarget,
-                                                )
-
-                                                const body = {
-                                                  text: String(
-                                                    form.get("text") ?? "",
-                                                  ).trim(),
-
-                                                  type: Number(
-                                                    form.get("type"),
-                                                  ),
-
-                                                  points: Number(
-                                                    form.get("points"),
-                                                  ),
-                                                }
-
-                                                void updateQuestion(
-                                                  String(question.id),
-
-                                                  body,
-                                                )
-                                              }}
-                                              className="mt-2 grid gap-2 sm:grid-cols-[1fr_100px_100px_auto] sm:items-end"
+                                          حفظ إعدادات الاختبار
+                                        </button>
+                                      </form>
+                                      <div className="space-y-3">
+                                        {records(quiz.questions).map(
+                                          (question, questionIndex) => (
+                                            <article
+                                              key={String(question.id)}
+                                              className="rounded-lg border border-stroke p-3"
                                             >
-                                              <label className={field}>
-                                                نص السؤال
-                                                <input
-                                                  name="text"
-                                                  required
-                                                  defaultValue={String(
-                                                    question.text ?? "",
-                                                  )}
-                                                  className={control}
-                                                />
-                                              </label>
-                                              <label className={field}>
-                                                النوع
-                                                <select
-                                                  name="type"
-                                                  defaultValue={String(
-                                                    question.type ?? 0,
-                                                  )}
-                                                  className={control}
-                                                >
-                                                  <option value="0">0</option>
-                                                  <option value="1">1</option>
-                                                  <option value="2">2</option>
-                                                </select>
-                                              </label>
-                                              <label className={field}>
-                                                النقاط
-                                                <input
-                                                  name="points"
-                                                  type="number"
-                                                  min="0"
-                                                  required
-                                                  defaultValue={String(
-                                                    question.points ?? 0,
-                                                  )}
-                                                  className={control}
-                                                />
-                                              </label>
-                                              <button
-                                                disabled={busy}
-                                                className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
-                                              >
-                                                حفظ
-                                              </button>
-                                            </form>
-                                          </details>
-                                          <ul className="mt-2 space-y-1 text-xs text-ink-muted">
-                                            {records(question.options).map(
-                                              (option) => (
-                                                <li
-                                                  key={String(option.id)}
-                                                  className="flex flex-wrap items-center justify-between gap-2"
-                                                >
-                                                  <details className="min-w-0 flex-1">
-                                                    <summary className="cursor-pointer">
-                                                      {String(option.text)}
-                                                      {option.isCorrect
-                                                        ? " · إجابة صحيحة"
-                                                        : ""}
-                                                    </summary>
-                                                    <form
-                                                      onSubmit={(event) => {
-                                                        event.preventDefault()
+                                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-sm font-semibold text-ink">
+                                                  {String(question.text)} ·
+                                                  النوع {String(question.type)}{" "}
+                                                  · {String(question.points)}{" "}
+                                                  نقطة
+                                                </p>
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    type="button"
+                                                    disabled={
+                                                      busy ||
+                                                      questionIndex === 0
+                                                    }
+                                                    aria-label="رفع ترتيب السؤال"
+                                                    onClick={() =>
+                                                      void moveQuestion(
+                                                        records(quiz.questions),
 
-                                                        const form =
-                                                          new FormData(
-                                                            event.currentTarget,
-                                                          )
+                                                        String(quiz.id),
 
-                                                        void updateOption(
-                                                          String(option.id),
+                                                        questionIndex,
 
-                                                          {
-                                                            text: String(
-                                                              form.get(
-                                                                "text",
-                                                              ) ?? "",
-                                                            ).trim(),
+                                                        -1,
+                                                      )
+                                                    }
+                                                    className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                                                  >
+                                                    ↑
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    disabled={
+                                                      busy ||
+                                                      questionIndex ===
+                                                        records(quiz.questions)
+                                                          .length -
+                                                          1
+                                                    }
+                                                    aria-label="خفض ترتيب السؤال"
+                                                    onClick={() =>
+                                                      void moveQuestion(
+                                                        records(quiz.questions),
 
-                                                            isCorrect:
-                                                              form.get(
-                                                                "isCorrect",
-                                                              ) === "on",
-                                                          },
-                                                        )
-                                                      }}
-                                                      className="mt-2 flex flex-wrap items-end gap-2"
-                                                    >
-                                                      <label className={field}>
-                                                        نص الاختيار
-                                                        <input
-                                                          name="text"
-                                                          required
-                                                          defaultValue={String(
-                                                            option.text ?? "",
-                                                          )}
-                                                          className={control}
-                                                        />
-                                                      </label>
-                                                      <label className="flex h-10 items-center gap-2 text-xs text-ink">
-                                                        <input
-                                                          name="isCorrect"
-                                                          type="checkbox"
-                                                          defaultChecked={
-                                                            option.isCorrect ===
-                                                            true
-                                                          }
-                                                        />{" "}
-                                                        صحيح
-                                                      </label>
-                                                      <button
-                                                        disabled={busy}
-                                                        className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-                                                      >
-                                                        حفظ
-                                                      </button>
-                                                    </form>
-                                                  </details>
+                                                        String(quiz.id),
+
+                                                        questionIndex,
+
+                                                        1,
+                                                      )
+                                                    }
+                                                    className="rounded border border-stroke px-2 py-1 text-xs disabled:opacity-40"
+                                                  >
+                                                    ↓
+                                                  </button>
                                                   <button
                                                     type="button"
                                                     disabled={busy}
                                                     onClick={() => {
                                                       void confirmMutation(
-                                                        "حذف الاختيار؟",
-                                                        "سيتم حذف هذا الاختيار من السؤال.",
+                                                        "حذف السؤال؟",
+                                                        "سيتم حذف السؤال وإزالته من الاختبار.",
                                                         () =>
-                                                          removeOption(
-                                                            String(option.id),
+                                                          removeQuestion(
+                                                            String(question.id),
                                                           ),
-                                                        "تم حذف الاختيار.",
-                                                        "حذف الاختيار",
+                                                        "تم حذف السؤال.",
+                                                        "حذف السؤال",
                                                       )
                                                     }}
-                                                    className="text-danger disabled:opacity-50"
+                                                    className="text-xs font-semibold text-danger disabled:opacity-50"
                                                   >
-                                                    حذف
+                                                    حذف السؤال
                                                   </button>
-                                                </li>
-                                              ),
-                                            )}
-                                          </ul>
-                                          <form
-                                            onSubmit={(event) =>
-                                              void addOption(
-                                                String(question.id),
+                                                </div>
+                                              </div>
+                                              <details className="mt-2">
+                                                <summary className="cursor-pointer text-xs font-semibold text-nuwa-base">
+                                                  تعديل السؤال
+                                                </summary>
+                                                <form
+                                                  onSubmit={(event) => {
+                                                    event.preventDefault()
 
-                                                event,
-                                              )
-                                            }
-                                            className="mt-3 grid gap-2 sm:grid-cols-[1fr_90px_auto_auto] sm:items-end"
-                                          >
-                                            <label className={field}>
-                                              إضافة اختيار
-                                              <input
-                                                name="text"
-                                                required
-                                                className={control}
-                                              />
-                                            </label>
-                                            <label className="flex h-10 items-center gap-2 text-xs text-ink">
-                                              <input
-                                                name="isCorrect"
-                                                type="checkbox"
-                                              />{" "}
-                                              صحيح
-                                            </label>
-                                            <label className={field}>
-                                              الترتيب
-                                              <input
-                                                name="order"
-                                                type="number"
-                                                min="1"
-                                                required
-                                                className={control}
-                                              />
-                                            </label>
-                                            <button
-                                              disabled={busy}
-                                              className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
-                                            >
-                                              إضافة اختيار
-                                            </button>
-                                          </form>
-                                        </article>
-                                      ),
-                                    )}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setAddingQuestion((value) => !value)
-                                    }
-                                    className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-semibold text-nuwa-base"
-                                  >
-                                    {addingQuestion
-                                      ? "إخفاء نموذج السؤال"
-                                      : "إضافة سؤال"}
-                                  </button>
-                                  {addingQuestion && (
-                                    <form
-                                      onSubmit={(event) =>
-                                        void addQuestion(event)
-                                      }
-                                      className="grid gap-2 rounded-lg bg-canvas p-3 sm:grid-cols-2"
-                                    >
-                                      <label className={field}>
-                                        نص السؤال
-                                        <input
-                                          name="text"
-                                          required
-                                          className={control}
-                                        />
-                                      </label>
-                                      <label className={field}>
-                                        نوع السؤال حسب رمز الـAPI
-                                        <select
-                                          name="type"
-                                          required
-                                          className={control}
-                                        >
-                                          <option value="0">0</option>
-                                          <option value="1">1</option>
-                                          <option value="2">2</option>
-                                        </select>
-                                      </label>
-                                      <label className={field}>
-                                        النقاط
-                                        <input
-                                          name="points"
-                                          type="number"
-                                          min="0"
-                                          required
-                                          className={control}
-                                        />
-                                      </label>
-                                      <label className={field}>
-                                        الترتيب
-                                        <input
-                                          name="order"
-                                          type="number"
-                                          min="1"
-                                          required
-                                          className={control}
-                                        />
-                                      </label>
+                                                    const form = new FormData(
+                                                      event.currentTarget,
+                                                    )
+
+                                                    const body = {
+                                                      text: String(
+                                                        form.get("text") ?? "",
+                                                      ).trim(),
+
+                                                      type: Number(
+                                                        form.get("type"),
+                                                      ),
+
+                                                      points: Number(
+                                                        form.get("points"),
+                                                      ),
+
+                                                      order: Number(
+                                                        form.get("order"),
+                                                      ),
+                                                    }
+
+                                                    void updateQuestion(
+                                                      String(question.id),
+
+                                                      body,
+                                                    )
+                                                  }}
+                                                  className="mt-2 grid gap-2 sm:grid-cols-[1fr_100px_100px_100px_auto] sm:items-end"
+                                                >
+                                                  <label className={field}>
+                                                    نص السؤال
+                                                    <input
+                                                      name="text"
+                                                      required
+                                                      defaultValue={String(
+                                                        question.text ?? "",
+                                                      )}
+                                                      className={control}
+                                                    />
+                                                  </label>
+                                                  <label className={field}>
+                                                    النوع
+                                                    <select
+                                                      name="type"
+                                                      defaultValue={String(
+                                                        question.type ?? 0,
+                                                      )}
+                                                      className={control}
+                                                    >
+                                                      <option value="0">
+                                                        رمز النوع 0
+                                                      </option>
+                                                      <option value="1">
+                                                        رمز النوع 1
+                                                      </option>
+                                                      <option value="2">
+                                                        رمز النوع 2
+                                                      </option>
+                                                    </select>
+                                                  </label>
+                                                  <label className={field}>
+                                                    النقاط
+                                                    <input
+                                                      name="points"
+                                                      type="number"
+                                                      min="0"
+                                                      required
+                                                      defaultValue={String(
+                                                        question.points ?? 0,
+                                                      )}
+                                                      className={control}
+                                                    />
+                                                  </label>
+                                                  <label className={field}>
+                                                    الترتيب
+                                                    <input
+                                                      name="order"
+                                                      type="number"
+                                                      min="1"
+                                                      required
+                                                      defaultValue={String(
+                                                        question.order ??
+                                                          questionIndex + 1,
+                                                      )}
+                                                      className={control}
+                                                    />
+                                                  </label>
+                                                  <button
+                                                    disabled={busy}
+                                                    className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                                                  >
+                                                    حفظ
+                                                  </button>
+                                                </form>
+                                              </details>
+                                              <ul className="mt-2 space-y-1 text-xs text-ink-muted">
+                                                {records(question.options).map(
+                                                  (option) => (
+                                                    <li
+                                                      key={String(option.id)}
+                                                      className="flex flex-wrap items-center justify-between gap-2"
+                                                    >
+                                                      <details className="min-w-0 flex-1">
+                                                        <summary className="cursor-pointer">
+                                                          {String(option.text)}
+                                                          {option.isCorrect
+                                                            ? " · إجابة صحيحة"
+                                                            : ""}
+                                                        </summary>
+                                                        <form
+                                                          onSubmit={(event) => {
+                                                            event.preventDefault()
+
+                                                            const form =
+                                                              new FormData(
+                                                                event.currentTarget,
+                                                              )
+
+                                                            void updateOption(
+                                                              String(option.id),
+
+                                                              {
+                                                                text: String(
+                                                                  form.get(
+                                                                    "text",
+                                                                  ) ?? "",
+                                                                ).trim(),
+
+                                                                isCorrect:
+                                                                  form.get(
+                                                                    "isCorrect",
+                                                                  ) === "on",
+
+                                                                order: Number(
+                                                                  form.get(
+                                                                    "order",
+                                                                  ),
+                                                                ),
+                                                              },
+                                                            )
+                                                          }}
+                                                          className="mt-2 flex flex-wrap items-end gap-2"
+                                                        >
+                                                          <label
+                                                            className={field}
+                                                          >
+                                                            نص الاختيار
+                                                            <input
+                                                              name="text"
+                                                              required
+                                                              defaultValue={String(
+                                                                option.text ??
+                                                                  "",
+                                                              )}
+                                                              className={
+                                                                control
+                                                              }
+                                                            />
+                                                          </label>
+                                                          <label className="flex h-10 items-center gap-2 text-xs text-ink">
+                                                            <input
+                                                              name="isCorrect"
+                                                              type="checkbox"
+                                                              defaultChecked={
+                                                                option.isCorrect ===
+                                                                true
+                                                              }
+                                                            />{" "}
+                                                            صحيح
+                                                          </label>
+                                                          <label
+                                                            className={field}
+                                                          >
+                                                            الترتيب
+                                                            <input
+                                                              name="order"
+                                                              type="number"
+                                                              min="1"
+                                                              required
+                                                              defaultValue={String(
+                                                                option.order ??
+                                                                  1,
+                                                              )}
+                                                              className={
+                                                                control
+                                                              }
+                                                            />
+                                                          </label>
+                                                          <button
+                                                            disabled={busy}
+                                                            className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+                                                          >
+                                                            حفظ
+                                                          </button>
+                                                        </form>
+                                                      </details>
+                                                      <button
+                                                        type="button"
+                                                        disabled={busy}
+                                                        onClick={() => {
+                                                          void confirmMutation(
+                                                            "حذف الاختيار؟",
+                                                            "سيتم حذف هذا الاختيار من السؤال.",
+                                                            () =>
+                                                              removeOption(
+                                                                String(
+                                                                  option.id,
+                                                                ),
+                                                              ),
+                                                            "تم حذف الاختيار.",
+                                                            "حذف الاختيار",
+                                                          )
+                                                        }}
+                                                        className="text-danger disabled:opacity-50"
+                                                      >
+                                                        حذف
+                                                      </button>
+                                                    </li>
+                                                  ),
+                                                )}
+                                              </ul>
+                                              <form
+                                                onSubmit={(event) =>
+                                                  void addOption(
+                                                    String(question.id),
+
+                                                    event,
+                                                  )
+                                                }
+                                                className="mt-3 grid gap-2 sm:grid-cols-[1fr_90px_auto_auto] sm:items-end"
+                                              >
+                                                <label className={field}>
+                                                  إضافة اختيار
+                                                  <input
+                                                    name="text"
+                                                    required
+                                                    className={control}
+                                                  />
+                                                </label>
+                                                <label className="flex h-10 items-center gap-2 text-xs text-ink">
+                                                  <input
+                                                    name="isCorrect"
+                                                    type="checkbox"
+                                                  />{" "}
+                                                  صحيح
+                                                </label>
+                                                <label className={field}>
+                                                  الترتيب
+                                                  <input
+                                                    name="order"
+                                                    type="number"
+                                                    min="1"
+                                                    required
+                                                    defaultValue={
+                                                      records(question.options)
+                                                        .length + 1
+                                                    }
+                                                    className={control}
+                                                  />
+                                                </label>
+                                                <button
+                                                  disabled={busy}
+                                                  className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                                                >
+                                                  إضافة اختيار
+                                                </button>
+                                              </form>
+                                            </article>
+                                          ),
+                                        )}
+                                      </div>
                                       <button
-                                        disabled={busy}
-                                        className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                        type="button"
+                                        onClick={() =>
+                                          setAddingQuestion((value) => !value)
+                                        }
+                                        className="rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-semibold text-nuwa-base"
                                       >
-                                        حفظ السؤال
+                                        {addingQuestion
+                                          ? "إخفاء نموذج السؤال"
+                                          : "إضافة سؤال"}
                                       </button>
-                                    </form>
-                                  )}
-                                  {attempts && (
-                                    <ul className="rounded-lg bg-canvas p-3 text-xs text-ink-muted">
-                                      {attempts.length
-                                        ? attempts.map((attempt) => (
-                                            <li
-                                              key={String(attempt.id)}
-                                              className="py-1"
+                                      {addingQuestion && (
+                                        <form
+                                          onSubmit={(event) =>
+                                            void addQuestion(event)
+                                          }
+                                          className="grid gap-2 rounded-lg bg-canvas p-3 sm:grid-cols-2"
+                                        >
+                                          <label className={field}>
+                                            نص السؤال
+                                            <input
+                                              name="text"
+                                              required
+                                              className={control}
+                                            />
+                                          </label>
+                                          <label className={field}>
+                                            نوع السؤال حسب رمز الـAPI
+                                            <select
+                                              name="type"
+                                              required
+                                              defaultValue="0"
+                                              className={control}
                                             >
-                                              محاولة {String(attempt.id)} ·
-                                              النتيجة{" "}
-                                              {String(attempt.score ?? "—")} /{" "}
-                                              {String(
-                                                attempt.totalPoints ?? "—",
-                                              )}{" "}
-                                              ·{" "}
-                                              {attempt.passed
-                                                ? "اجتاز"
-                                                : "لم يجتز"}
-                                            </li>
-                                          ))
-                                        : "لا توجد محاولات مسجلة."}
-                                    </ul>
+                                              <option value="0">
+                                                رمز النوع 0
+                                              </option>
+                                              <option value="1">
+                                                رمز النوع 1
+                                              </option>
+                                              <option value="2">
+                                                رمز النوع 2
+                                              </option>
+                                            </select>
+                                          </label>
+                                          <label className={field}>
+                                            النقاط
+                                            <input
+                                              name="points"
+                                              type="number"
+                                              min="0"
+                                              required
+                                              defaultValue="1"
+                                              className={control}
+                                            />
+                                          </label>
+                                          <label className={field}>
+                                            الترتيب
+                                            <input
+                                              name="order"
+                                              type="number"
+                                              min="1"
+                                              required
+                                              defaultValue={
+                                                records(quiz.questions).length +
+                                                1
+                                              }
+                                              className={control}
+                                            />
+                                          </label>
+                                          <button
+                                            disabled={busy}
+                                            className="rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                          >
+                                            حفظ السؤال
+                                          </button>
+                                        </form>
+                                      )}
+                                      {attempts && (
+                                        <ul className="rounded-lg bg-canvas p-3 text-xs text-ink-muted">
+                                          {attempts.length
+                                            ? attempts.map((attempt) => (
+                                                <li
+                                                  key={String(attempt.id)}
+                                                  className="py-1"
+                                                >
+                                                  محاولة {String(attempt.id)} ·
+                                                  النتيجة{" "}
+                                                  {String(attempt.score ?? "—")}{" "}
+                                                  /{" "}
+                                                  {String(
+                                                    attempt.totalPoints ?? "—",
+                                                  )}{" "}
+                                                  ·{" "}
+                                                  {attempt.passed
+                                                    ? "اجتاز"
+                                                    : "لم يجتز"}
+                                                </li>
+                                              ))
+                                            : "لا توجد محاولات مسجلة."}
+                                        </ul>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        </details>
                       </li>
                     )
                   })}
                 </ul>
-                <form
-                  onSubmit={(event) => void createLesson(moduleId, event)}
-                  className="mt-3 grid gap-2 rounded-lg bg-canvas p-3 sm:grid-cols-[1fr_1.5fr_100px_auto] sm:items-end"
+                <details
+                  name="teacher-course-content"
+                  open={openContentPanel === `add-lesson-${moduleId}`}
+                  onToggle={(event) => {
+                    if (event.currentTarget.open)
+                      setOpenContentPanel(`add-lesson-${moduleId}`)
+                    else
+                      setOpenContentPanel((current) =>
+                        current === `add-lesson-${moduleId}` ? null : current,
+                      )
+                  }}
+                  className="mt-3 rounded-xl border border-dashed border-nuwa-base/30 bg-canvas"
                 >
-                  <span className="text-xs font-semibold text-ink-muted sm:col-span-full">
-                    إضافة درس إلى: {String(module.title)}
-                  </span>
-                  <label className={field}>
-                    العنوان
-                    <input name="title" required placeholder="مثال: مقدمة الدرس" className={control} />
-                  </label>
-                  <label className={field}>
-                    الوصف
-                    <input name="description" required placeholder="الموضوعات أو المهارة التي يغطيها الدرس" className={control} />
-                  </label>
-                  <label className={field}>
-                    الترتيب
-                    <input
-                      name="order"
-                      type="number"
-                      min="1"
-                      required
-                      defaultValue={lessons.length + 1}
-                      className={control}
-                    />
-                  </label>
-                  <button
-                    disabled={busy}
-                    className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl p-4 text-base font-bold text-nuwa-deep [&::-webkit-details-marker]:hidden">
+                    <span>
+                      إضافة درس إلى: {String(module.title ?? "هذه الوحدة")}
+                    </span>
+                    <ChevronDown size={20} aria-hidden="true" />
+                  </summary>
+                  <form
+                    onSubmit={(event) => void createLesson(moduleId, event)}
+                    className="grid gap-2 border-t border-stroke p-3 sm:grid-cols-[1fr_1.5fr_100px_auto] sm:items-end"
                   >
-                    إضافة درس
-                  </button>
-                </form>
+                    <label className={field}>
+                      العنوان
+                      <input
+                        name="title"
+                        required
+                        placeholder="مثال: مقدمة الدرس"
+                        className={control}
+                      />
+                    </label>
+                    <label className={field}>
+                      الوصف
+                      <input
+                        name="description"
+                        required
+                        placeholder="الموضوعات أو المهارة التي يغطيها الدرس"
+                        className={control}
+                      />
+                    </label>
+                    <label className={field}>
+                      الترتيب
+                      <input
+                        name="order"
+                        type="number"
+                        min="1"
+                        required
+                        defaultValue={lessons.length + 1}
+                        className={control}
+                      />
+                    </label>
+                    <button
+                      disabled={busy}
+                      className="h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
+                    >
+                      إضافة درس
+                    </button>
+                  </form>
+                </details>
               </article>
             )
           })}

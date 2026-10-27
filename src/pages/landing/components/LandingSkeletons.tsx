@@ -8,18 +8,17 @@ export function CourseCardSkeleton() {
       aria-hidden="true"
       className="overflow-hidden rounded-2xl border border-[#deebe1] bg-white shadow-[0_8px_24px_-16px_rgba(23,53,42,.28)]"
     >
-      <div className="relative flex h-44 items-end bg-[#edf4ef] p-5">
+      <div className="relative flex h-36 items-end bg-[#edf4ef] p-3 sm:h-44 sm:p-5">
         <SkeletonBlock className="h-6 w-24 rounded-lg bg-[#dce9df]" />
       </div>
-      <div className="p-5">
-        <SkeletonBlock className="h-6 w-3/4" />
-        <SkeletonBlock className="mt-3 h-4 w-full" />
+      <div className="p-3 sm:p-5">
+        <SkeletonBlock className="h-5 w-3/4 sm:h-6" />
+        <SkeletonBlock className="mt-2 h-4 w-full" />
         <SkeletonBlock className="mt-2 h-4 w-5/6" />
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#edf1ed] pt-4">
+        <div className="mt-3 flex flex-col justify-between gap-2 border-t border-[#edf1ed] pt-3 sm:mt-4 sm:flex-row sm:items-center sm:gap-3 sm:pt-4">
           <SkeletonBlock className="h-4 w-24" />
-          <SkeletonBlock className="h-7 w-16 rounded-lg" />
+          <SkeletonBlock className="h-8 w-full rounded-lg sm:h-7 sm:w-16" />
         </div>
-        <SkeletonBlock className="mt-4 h-4 w-20" />
       </div>
     </article>
   )
@@ -30,7 +29,7 @@ export function CourseGridSkeleton() {
     <div
       aria-busy="true"
       aria-label="جارٍ تحميل الدورات"
-      className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      className="mt-9 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4"
     >
       {[0, 1, 2, 3].map((item) => (
         <CourseCardSkeleton key={item} />
@@ -43,22 +42,20 @@ export function TeacherCardSkeleton() {
   return (
     <article
       aria-hidden="true"
-      className="overflow-hidden rounded-xl border border-stroke bg-white"
+      className="relative min-h-[20rem] overflow-hidden rounded-2xl border border-stroke bg-[#e5eee7] sm:min-h-[26rem] sm:rounded-3xl"
     >
-      <div className="relative aspect-[4/3] bg-[#e5eee7] p-3">
-        <SkeletonBlock className="h-7 w-24 rounded-lg" />
-        <SkeletonBlock className="absolute bottom-3 right-3 h-4 w-28 bg-white/60" />
+      <SkeletonBlock className="absolute inset-0 rounded-none bg-[#dce9df]" />
+      <div className="absolute inset-x-3 top-3 flex justify-between sm:inset-x-4 sm:top-4">
+        <SkeletonBlock className="h-7 w-24 rounded-full" />
+        <SkeletonBlock className="h-7 w-16 rounded-full" />
       </div>
-      <div className="p-4 sm:p-5">
-        <SkeletonBlock className="h-6 w-2/3" />
-        <div className="mt-2 grid min-h-12 gap-2">
-          <SkeletonBlock className="h-4 w-full" />
-          <SkeletonBlock className="h-4 w-4/5" />
+      <div className="absolute inset-x-0 bottom-0 space-y-3 bg-gradient-to-t from-emerald-950/30 to-transparent p-4 pt-16 sm:p-5 sm:pt-20">
+        <SkeletonBlock className="h-6 w-2/3 bg-white/50" />
+        <div className="grid gap-2">
+          <SkeletonBlock className="h-4 w-full bg-white/40" />
+          <SkeletonBlock className="h-4 w-4/5 bg-white/40" />
         </div>
-        <div className="mt-4 flex items-center justify-between border-t border-stroke pt-3">
-          <SkeletonBlock className="h-5 w-32" />
-          <SkeletonBlock className="size-8 rounded-full" />
-        </div>
+        <SkeletonBlock className="h-10 w-full rounded-xl bg-white/40" />
       </div>
     </article>
   )
@@ -114,7 +111,7 @@ export function LandingPageSkeleton() {
           <div className="flex items-end justify-between gap-5">
             <div>
               <SkeletonBlock className="h-8 w-44" />
-              <SkeletonBlock className="mt-4 h-9 w-72 max-w-full" />
+              <SkeletonBlock className="mt-4 h-12 w-80 max-w-full" />
             </div>
             <SkeletonBlock className="h-11 w-32 rounded-xl" />
           </div>
@@ -125,7 +122,7 @@ export function LandingPageSkeleton() {
       <section aria-hidden="true" className="bg-white py-14 sm:py-16">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <SkeletonBlock className="h-8 w-40" />
-          <SkeletonBlock className="mt-3 h-9 w-64 max-w-full" />
+          <SkeletonBlock className="mt-3 h-12 w-72 max-w-full" />
           <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {[0, 1, 2, 3, 4, 5].map((item) => (
               <div
@@ -143,16 +140,19 @@ export function LandingPageSkeleton() {
         </div>
       </section>
 
-      <section aria-hidden="true" className="border-y border-stroke bg-[#f5f8f5] py-14 sm:py-16">
+      <section
+        aria-hidden="true"
+        className="border-y border-stroke bg-[#f5f8f5] py-14 sm:py-16"
+      >
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="flex items-end justify-between gap-4">
             <div>
               <SkeletonBlock className="h-4 w-36" />
-              <SkeletonBlock className="mt-3 h-9 w-64 max-w-full" />
+              <SkeletonBlock className="mt-3 h-12 w-72 max-w-full" />
             </div>
             <SkeletonBlock className="h-5 w-28" />
           </div>
-          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[0, 1, 2, 3].map((item) => (
               <TeacherCardSkeleton key={item} />
             ))}
@@ -164,7 +164,7 @@ export function LandingPageSkeleton() {
         <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-8 lg:grid-cols-[.9fr_1.35fr_auto] lg:items-center">
           <div>
             <SkeletonBlock className="h-5 w-32 bg-white/20" />
-            <SkeletonBlock className="mt-4 h-10 w-64 max-w-full bg-white/25" />
+            <SkeletonBlock className="mt-4 h-12 w-72 max-w-full bg-white/25" />
             <SkeletonBlock className="mt-3 h-4 w-full bg-white/20" />
           </div>
           <div className="grid grid-cols-2 gap-5 border-y border-white/15 py-5 sm:grid-cols-4 sm:border-y-0 sm:border-x sm:px-6">
