@@ -127,7 +127,7 @@ export default function FeaturedCoursesSection({
           onRetry={onRetry}
         >
           {data && (
-            <div className="mt-9 grid grid-cols-1 gap-4 sm:gap-5">
+            <div className="mt-9 grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-4">
               {data.featured
                 .slice(0, visibleCount)
 
@@ -146,9 +146,9 @@ export default function FeaturedCoursesSection({
                       key={String(course.id ?? index)}
                       {...fade(Math.min(index, 5) * 0.05)}
                       layout={!reduce}
-                      className="group relative mx-auto flex min-h-64 w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] sm:min-h-72 sm:flex-row sm:rounded-3xl"
+                      className="group relative mx-auto flex min-h-64 w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] sm:min-h-72 sm:rounded-3xl lg:mx-0 lg:max-w-none"
                     >
-                      <div className="relative h-44 w-full shrink-0 overflow-hidden bg-gradient-to-br from-[#072d1c] via-[#0e5233] to-[#187d4d] sm:h-auto sm:min-h-72 sm:w-[38%]">
+                      <div className="relative h-44 w-full shrink-0 overflow-hidden bg-gradient-to-br from-[#072d1c] via-[#0e5233] to-[#187d4d] sm:h-48 lg:h-44">
                         {cover ? (
                           <img
                             src={cover}
@@ -267,6 +267,18 @@ export default function FeaturedCoursesSection({
             >
               <span>عرض المزيد من الدورات</span>
               <ArrowDown size={16} className="transition-transform duration-300 group-hover:translate-y-0.5" aria-hidden="true" />
+            </button>
+          </motion.div>
+        )}
+        {data && data.featured.length <= visibleCount && (
+          <motion.div {...fade()} className="mt-7 flex justify-center">
+            <button
+              type="button"
+              onClick={() => navigate("public:courses")}
+              className="group inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-2xl border border-[#cddbd0] bg-white px-5 py-3 text-sm font-bold text-[#234736] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-nuwa-base/50 hover:bg-nuwa-ice hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:w-auto"
+            >
+              <span>كل الدورات</span>
+              <ArrowLeft size={16} aria-hidden="true" />
             </button>
           </motion.div>
         )}
