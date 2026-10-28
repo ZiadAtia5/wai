@@ -1,4 +1,6 @@
-import { ArrowLeft, BookOpen, Star } from "lucide-react"
+import { useState } from "react"
+
+import { ArrowDown, ArrowLeft, BookOpen, Star } from "lucide-react"
 
 import { motion, useReducedMotion } from "framer-motion"
 
@@ -15,6 +17,7 @@ import { CourseGridSkeleton } from "./LandingSkeletons"
 import { formatEgp } from "../../../utils/currency"
 
 const INITIAL_VISIBLE_COURSES = 4
+const MORE_COURSES = 4
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -43,6 +46,7 @@ export default function FeaturedCoursesSection({
 
   navigate: NavigateFn
 }) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COURSES)
   const reduce = !!useReducedMotion()
 
   // one quiet fade-in when an element first scrolls into view, nothing else
@@ -123,10 +127,9 @@ export default function FeaturedCoursesSection({
           onRetry={onRetry}
         >
           {data && (
-            <div className="mt-9 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mt-9 grid grid-cols-1 gap-4 sm:gap-5">
               {data.featured
-
-                .slice(0, INITIAL_VISIBLE_COURSES)
+                .slice(0, visibleCount)
 
                 .map((item, index) => {
                   const course = record(item)
@@ -142,9 +145,10 @@ export default function FeaturedCoursesSection({
                     <motion.article
                       key={String(course.id ?? index)}
                       {...fade(Math.min(index, 5) * 0.05)}
-                      className="group relative flex min-h-80 flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] sm:rounded-3xl"
+                      layout={!reduce}
+                      className="group relative mx-auto flex min-h-64 w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-stroke bg-surface text-start shadow-sm transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:border-emerald-300/70 hover:shadow-[0_16px_36px_-24px_rgba(11,59,37,.35)] sm:min-h-72 sm:flex-row sm:rounded-3xl"
                     >
-                      <div className="relative h-36 w-full overflow-hidden bg-gradient-to-br from-[#072d1c] via-[#0e5233] to-[#187d4d] sm:h-52">
+                      <div className="relative h-44 w-full shrink-0 overflow-hidden bg-gradient-to-br from-[#072d1c] via-[#0e5233] to-[#187d4d] sm:h-auto sm:min-h-72 sm:w-[38%]">
                         {cover ? (
                           <img
                             src={cover}
@@ -201,7 +205,7 @@ export default function FeaturedCoursesSection({
                         )}
                       </div>
 
-                      <div className="relative z-10 flex flex-1 flex-col justify-between bg-surface p-3 transition-colors duration-300 group-hover:bg-emerald-50/20 sm:p-5">
+                      <div className="relative z-10 flex flex-1 flex-col justify-between bg-surface p-4 transition-colors duration-300 group-hover:bg-emerald-50/20 sm:p-6">
                         <div>
                           <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-nuwa-base sm:text-base">
                             {String(course.title ?? "دورة تعليمية")}
@@ -241,7 +245,7 @@ export default function FeaturedCoursesSection({
                                 courseId: String(course.id),
                               })
                             }
-                            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-nuwa-soft px-2.5 py-1.5 text-[11px] font-bold text-nuwa-deep opacity-100 transition-[opacity,transform,background-color,color] duration-300 ease-out hover:bg-nuwa-base hover:text-white hover:shadow-md hover:shadow-emerald-900/10 focus-visible:translate-y-0 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default sm:gap-1.5 sm:rounded-full sm:px-3.5 sm:py-1.5 sm:text-xs sm:translate-y-1 sm:opacity-0 group-hover:translate-y-0 group-hover:bg-nuwa-base group-hover:text-white group-hover:opacity-100"
+                            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-nuwa-soft px-3 py-2 text-xs font-bold text-nuwa-deep transition-[transform,background-color,color] duration-300 ease-out hover:bg-nuwa-base hover:text-white hover:shadow-md hover:shadow-emerald-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default sm:gap-1.5 sm:rounded-full sm:px-4 sm:py-2"
                           >
                             التفاصيل
                             <ArrowLeft size={13} aria-hidden="true" />
@@ -254,6 +258,18 @@ export default function FeaturedCoursesSection({
             </div>
           )}
         </ApiQueryState>
+        {data && data.featured.length > visibleCount && (
+          <motion.div {...fade()} className="mt-7 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + MORE_COURSES)}
+              className="group inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-2xl border border-[#cddbd0] bg-white px-5 py-3 text-sm font-bold text-[#234736] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-nuwa-base/50 hover:bg-nuwa-ice hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:w-auto"
+            >
+              <span>عرض المزيد من الدورات</span>
+              <ArrowDown size={16} className="transition-transform duration-300 group-hover:translate-y-0.5" aria-hidden="true" />
+            </button>
+          </motion.div>
+        )}
       </div>
     </section>
   )

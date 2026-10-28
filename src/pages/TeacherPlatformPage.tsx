@@ -176,7 +176,12 @@ export default function TeacherPlatformPage({
     [teacherId],
   )
 
-  const { data, error, loading } = useApiQuery(loadPage, reloadKey)
+  const { data, error, loading } = useApiQuery(
+    loadPage,
+    reloadKey,
+    true,
+    `teacher-platform:${teacherId}`,
+  )
 
   const teacher = data?.teacher
 
@@ -355,7 +360,11 @@ export default function TeacherPlatformPage({
 
           <ApiQueryState
             loading={loading}
-            loadingContent={<TeacherCoursesSkeleton />}
+            loadingContent={
+              <TeacherCoursesSkeleton
+                count={data === null ? undefined : data.courses.length}
+              />
+            }
             error={error}
             isEmpty={Boolean(data && data.courses.length === 0)}
             emptyMessage="لا توجد دورات منشورة متاحة لهذا المعلم حاليًا."

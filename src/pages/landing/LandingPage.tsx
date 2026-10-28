@@ -22,7 +22,7 @@ import PlatformBenefitsSection from "./components/PlatformBenefitsSection"
 
 async function loadCatalogSummary(): Promise<LandingCatalogSummary> {
   const [courses, teachers] = await Promise.all([
-    getPublicCourses(1, 4),
+    getPublicCourses(1, 24),
 
     getPublicTeachers(1, 4),
   ])

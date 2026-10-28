@@ -5,6 +5,7 @@ import {
   SkeletonIcon,
   SkeletonImage,
   SkeletonText,
+  getLoadingItemCount,
 } from "../Skeleton"
 
 type CatalogSkeletonKind = "course" | "person" | "record"
@@ -106,7 +107,10 @@ export function PublicCatalogPageSkeleton({
           </div>
           <div className="mt-3 flex gap-2 overflow-hidden">
             {[0, 1, 2, 3].map((item) => (
-              <Skeleton key={item} className="h-10 w-20 shrink-0 rounded-full" />
+              <Skeleton
+                key={item}
+                className="h-10 w-20 shrink-0 rounded-full"
+              />
             ))}
           </div>
         </div>
@@ -131,43 +135,26 @@ export function CatalogGridSkeleton({
       : `grid gap-5 md:grid-cols-2 ${
           kind === "course" ? "xl:grid-cols-3" : "lg:grid-cols-3"
         }`
-  const secondColumn = layout === "dashboard" ? "sm:block" : "md:block"
-  const thirdColumn =
-    layout === "dashboard"
-      ? "xl:block"
-      : kind === "course"
-        ? "xl:block"
-        : "lg:block"
-
   return (
     <div
       aria-busy="true"
       aria-label="جارٍ تحميل النتائج"
       className={gridColumns}
     >
-      {Array.from({ length: Math.max(1, count) }, (_, index) => {
-        const visibility =
-          count <= 3 && index === 1
-            ? `hidden ${secondColumn}`
-            : count <= 3 && index === 2
-              ? `hidden ${thirdColumn}`
-              : ""
-        return (
-          <div key={index} className={visibility}>
-            <CatalogCardSkeleton kind={kind} />
-          </div>
-        )
-      })}
+      {Array.from({ length: getLoadingItemCount(count) }, (_, index) => (
+        <CatalogCardSkeleton key={index} kind={kind} />
+      ))}
     </div>
   )
 }
 
 export function TeacherCoursesSkeleton({
   dashboard = false,
+  count,
 }: {
   dashboard?: boolean
+  count?: number
 }) {
-  const thirdColumn = dashboard ? "2xl:block" : "xl:block"
   return (
     <div
       aria-busy="true"
@@ -176,13 +163,9 @@ export function TeacherCoursesSkeleton({
         dashboard ? "2xl:grid-cols-3" : "xl:grid-cols-3"
       }`}
     >
-      <CourseGridCardSkeleton />
-      <div className="hidden md:block">
-        <CourseGridCardSkeleton />
-      </div>
-      <div className={`hidden ${thirdColumn}`}>
-        <CourseGridCardSkeleton />
-      </div>
+      {Array.from({ length: getLoadingItemCount(count) }, (_, index) => (
+        <CourseGridCardSkeleton key={index} />
+      ))}
     </div>
   )
 }
@@ -206,7 +189,13 @@ function CourseGridCardSkeleton() {
   )
 }
 
-export function RecordGridSkeleton({ compact = false }: { compact?: boolean }) {
+export function RecordGridSkeleton({
+  compact = false,
+  count,
+}: {
+  compact?: boolean
+  count?: number
+}) {
   const card = (
     <article
       aria-hidden="true"
@@ -237,17 +226,9 @@ export function RecordGridSkeleton({ compact = false }: { compact?: boolean }) {
       aria-label="جارٍ تحميل البيانات"
       className={compact ? "grid gap-3" : "grid gap-4 md:grid-cols-2"}
     >
-      {compact ? (
-        <>
-          {card}
-          {card}
-        </>
-      ) : (
-        <>
-          {card}
-          <div className="hidden md:block">{card}</div>
-        </>
-      )}
+      {Array.from({ length: getLoadingItemCount(count) }, (_, index) => (
+        <div key={index}>{card}</div>
+      ))}
     </div>
   )
 }
@@ -314,14 +295,14 @@ export function ProgressGridSkeleton() {
   )
 }
 
-export function EnrollmentGridSkeleton() {
+export function EnrollmentGridSkeleton({ count }: { count?: number } = {}) {
   return (
     <div
       aria-busy="true"
       aria-label="جارٍ تحميل الدورات المسجل بها"
       className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
     >
-      {[0, 1, 2].map((item) => (
+      {Array.from({ length: getLoadingItemCount(count) }, (_, item) => (
         <article
           key={item}
           aria-hidden="true"

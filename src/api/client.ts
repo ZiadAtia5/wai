@@ -59,7 +59,9 @@ export function resolveApiAssetUrl(path: string): string {
 
   try {
     const apiUrl = new URL(getApiBaseUrl())
+
     const baseUrl = `${apiUrl.origin}/`
+
     url = new URL(trimmedPath, baseUrl)
   } catch {
     throw new ApiError("مسار ملف الخادم غير صالح.")
@@ -211,7 +213,7 @@ export async function apiRequest<T>(
 function getHttpErrorMessage(status: number): string {
   if (status === 401) return "يلزم تسجيل الدخول للوصول إلى هذه البيانات."
 
-  if (status === 403) return "لا تملك صلاحية الوصول إلى هذه البيانات."
+  if (status === 403) return "تعذر تحميل البيانات المطلوبة الآن."
 
   if (status === 404) return "المورد المطلوب غير موجود."
 

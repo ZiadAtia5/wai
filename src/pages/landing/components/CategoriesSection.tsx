@@ -188,26 +188,29 @@ export default function CategoriesSection({
         </div>
 
         {/* شبكة المجالات (الكروت المدمجة والمصغرة) */}
-        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
-          {CATEGORIES.map((category) => {
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-6">
+          {CATEGORIES.map((category, index) => {
             const Icon = category.icon
 
             return (
-              <button
+              <motion.button
                 key={category.name}
                 type="button"
                 onClick={() => handleCategorySelect(category.name)}
+                initial={reduce ? false : { opacity: 0, y: 24, scale: 0.97 }}
+                whileInView={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.55, delay: reduce ? 0 : index * 0.07, ease: [0.22, 1, 0.36, 1] }}
                 aria-label={`استكشف دورات ${category.name}`}
                 className={`
-                  group relative flex min-h-[160px]
+                  group relative flex min-h-[176px] sm:min-h-[190px]
                   flex-col justify-between overflow-hidden
-                  rounded-2xl border border-slate-200/90
-                  bg-white/95 p-4 text-right
-                  shadow-[0_2px_8px_rgba(15,23,42,0.04)]
-                  transition-all duration-300
-                  hover:-translate-y-1
+                  rounded-[1.35rem] border border-slate-200/90
+                  bg-white/95 p-3.5 text-right shadow-[0_8px_24px_rgba(15,23,42,0.055)]
+                  transition-[transform,box-shadow,border-color] duration-300
+                  hover:-translate-y-1.5
                   hover:bg-white
-                  hover:shadow-[0_12px_24px_rgba(15,23,42,0.08)]
+                  hover:shadow-[0_18px_36px_rgba(15,23,42,0.11)] active:scale-[0.98]
                   focus-visible:outline-none
                   focus-visible:ring-2
                   focus-visible:ring-nuwa-base
@@ -219,7 +222,7 @@ export default function CategoriesSection({
                   aria-hidden="true"
                   className={`
                     absolute inset-0 bg-gradient-to-br
-                    opacity-0 transition-opacity duration-300
+                    opacity-40 transition-opacity duration-500
                     group-hover:opacity-100 pointer-events-none
                     ${category.glowClassName}
                   `}
@@ -229,11 +232,11 @@ export default function CategoriesSection({
                 <div className="relative z-10 flex items-center justify-between">
                   <span
                     className={`
-                      relative grid size-10 shrink-0
-                      place-items-center rounded-xl
+                      relative grid size-11 shrink-0
+                      place-items-center rounded-2xl
                       ring-1 shadow-2xs
                       transition-all duration-300
-                      group-hover:scale-105
+                      group-hover:scale-110 group-hover:-rotate-3
                       ${category.iconClassName}
                     `}
                   >
@@ -248,11 +251,11 @@ export default function CategoriesSection({
 
                 {/* النصوص والتفاصيل */}
                 <div className="relative z-10 mt-3">
-                  <span className="block text-sm font-black tracking-tight text-ink transition-colors duration-200 group-hover:text-nuwa-base">
+                  <span className="block text-[13px] font-black tracking-tight text-ink transition-colors duration-200 group-hover:text-nuwa-base sm:text-base">
                     {category.name}
                   </span>
 
-                  <span className="mt-1 block text-[11px] leading-tight text-ink-muted line-clamp-1">
+                  <span className="mt-1 block text-[10px] leading-relaxed text-ink-muted line-clamp-2 sm:text-xs">
                     {category.detail}
                   </span>
 
@@ -277,7 +280,7 @@ export default function CategoriesSection({
                     />
                   </div>
                 </div>
-              </button>
+              </motion.button>
             )
           })}
         </div>

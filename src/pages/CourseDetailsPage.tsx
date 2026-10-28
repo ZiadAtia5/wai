@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleDollarSign,
   GraduationCap,
+  FileText,
   LockKeyhole,
   Play,
   ShieldCheck,
@@ -17,7 +18,9 @@ import { ApiError, getAuthToken, resolveApiAssetUrl } from "../api/client"
 
 import { coursesApi, quizzesApi, studentsApi } from "../api/endpoints"
 
-import LessonVideoPlayer from "../components/dashboard/LessonVideoPlayer"
+import LessonVideoPlayer, {
+  youtubeVideoId,
+} from "../components/dashboard/LessonVideoPlayer"
 
 import {
   Skeleton,
@@ -29,6 +32,7 @@ import {
 import { notifyError, notifySuccess } from "../utils/notifications"
 
 import type { NavigateFn } from "../types"
+
 import { formatEgp } from "../utils/currency"
 
 type RecordValue = Record<string, unknown>
@@ -69,6 +73,16 @@ function list(value: unknown): RecordValue[] {
     "courseModules",
 
     "lessons",
+
+    "resources",
+
+    "lessonResources",
+
+    "attachments",
+
+    "materials",
+
+    "files",
 
     "enrollments",
   ]) {
@@ -140,16 +154,19 @@ function quizPassed(attempt: RecordValue): boolean {
 
 function attemptRecords(value: unknown): RecordValue[] {
   const root = record(value)
+
   const records = [root, record(root.data), record(unwrap(value))]
 
   for (const result of records) {
     for (const key of ["items", "attempts", "results"]) {
       const candidate = result[key]
+
       if (Array.isArray(candidate)) return candidate.map(record)
     }
   }
 
   if (Array.isArray(value)) return value.map(record)
+
   return list(value)
 }
 
@@ -272,6 +289,7 @@ async function studentPassedLessonQuiz(
     throw new Error("لم يُعِد الخادم بيانات الاختبار المتوقعة.")
 
   const attemptResponse = await quizzesApi.attempts(String(quizId))
+
   const attempts = attemptRecords(attemptResponse)
 
   return attempts.some(
@@ -283,12 +301,90 @@ async function studentPassedLessonQuiz(
 function courseRecord(value: unknown): RecordValue {
   const result = record(unwrap(value))
 
-  for (const key of ["course", "courseDetails", "courseData", "result"]) {
+  for (const key of [
+    "course",
+    "courseDetails",
+    "courseData",
+    "courseContent",
+    "details",
+    "result",
+  ]) {
     if (result[key] && typeof result[key] === "object")
       return courseRecord(result[key])
   }
 
   return result
+}
+
+function mergeCourseLessonResources(
+  primaryValue: unknown,
+  supplementalValue: unknown,
+): RecordValue {
+  const primary = courseRecord(primaryValue)
+  const supplemental = courseRecord(supplementalValue)
+  const supplementalModules = list(
+    supplemental.modules ?? supplemental.courseModules,
+  )
+  const supplementalLessons = new Map<string, RecordValue>()
+  const primaryLessonById = new Map<string, RecordValue>()
+
+  for (const lesson of list(primary.lessons)) {
+    const id = lessonId(lesson)
+    if (id) primaryLessonById.set(id, lesson)
+  }
+
+  for (const module of supplementalModules) {
+    for (const lesson of list(module.lessons ?? module.courseLessons)) {
+      const id = lessonId(lesson)
+      if (id) supplementalLessons.set(id, lesson)
+    }
+  }
+
+  for (const lesson of list(supplemental.lessons)) {
+    const id = lessonId(lesson)
+    if (id) supplementalLessons.set(id, lesson)
+  }
+
+  const primaryModules = list(primary.modules ?? primary.courseModules)
+  const modulesSource = primaryModules.length
+    ? primaryModules
+    : supplementalModules
+  const modules = modulesSource.map((module, index) => {
+    const moduleId = String(module.id ?? module.moduleId ?? "")
+    const supplementalModule = supplementalModules.find(
+      (item) => moduleId && String(item.id ?? item.moduleId ?? "") === moduleId,
+    )
+    const moduleLessons = list(module.lessons ?? module.courseLessons)
+    const lessonsSource = moduleLessons.length
+      ? moduleLessons
+      : list(supplementalModule?.lessons ?? supplementalModule?.courseLessons)
+
+    return {
+      ...(supplementalModule ?? {}),
+      ...module,
+      lessons: lessonsSource.map((lesson) => {
+        const id = lessonId(lesson)
+        const alternateLesson = id ? supplementalLessons.get(id) : undefined
+        const primaryLesson = id ? primaryLessonById.get(id) : undefined
+        const resources =
+          lessonResourcesFrom(primaryLesson ?? lesson).length > 0
+            ? lessonResourcesFrom(primaryLesson ?? lesson)
+            : lessonResourcesFrom(alternateLesson ?? {})
+
+        return resources.length > 0
+          ? {
+              ...(alternateLesson ?? {}),
+              ...lesson,
+              ...(primaryLesson ?? {}),
+              resources,
+            }
+          : { ...(alternateLesson ?? {}), ...lesson, ...(primaryLesson ?? {}) }
+      }),
+      order: module.order ?? index + 1,
+    }
+  })
+
+  return { ...supplemental, ...primary, modules }
 }
 
 function approvedEnrollment(value: RecordValue): boolean {
@@ -357,6 +453,72 @@ function videoFromLesson(lesson: RecordValue): RecordValue | null {
     return video
 
   return null
+}
+
+function lessonResourceUrl(resource: RecordValue): string {
+  const file = record(
+    resource.file ?? resource.attachment ?? resource.resourceFile,
+  )
+  const candidates = [
+    resource.externalUrl,
+    resource.externalLink,
+    resource.fileUrl,
+    resource.resourceFileUrl,
+    resource.resourceUrl,
+    resource.downloadUrl,
+    resource.mediaUrl,
+    resource.publicUrl,
+    resource.storageUrl,
+    resource.href,
+    resource.filePath,
+    resource.path,
+    resource.url,
+    typeof resource.file === "string" ? resource.file : undefined,
+    file.downloadUrl,
+    file.fileUrl,
+    file.url,
+    file.path,
+  ]
+  const value = candidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.trim().length > 0,
+  )
+
+  return value?.trim() ?? ""
+}
+
+function lessonResourcesFrom(lesson: RecordValue): RecordValue[] {
+  const content = record(lesson.content)
+  const candidates = [
+    lesson.resources,
+    lesson.lessonResources,
+    lesson.attachments,
+    lesson.materials,
+    lesson.files,
+    lesson.resourceList,
+    content.resources,
+    content.attachments,
+    content.materials,
+    content.files,
+  ]
+
+  for (const candidate of candidates) {
+    const items = list(candidate)
+    if (items.length) return items
+  }
+
+  return []
+}
+
+function scrollToLessonContent(targetId: string) {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      })
+    })
+  })
 }
 
 function CourseDetailsSkeleton() {
@@ -468,6 +630,13 @@ export default function CourseDetailsPage({
 
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null)
 
+  const [openVideoLessonId, setOpenVideoLessonId] = useState<string | null>(
+    null,
+  )
+
+  const [openResourcesLessonId, setOpenResourcesLessonId] =
+    useState<string | null>(null)
+
   async function loadPage(active = () => true) {
     setLoading(true)
 
@@ -482,6 +651,10 @@ export default function CourseDetailsPage({
     setQuizPassByLesson({})
 
     setExpandedLessonId(null)
+
+    setOpenVideoLessonId(null)
+
+    setOpenResourcesLessonId(null)
 
     const token = getAuthToken()
 
@@ -533,7 +706,20 @@ export default function CourseDetailsPage({
 
       if (!active()) return
 
-      const loadedCourse = courseRecord(response)
+      let loadedCourse = courseRecord(response)
+
+      if (nextAccess === "approved") {
+        try {
+          const supplementalCourse = await coursesApi.detail(courseId)
+          if (!active()) return
+          loadedCourse = mergeCourseLessonResources(
+            response,
+            supplementalCourse,
+          )
+        } catch {
+          // Keep the enrolled-student course response if public details are unavailable.
+        }
+      }
 
       setCourse(loadedCourse)
 
@@ -713,10 +899,14 @@ export default function CourseDetailsPage({
 
       setLessonProgress((current) => {
         const next = new Map(current)
+
         next.set(id, { ...next.get(id), lessonId: id, isCompleted: true })
+
         return next
       })
+
       setExpandedLessonId(null)
+
       notifySuccess("تم تسجيل إكمال الدرس.")
     } catch (cause) {
       notifyError(cause, "تعذر تسجيل إكمال الدرس.")
@@ -738,7 +928,9 @@ export default function CourseDetailsPage({
 
   function moduleIsComplete(module: RecordValue): boolean {
     if (!progressVerified) return false
+
     const lessons = list(module.lessons ?? module.courseLessons)
+
     return lessons.every((lesson) => {
       return lessonIsComplete(lesson)
     })
@@ -747,7 +939,9 @@ export default function CourseDetailsPage({
   function lessonIsComplete(lesson: RecordValue): boolean {
     if (!progressVerified || !lessonCompleted(lesson, lessonProgress))
       return false
+
     const id = lessonId(lesson)
+
     return (
       !isTrue(lesson.hasQuiz) || (id !== "" && quizPassByLesson[id] === true)
     )
@@ -801,10 +995,10 @@ export default function CourseDetailsPage({
                 <img
                   src={cover}
                   alt=""
-                  className="absolute inset-0 -z-20 size-full object-cover opacity-40"
+                  className="absolute inset-0 -z-20 size-full object-cover opacity-70"
                 />
               )}
-              <div className="absolute inset-0 -z-10 bg-gradient-to-l from-emerald-950/95 via-emerald-950/60 to-emerald-950/15" />
+              <div className="absolute inset-0 -z-10 bg-gradient-to-l from-emerald-950/55 via-emerald-950/25 to-emerald-950/5" />
               <div className="pointer-events-none absolute -left-16 -top-20 -z-10 size-80 rounded-full border border-white/15" />
               <div className="pointer-events-none absolute -left-2 -top-6 -z-10 size-52 rounded-full border border-white/15" />
               <div className="max-w-3xl">
@@ -955,6 +1149,9 @@ export default function CourseDetailsPage({
                                 lessons.map((lesson, lessonIndex) => {
                                   const video = videoFromLesson(lesson)
 
+                                  const lessonResources =
+                                    lessonResourcesFrom(lesson)
+
                                   const id = lessonId(lesson)
 
                                   const lessonLocked =
@@ -962,7 +1159,9 @@ export default function CourseDetailsPage({
                                     (locked ||
                                       (lessonIndex > 0 &&
                                         !lessons
+
                                           .slice(0, lessonIndex)
+
                                           .every(lessonIsComplete)))
 
                                   const completedLesson = lessonCompleted(
@@ -1012,11 +1211,13 @@ export default function CourseDetailsPage({
                                                 type="button"
                                                 disabled={lessonLocked || !id}
                                                 aria-expanded={isExpanded}
-                                                onClick={() =>
+                                                onClick={() => {
                                                   setExpandedLessonId(
                                                     isExpanded ? null : id,
                                                   )
-                                                }
+                                                  setOpenVideoLessonId(null)
+                                                  setOpenResourcesLessonId(null)
+                                                }}
                                                 className="inline-flex items-center gap-2 text-start font-bold text-ink disabled:cursor-not-allowed disabled:opacity-65"
                                               >
                                                 <span>
@@ -1069,11 +1270,12 @@ export default function CourseDetailsPage({
                                               وُجد لفتح هذا الدرس.
                                             </p>
                                           )}
-                                          {Boolean(lesson.description) && (
-                                            <p className="mt-1 whitespace-pre-line text-sm leading-6 text-ink-muted">
-                                              {String(lesson.description)}
-                                            </p>
-                                          )}
+                                          {isExpanded &&
+                                            Boolean(lesson.description) && (
+                                              <p className="mt-1 whitespace-pre-line text-sm leading-6 text-ink-muted">
+                                                {String(lesson.description)}
+                                              </p>
+                                            )}
                                           {hasQuiz && !passedQuiz && (
                                             <div className="mt-3 flex flex-wrap items-center gap-2">
                                               <span className="text-xs text-amber-800">
@@ -1101,22 +1303,261 @@ export default function CourseDetailsPage({
                                       </div>
                                       {isExpanded && (
                                         <div className="mt-3 border-t border-stroke pt-4">
-                                          {video ? (
-                                            <LessonVideoPlayer
-                                              video={video}
-                                              title={String(
-                                                lesson.title ?? "فيديو الدرس",
-                                              )}
-                                              onEnded={(seconds) =>
-                                                void completeLesson(id, seconds)
-                                              }
-                                            />
-                                          ) : (
-                                            <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                              لم يضف المدرّس فيديو لهذا الدرس
-                                              بعد.
-                                            </p>
-                                          )}
+                                          <div className="grid gap-2 sm:grid-cols-2">
+                                            {video && (
+                                              <button
+                                                type="button"
+                                                aria-expanded={
+                                                  openVideoLessonId === id
+                                                }
+                                                onClick={() => {
+                                                  const isOpening =
+                                                    openVideoLessonId !== id
+                                                  setOpenVideoLessonId(
+                                                    openVideoLessonId === id
+                                                      ? null
+                                                      : id,
+                                                  )
+                                                  if (isOpening)
+                                                    scrollToLessonContent(
+                                                      `course-video-${id}`,
+                                                    )
+                                                }}
+                                                className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-start transition ${
+                                                  openVideoLessonId === id
+                                                    ? "border-nuwa-base bg-nuwa-soft/60 text-nuwa-deep"
+                                                    : "border-stroke bg-white text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                                }`}
+                                              >
+                                                <span className="flex min-w-0 items-center gap-3">
+                                                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-nuwa-soft text-nuwa-base">
+                                                    <Play
+                                                      size={16}
+                                                      fill="currentColor"
+                                                    />
+                                                  </span>
+                                                  <span className="truncate text-sm font-bold">
+                                                    فيديو الدرس
+                                                  </span>
+                                                </span>
+                                                <ChevronDown
+                                                  size={17}
+                                                  className={`shrink-0 transition-transform ${
+                                                    openVideoLessonId === id
+                                                      ? "rotate-180"
+                                                      : ""
+                                                  }`}
+                                                />
+                                              </button>
+                                            )}
+                                            {lessonResources.length > 0 && (
+                                              <button
+                                                type="button"
+                                                aria-expanded={
+                                                  openResourcesLessonId === id
+                                                }
+                                                onClick={() => {
+                                                  const isOpening =
+                                                    openResourcesLessonId !== id
+                                                  setOpenResourcesLessonId(
+                                                    openResourcesLessonId === id
+                                                      ? null
+                                                      : id,
+                                                  )
+                                                  if (isOpening)
+                                                    scrollToLessonContent(
+                                                      `course-resources-${id}`,
+                                                    )
+                                                }}
+                                                className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-start transition ${
+                                                  openResourcesLessonId === id
+                                                    ? "border-nuwa-base bg-nuwa-soft/60 text-nuwa-deep"
+                                                    : "border-stroke bg-white text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                                }`}
+                                              >
+                                                <span className="flex min-w-0 items-center gap-3">
+                                                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-nuwa-soft text-nuwa-base">
+                                                    <FileText size={17} />
+                                                  </span>
+                                                  <span className="truncate text-sm font-bold">
+                                                    ملفات ومواد الدرس
+                                                  </span>
+                                                </span>
+                                                <span className="flex shrink-0 items-center gap-2">
+                                                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold">
+                                                    {lessonResources.length}
+                                                  </span>
+                                                  <ChevronDown
+                                                    size={17}
+                                                    className={`transition-transform ${
+                                                      openResourcesLessonId ===
+                                                      id
+                                                        ? "rotate-180"
+                                                        : ""
+                                                    }`}
+                                                  />
+                                                </span>
+                                              </button>
+                                            )}
+                                          </div>
+                                          {openVideoLessonId === id &&
+                                            video && (
+                                              <div
+                                                id={`course-video-${id}`}
+                                                className="scroll-mt-24"
+                                              >
+                                                <LessonVideoPlayer
+                                                  video={video}
+                                                  title={String(
+                                                    lesson.title ??
+                                                      "فيديو الدرس",
+                                                  )}
+                                                  onEnded={(seconds) =>
+                                                    void completeLesson(
+                                                      id,
+                                                      seconds,
+                                                    )
+                                                  }
+                                                />
+                                              </div>
+                                            )}
+                                          {openResourcesLessonId === id &&
+                                            lessonResources.length > 0 && (
+                                              <section
+                                                id={`course-resources-${id}`}
+                                                className="mt-5 rounded-2xl border border-stroke bg-slate-50/80 p-4 sm:p-5"
+                                                aria-label="ملفات ومواد الدرس"
+                                              >
+                                                <div className="flex items-center gap-2.5">
+                                                  <span className="grid size-9 place-items-center rounded-xl bg-white text-nuwa-base shadow-sm">
+                                                    <FileText size={18} />
+                                                  </span>
+                                                  <div>
+                                                    <h4 className="text-sm font-bold text-ink">
+                                                      ملفات ومواد الدرس
+                                                    </h4>
+                                                    <p className="text-xs text-ink-muted">
+                                                      مرفقات تساعدك على متابعة
+                                                      الشرح والمراجعة.
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                                <div className="mt-3 grid gap-3">
+                                                  {lessonResources.map(
+                                                    (
+                                                      resource,
+                                                      resourceIndex,
+                                                    ) => {
+                                                      const url =
+                                                        lessonResourceUrl(
+                                                          resource,
+                                                        )
+
+                                                      const name = String(
+                                                        resource.name ??
+                                                          `مادة الدرس ${resourceIndex + 1}`,
+                                                      )
+
+                                                      const mime = String(
+                                                        resource.contentType ??
+                                                          resource.mimeType ??
+                                                          resource.type ??
+                                                          "",
+                                                      ).toLowerCase()
+
+                                                      if (!url) {
+                                                        return (
+                                                          <div
+                                                            key={String(
+                                                              resource.id ??
+                                                                resourceIndex,
+                                                            )}
+                                                            className="flex min-h-14 items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm"
+                                                          >
+                                                            <FileText
+                                                              size={18}
+                                                              className="shrink-0 text-amber-700"
+                                                            />
+                                                            <span className="min-w-0 flex-1 truncate font-semibold text-ink">
+                                                              {name}
+                                                            </span>
+                                                            <span className="shrink-0 text-xs font-medium text-amber-800">
+                                                              رابط الملف غير
+                                                              متاح
+                                                            </span>
+                                                          </div>
+                                                        )
+                                                      }
+
+                                                      const isYoutube = Boolean(
+                                                        youtubeVideoId(url),
+                                                      )
+
+                                                      const isVideo =
+                                                        isYoutube ||
+                                                        mime.startsWith(
+                                                          "video/",
+                                                        ) ||
+                                                        /\.(mp4|webm|mov|m4v|ogv)(?:$|\?)/i.test(
+                                                          url,
+                                                        ) ||
+                                                        name.startsWith(
+                                                          "فيديو إضافي",
+                                                        )
+
+                                                      if (isVideo) {
+                                                        return (
+                                                          <div
+                                                            key={String(
+                                                              resource.id ??
+                                                                resourceIndex,
+                                                            )}
+                                                            className="rounded-xl border border-stroke bg-white p-3"
+                                                          >
+                                                            <p className="mb-2 text-xs font-semibold text-ink-muted">
+                                                              {name}
+                                                            </p>
+                                                            <LessonVideoPlayer
+                                                              video={{
+                                                                videoUrl: url,
+                                                              }}
+                                                              title={name}
+                                                            />
+                                                          </div>
+                                                        )
+                                                      }
+
+                                                      const href =
+                                                        resolveApiAssetUrl(url)
+
+                                                      return (
+                                                        <a
+                                                          key={String(
+                                                            resource.id ??
+                                                              resourceIndex,
+                                                          )}
+                                                          href={href}
+                                                          target="_blank"
+                                                          rel="noreferrer"
+                                                          className="flex min-h-14 items-center gap-3 rounded-xl border border-stroke bg-white px-3 py-2.5 text-sm font-semibold text-ink transition hover:border-nuwa-base/40 hover:bg-nuwa-ice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright"
+                                                        >
+                                                          <FileText
+                                                            size={18}
+                                                            className="shrink-0 text-nuwa-base"
+                                                          />
+                                                          <span className="min-w-0 flex-1 truncate">
+                                                            {name}
+                                                          </span>
+                                                          <span className="shrink-0 text-xs font-bold text-nuwa-base">
+                                                            فتح المادة
+                                                          </span>
+                                                        </a>
+                                                      )
+                                                    },
+                                                  )}
+                                                </div>
+                                              </section>
+                                            )}
                                           {id && (
                                             <button
                                               type="button"
@@ -1127,6 +1568,7 @@ export default function CourseDetailsPage({
                                               onClick={() =>
                                                 void completeLesson(
                                                   id,
+
                                                   Number(
                                                     lesson.lastPosition ?? 0,
                                                   ),

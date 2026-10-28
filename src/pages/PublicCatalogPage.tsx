@@ -270,9 +270,7 @@ export default function PublicCatalogPage({
 
   const [academicYear, setAcademicYear] = useState("")
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
-    [],
-  )
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
 
   const [academicYearsLoading, setAcademicYearsLoading] = useState(false)
 
@@ -1240,7 +1238,7 @@ export default function PublicCatalogPage({
               kind={
                 personCards ? "person" : courseCatalog ? "course" : "record"
               }
-              count={12}
+              count={data ? visibleItems.length : 12}
             />
           }
           error={error}

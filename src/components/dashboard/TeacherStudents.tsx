@@ -12,6 +12,8 @@ import PersonAvatar from "../PersonAvatar"
 
 import StudentDetailDialog from "./StudentDetailDialog"
 
+import { getLoadingItemCount, Skeleton, SkeletonAvatar } from "../Skeleton"
+
 import { fieldLabels, formatValue } from "./StudentDetailsCard"
 
 type DataRecord = Record<string, unknown>
@@ -297,7 +299,12 @@ export default function TeacherStudents() {
 
   const load = useCallback(loadAllEnrollmentRequests, [])
 
-  const { data, error, loading } = useApiQuery(load, reloadKey)
+  const { data, error, loading } = useApiQuery(
+    load,
+    reloadKey,
+    true,
+    "teacher:students",
+  )
 
   const students = useMemo(() => normalizeStudents(data), [data])
 
@@ -336,7 +343,11 @@ export default function TeacherStudents() {
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-nuwa-soft px-3 py-1.5 text-xs font-bold text-nuwa-deep">
             <UsersRound size={15} aria-hidden="true" />
-            {students.length} طالب
+            {loading ? (
+              <Skeleton className="h-3 w-12 bg-emerald-900/10" />
+            ) : (
+              <>{students.length} طالب</>
+            )}
           </span>
         </div>
         <label className="mt-5 flex min-h-11 items-center gap-2 rounded-xl border border-stroke bg-canvas/60 px-3 transition-colors focus-within:border-nuwa-base">
@@ -359,7 +370,32 @@ export default function TeacherStudents() {
       <ApiQueryState
         loading={loading}
         loadingContent={
-          <div className="min-h-48 rounded-2xl bg-white" aria-hidden="true" />
+          <div
+            aria-busy="true"
+            aria-label="جارٍ تحميل قائمة الطلاب"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          >
+            {Array.from(
+              {
+                length: getLoadingItemCount(
+                  data === null ? undefined : students.length,
+                ),
+              },
+              (_, index) => (
+                <div
+                  key={index}
+                  aria-hidden="true"
+                  className="flex min-h-[76px] items-center gap-3 rounded-2xl border border-stroke bg-white p-3 shadow-nuwa"
+                >
+                  <SkeletonAvatar className="size-10 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="mt-2 h-3 w-1/3" />
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
         }
         error={error}
         isEmpty={students.length === 0}
