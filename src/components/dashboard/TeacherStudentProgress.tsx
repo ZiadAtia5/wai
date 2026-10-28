@@ -7,11 +7,11 @@ import { ApiError } from "../../api/client"
 import { quizzesApi, teachersApi } from "../../api/endpoints"
 
 import ApiQueryState from "../ApiQueryState"
+import { getLoadingItemCount, Skeleton } from "../Skeleton"
 
 import PersonAvatar from "../PersonAvatar"
 import StudentDetailDialog from "./StudentDetailDialog"
-
-import { ProgressGridSkeleton } from "../loading/SkeletonLayouts"
+import { AnimatedBar, AnimatedNumber } from "./DashboardMotion"
 
 import { useApiQuery } from "../../hooks/useApiQuery"
 
@@ -292,12 +292,42 @@ async function loadStudentProgress(): Promise<ProgressData> {
   return { courses, enrollments, attempts, warnings: [...new Set(warnings)] }
 }
 
+function ProgressSubjectSkeleton({ count }: { count?: number }) {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="جارٍ تحميل المواد الدراسية"
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+    >
+      {Array.from({ length: getLoadingItemCount(count) }, (_, item) => (
+        <div
+          key={item}
+          aria-hidden="true"
+          className="flex min-h-28 items-center gap-4 rounded-2xl border border-stroke bg-white p-5 shadow-nuwa"
+        >
+          <Skeleton className="size-12 shrink-0 rounded-2xl" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="mt-2 h-3 w-1/3" />
+          </div>
+          <Skeleton className="size-4 shrink-0 rounded-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function TeacherStudentProgress() {
   const [reloadKey, setReloadKey] = useState(0)
 
   const load = useCallback(() => loadStudentProgress(), [])
 
-  const { data, error, loading } = useApiQuery(load, reloadKey)
+  const { data, error, loading } = useApiQuery(
+    load,
+    reloadKey,
+    true,
+    "teacher:student-progress",
+  )
 
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
 
@@ -524,7 +554,7 @@ export default function TeacherStudentProgress() {
                 متوسط التقدم الدراسي المتاح
               </span>
               <span className="font-bold tabular-nums text-ink">
-                {averageCompletion}٪
+                <AnimatedNumber value={`${averageCompletion}٪`} />
               </span>
             </div>
             <div
@@ -535,9 +565,9 @@ export default function TeacherStudentProgress() {
               aria-valuemax={100}
               aria-valuenow={averageCompletion}
             >
-              <div
+              <AnimatedBar
                 className="h-full rounded-full bg-nuwa-base"
-                style={{ width: `${averageCompletion}%` }}
+                value={averageCompletion}
               />
             </div>
           </div>
@@ -556,8 +586,14 @@ export default function TeacherStudentProgress() {
 
       <ApiQueryState
         loading={loading}
-        loadingContent={<ProgressGridSkeleton />}
-        error={error}
+        loadingContent={
+          <ProgressSubjectSkeleton
+            count={data === null ? undefined : subjectOptions.length}
+          />
+        }
+        error={
+          error ? "تعذر تحميل تقدم الطلاب الآن. حاول تحديث البيانات." : null
+        }
         isEmpty={!subjectOptions.length}
         emptyMessage="لا توجد مواد مرتبطة بدوراتك حتى الآن."
         onRetry={() => setReloadKey((key) => key + 1)}
@@ -754,18 +790,15 @@ export default function TeacherStudentProgress() {
                                           <div className="flex justify-between text-xs text-ink-muted">
                                             <span>التقدم</span>
                                             <span className="font-bold tabular-nums">
-                                              {Math.round(
-                                                enrollment.progressPercent,
-                                              )}
-                                              ٪
+                                              <AnimatedNumber
+                                                value={`${Math.round(enrollment.progressPercent)}٪`}
+                                              />
                                             </span>
                                           </div>
                                           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-nuwa-soft">
-                                            <div
+                                            <AnimatedBar
                                               className="h-full rounded-full bg-nuwa-base"
-                                              style={{
-                                                width: `${enrollment.progressPercent}%`,
-                                              }}
+                                              value={enrollment.progressPercent}
                                             />
                                           </div>
                                           {enrollment.completedLessons !==
@@ -887,7 +920,9 @@ function SummaryCard({
   return (
     <div className="rounded-xl border border-stroke bg-canvas/70 p-4">
       <p className="text-xs font-semibold text-ink-muted">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-ink">{value}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-ink">
+        <AnimatedNumber value={value} />
+      </p>
     </div>
   )
 }

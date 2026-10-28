@@ -31,7 +31,7 @@ export function CourseGridSkeleton() {
       aria-label="جارٍ تحميل الدورات"
       className="mt-9 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4"
     >
-      {[0, 1, 2, 3].map((item) => (
+      {[0, 1, 2].map((item) => (
         <CourseCardSkeleton key={item} />
       ))}
     </div>
@@ -153,7 +153,7 @@ export function LandingPageSkeleton() {
             <SkeletonBlock className="h-5 w-28" />
           </div>
           <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((item) => (
+            {[0, 1, 2].map((item) => (
               <TeacherCardSkeleton key={item} />
             ))}
           </div>

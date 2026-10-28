@@ -7,7 +7,7 @@ import {
   Menu,
   UserPlus,
   X,
-} from "lucide-react";
+} from "lucide-react"
 
 import {
   useCallback,
@@ -15,8 +15,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-} from "react";
-import { createPortal } from "react-dom";
+} from "react"
+import { createPortal } from "react-dom"
 import {
   AnimatePresence,
   MotionConfig,
@@ -25,65 +25,65 @@ import {
   useScroll,
   useSpring,
   type Variants,
-} from "framer-motion";
+} from "framer-motion"
 
-import { getAuthToken } from "../../api/client";
+import { getAuthToken } from "../../api/client"
 
-import type { NavigateFn, View } from "../../types";
+import type { NavigateFn, View } from "../../types"
 
-import NuwaLogo from "../NuwaLogo";
+import NuwaLogo from "../NuwaLogo"
 
 interface PublicNavbarProps {
-  currentView: View;
-  navigate: NavigateFn;
+  currentView: View
+  navigate: NavigateFn
 }
 
 interface PublicNavigationItem {
-  label: string;
-  view: View;
-  icon: typeof House;
+  label: string
+  view: View
+  icon: typeof House
 }
 
 const publicNavigation: PublicNavigationItem[] = [
   { label: "الرئيسية", view: "landing", icon: House },
   { label: "الدورات", view: "public:courses", icon: BookOpen },
   { label: "المعلمون", view: "public:teachers", icon: GraduationCap },
-];
+]
 
 const isViewActive = (currentView: View, view: View) =>
   currentView === view ||
-  (view === "public:courses" && currentView === "public:course-detail");
+  (view === "public:courses" && currentView === "public:course-detail")
 
 /*
   مؤشر اللينك النشط: بنحرّك الحافتين (left / right) لوحدهم.
   الحافة الأمامية (ناحية الوجهة) بتسبق بسرعة = Stretch،
   وبعدها الحافة الخلفية بتلحقها = Contract، والنتيجة النهائية نفس مقاس الوجهة بالظبط.
 */
-type IndicatorEdge = "left" | "right";
+type IndicatorEdge = "left" | "right"
 
 interface IndicatorState {
-  left: number;
-  right: number;
+  left: number
+  right: number
   /** الحافة اللي بتسبق. null = من غير حركة (أول ظهور أو resize) */
-  lead: IndicatorEdge | null;
-  visible: boolean;
+  lead: IndicatorEdge | null
+  visible: boolean
 }
 
 const STRETCH_TRANSITION = {
   duration: 0.34,
   ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
-};
+}
 
 const CONTRACT_TRANSITION = {
   duration: 0.42,
   delay: 0.1,
   ease: [0.65, 0, 0.35, 1] as [number, number, number, number],
-};
+}
 
 const sidebarListVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.06, delayChildren: 0.14 } },
-};
+}
 
 const sidebarItemVariants: Variants = {
   hidden: { opacity: 0, x: 24 },
@@ -92,54 +92,54 @@ const sidebarItemVariants: Variants = {
     x: 0,
     transition: { type: "spring", stiffness: 380, damping: 30 },
   },
-};
+}
 
 export default function PublicNavbar({
   currentView,
   navigate,
 }: PublicNavbarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const navigationRef = useRef<HTMLElement | null>(null);
-  const [indicator, setIndicator] = useState<IndicatorState | null>(null);
-  const prefersReducedMotion = useReducedMotion();
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const navigationRef = useRef<HTMLElement | null>(null)
+  const [indicator, setIndicator] = useState<IndicatorState | null>(null)
+  const prefersReducedMotion = useReducedMotion()
 
-  const isAuthenticated = Boolean(getAuthToken());
-  const isOnLandingHero = currentView === "landing" && !scrolled;
+  const isAuthenticated = Boolean(getAuthToken())
+  const isOnLandingHero = currentView === "landing" && !scrolled
 
   const measureIndicator = useCallback((animate: boolean) => {
-    const navigation = navigationRef.current;
-    if (!navigation) return;
+    const navigation = navigationRef.current
+    if (!navigation) return
 
-    const navigationRect = navigation.getBoundingClientRect();
+    const navigationRect = navigation.getBoundingClientRect()
     // الناف مخفي (موبايل) → مفيش قياس
-    if (navigationRect.width === 0) return;
+    if (navigationRect.width === 0) return
 
     const activeLink = navigation.querySelector<HTMLElement>(
       '[data-nav-active="true"]',
-    );
+    )
 
     if (!activeLink) {
       setIndicator((previous) =>
         previous ? { ...previous, lead: null, visible: false } : previous,
-      );
-      return;
+      )
+      return
     }
 
-    const linkRect = activeLink.getBoundingClientRect();
-    const left = linkRect.left - navigationRect.left;
-    const right = navigationRect.right - linkRect.right;
+    const linkRect = activeLink.getBoundingClientRect()
+    const left = linkRect.left - navigationRect.left
+    const right = navigationRect.right - linkRect.right
 
     setIndicator((previous) => {
       if (!previous || !previous.visible || !animate) {
-        return { left, right, lead: null, visible: true };
+        return { left, right, lead: null, visible: true }
       }
 
       if (
         Math.abs(previous.left - left) < 0.5 &&
         Math.abs(previous.right - right) < 0.5
       ) {
-        return previous;
+        return previous
       }
 
       // لو رايح يمين: الحافة اليمين هي اللي بتسبق، والعكس
@@ -148,23 +148,23 @@ export default function PublicNavbar({
         right,
         lead: left > previous.left ? "right" : "left",
         visible: true,
-      };
-    });
-  }, []);
+      }
+    })
+  }, [])
 
   useLayoutEffect(() => {
-    measureIndicator(true);
-  }, [currentView, measureIndicator]);
+    measureIndicator(true)
+  }, [currentView, measureIndicator])
 
   useEffect(() => {
-    const navigation = navigationRef.current;
-    if (!navigation) return;
+    const navigation = navigationRef.current
+    if (!navigation) return
 
     // بيتنفذ عند تحميل الخطوط أو تغيّر المقاسات / الـ resize
-    const observer = new ResizeObserver(() => measureIndicator(false));
-    observer.observe(navigation);
-    return () => observer.disconnect();
-  }, [measureIndicator]);
+    const observer = new ResizeObserver(() => measureIndicator(false))
+    observer.observe(navigation)
+    return () => observer.disconnect()
+  }, [measureIndicator])
 
   const indicatorTransition =
     !indicator || indicator.lead === null || prefersReducedMotion
@@ -177,54 +177,54 @@ export default function PublicNavbar({
           [indicator.lead]: STRETCH_TRANSITION,
           [indicator.lead === "left" ? "right" : "left"]: CONTRACT_TRANSITION,
           opacity: { duration: 0.2 },
-        };
+        }
 
   /* شريط تقدّم القراءة أسفل الهيدر */
-  const { scrollYProgress } = useScroll();
+  const { scrollYProgress } = useScroll()
   const progress = useSpring(scrollYProgress, {
     stiffness: 120,
     damping: 28,
     mass: 0.3,
-  });
+  })
 
   useEffect(() => {
-    const updateScrollState = () => setScrolled(window.scrollY > 24);
-    updateScrollState();
-    window.addEventListener("scroll", updateScrollState, { passive: true });
-    return () => window.removeEventListener("scroll", updateScrollState);
-  }, []);
+    const updateScrollState = () => setScrolled(window.scrollY > 24)
+    updateScrollState()
+    window.addEventListener("scroll", updateScrollState, { passive: true })
+    return () => window.removeEventListener("scroll", updateScrollState)
+  }, [])
 
   useEffect(() => {
-    if (!mobileOpen) return;
+    if (!mobileOpen) return
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileOpen(false);
-    };
+      if (event.key === "Escape") setMobileOpen(false)
+    }
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", closeOnEscape);
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    window.addEventListener("keydown", closeOnEscape)
 
     return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [mobileOpen]);
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [mobileOpen])
 
   useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 1024px)");
+    const desktop = window.matchMedia("(min-width: 1024px)")
     const closeOnDesktop = (event: MediaQueryListEvent) => {
-      if (event.matches) setMobileOpen(false);
-    };
+      if (event.matches) setMobileOpen(false)
+    }
 
-    desktop.addEventListener("change", closeOnDesktop);
-    return () => desktop.removeEventListener("change", closeOnDesktop);
-  }, []);
+    desktop.addEventListener("change", closeOnDesktop)
+    return () => desktop.removeEventListener("change", closeOnDesktop)
+  }, [])
 
   const goTo = (view: View) => {
-    navigate(view);
-    setMobileOpen(false);
-  };
+    navigate(view)
+    setMobileOpen(false)
+  }
 
   return createPortal(
     <MotionConfig reducedMotion="user">
@@ -240,7 +240,7 @@ export default function PublicNavbar({
       >
         <div
           className={`relative mx-auto flex max-w-360 items-center justify-between gap-4 px-4 transition-[height] duration-300 sm:px-7 ${
-            scrolled ? "h-[60px]" : "h-[68px]"
+            scrolled ? "h-[56px]" : "h-[60px]"
           }`}
         >
           {/* اللوجو */}
@@ -278,7 +278,7 @@ export default function PublicNavbar({
             )}
 
             {publicNavigation.map(({ label, view }) => {
-              const isActive = isViewActive(currentView, view);
+              const isActive = isViewActive(currentView, view)
 
               return (
                 <button
@@ -297,7 +297,7 @@ export default function PublicNavbar({
                 >
                   {label}
                 </button>
-              );
+              )
             })}
           </nav>
 
@@ -451,7 +451,7 @@ export default function PublicNavbar({
                 animate="show"
               >
                 {publicNavigation.map(({ label, view, icon: Icon }) => {
-                  const isActive = isViewActive(currentView, view);
+                  const isActive = isViewActive(currentView, view)
 
                   return (
                     <motion.button
@@ -473,7 +473,7 @@ export default function PublicNavbar({
                         <span className="absolute bottom-2 right-0 top-2 w-1 rounded-l-full bg-nuwa-base" />
                       )}
                     </motion.button>
-                  );
+                  )
                 })}
               </motion.nav>
 
@@ -537,5 +537,5 @@ export default function PublicNavbar({
       </AnimatePresence>
     </MotionConfig>,
     document.body,
-  );
+  )
 }

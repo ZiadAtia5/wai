@@ -4,12 +4,16 @@ import { getAcademicYears, type AcademicYearResponse } from "../../api/catalog"
 
 import {
   BookOpen,
+  ChevronDown,
   ClipboardCheck,
+  ExternalLink,
   Eye,
   EyeOff,
+  FileText,
   ImagePlus,
   LoaderCircle,
   Pencil,
+  Play,
   Plus,
   Trash2,
 } from "lucide-react"
@@ -17,10 +21,12 @@ import {
 import { ApiError, resolveApiAssetUrl } from "../../api/client"
 
 import TeacherStudentProgress from "./TeacherStudentProgress"
+
 import TeacherStudents from "./TeacherStudents"
 
 import {
   adminApi,
+  coursesApi,
   quizzesApi,
   studentsApi,
   subjectsApi,
@@ -29,17 +35,25 @@ import {
 } from "../../api/endpoints"
 
 import TeacherCourseContent from "./TeacherCourseContent"
-import LessonVideoPlayer from "./LessonVideoPlayer"
+
+import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
 
 import { useConfirmation } from "../ConfirmationProvider"
+
 import { formatEgp } from "../../utils/currency"
 
+import { AnimatedBar, AnimatedNumber } from "./DashboardMotion"
+
 import ProfileImageEditor from "./ProfileImageEditor"
+
 import FileUploadField from "./FileUploadField"
+
 import ImageCropDialog from "../ImageCropDialog"
 
 import PersonAvatar from "../PersonAvatar"
+
 import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
+
 import {
   CatalogGridSkeleton,
   EnrollmentGridSkeleton,
@@ -55,12 +69,15 @@ function isRecordValue(value: unknown): value is RecordValue {
 
 function courseIsPublished(course: RecordValue): boolean {
   const nestedCourse = asRecord(course.course)
+
   if (Object.keys(nestedCourse).length) return courseIsPublished(nestedCourse)
 
   for (const key of ["isPublished", "is_published", "published"]) {
     const value = course[key]
+
     if (value === true || value === 1 || value === "1" || value === "true")
       return true
+
     if (value === false || value === 0 || value === "0" || value === "false")
       return false
   }
@@ -74,17 +91,26 @@ function courseIsPublished(course: RecordValue): boolean {
       course.state ??
       "",
   )
+
     .trim()
+
     .toLowerCase()
 
   // CourseStatus is an integer enum in the API: Draft=0, Published=1,
+
   // and other states are not public.
+
   if (status === "1") return true
+
   if (status === "0" || status === "2") return false
+
   if (/draft|unpublish|not.?publish/.test(status)) return false
+
   if (/publish|public|live/.test(status)) return true
+
   if (course.publishedAt != null && String(course.publishedAt).trim())
     return true
+
   return false
 }
 
@@ -151,7 +177,9 @@ function profileRecord(value: unknown): RecordValue {
 
 function profileImageSource(record: RecordValue): string {
   const avatar = record.avatar
+
   const avatarRecord = asRecord(avatar)
+
   const candidate =
     record.avatarUrl ??
     record.avatar_url ??
@@ -167,6 +195,7 @@ function profileImageSource(record: RecordValue): string {
     (typeof avatar === "string" ? avatar : undefined) ??
     avatarRecord.url ??
     avatarRecord.src
+
   return typeof candidate === "string" ? candidate : ""
 }
 
@@ -198,6 +227,14 @@ function listFrom(value: unknown): RecordValue[] {
     "questions",
 
     "resources",
+
+    "lessonResources",
+
+    "attachments",
+
+    "materials",
+
+    "files",
 
     "attempts",
 
@@ -279,13 +316,16 @@ function progressLessons(progress: RecordValue | null): RecordValue[] {
 
 function findCourseContent(value: unknown, depth = 0): RecordValue {
   const unwrapped = unwrapApiResponse(value)
+
   if (depth > 5) return {}
 
   if (Array.isArray(unwrapped)) {
     for (const item of unwrapped) {
       const nested = findCourseContent(item, depth + 1)
+
       if (Object.keys(nested).length) return nested
     }
+
     return {}
   }
 
@@ -299,15 +339,23 @@ function findCourseContent(value: unknown, depth = 0): RecordValue {
 
   for (const key of [
     "course",
+
     "courseDetails",
+
     "courseData",
+
     "courseContent",
+
     "details",
+
     "content",
+
     "result",
+
     "data",
   ]) {
     const nested = findCourseContent(candidate[key], depth + 1)
+
     if (Object.keys(nested).length) return nested
   }
 
@@ -316,32 +364,45 @@ function findCourseContent(value: unknown, depth = 0): RecordValue {
 
 function getLessonVideo(lesson: RecordValue): RecordValue | undefined {
   const content = asRecord(lesson.content)
+
   const candidates = [
     lesson.video,
+
     lesson.videoInfo,
+
     lesson.videoResponse,
+
     lesson.videoData,
+
     lesson.lessonVideo,
+
     content.video,
+
     lesson,
   ]
 
   for (const candidate of candidates) {
     const unwrapped = unwrapApiResponse(candidate)
+
     if (typeof unwrapped === "string" && unwrapped.trim())
       return { videoUrl: unwrapped.trim() }
 
     const video = asRecord(unwrapped)
+
     const videoUrl = video.videoUrl ?? video.url ?? video.streamUrl
+
     const providerVideoId =
       video.providerVideoId ?? video.youTubeVideoId ?? video.youtubeId
+
     if (
       (typeof videoUrl === "string" && videoUrl.trim()) ||
       (typeof providerVideoId === "string" && providerVideoId.trim())
     ) {
       return {
         ...video,
+
         videoUrl,
+
         providerVideoId,
       }
     }
@@ -350,84 +411,221 @@ function getLessonVideo(lesson: RecordValue): RecordValue | undefined {
   return undefined
 }
 
+function getLessonResources(lesson: RecordValue): RecordValue[] {
+  const content = asRecord(lesson.content)
+
+  const candidates = [
+    lesson.resources,
+
+    lesson.lessonResources,
+
+    lesson.attachments,
+
+    lesson.materials,
+
+    lesson.files,
+
+    lesson.resourceList,
+
+    content.resources,
+
+    content.attachments,
+
+    content.materials,
+
+    content.files,
+  ]
+
+  for (const candidate of candidates) {
+    const resources = listFrom(candidate)
+
+    if (resources.length) return resources
+  }
+
+  return []
+}
+
+function getLessonResourceUrl(resource: RecordValue): string {
+  const file = asRecord(
+    resource.file ?? resource.attachment ?? resource.resourceFile,
+  )
+
+  const candidates = [
+    resource.externalUrl,
+
+    resource.externalLink,
+
+    resource.fileUrl,
+
+    resource.resourceFileUrl,
+
+    resource.resourceUrl,
+
+    resource.downloadUrl,
+
+    resource.mediaUrl,
+
+    resource.publicUrl,
+
+    resource.storageUrl,
+
+    resource.href,
+
+    resource.filePath,
+
+    resource.path,
+
+    resource.url,
+
+    typeof resource.file === "string" ? resource.file : undefined,
+
+    file.downloadUrl,
+
+    file.fileUrl,
+
+    file.url,
+
+    file.path,
+  ]
+
+  const url = candidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.trim().length > 0,
+  )
+
+  return url?.trim() ?? ""
+}
+
+function scrollToLessonContent(targetId: string) {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      })
+    })
+  })
+}
+
 function mergeCourseContentWithProgress(
   progressValue: unknown,
+
   courseValue: unknown,
+
   fallbackCourseValue?: unknown,
+
+  supplementalCourseValue?: unknown,
 ): RecordValue {
   const progress = asRecord(unwrapApiResponse(progressValue))
+
   const courseCandidates = [
     findCourseContent(courseValue),
+
     findCourseContent(fallbackCourseValue),
+
+    findCourseContent(supplementalCourseValue),
+
     findCourseContent(progress),
+
     findCourseContent(progress.course),
   ].filter((candidate) => Object.keys(candidate).length > 0)
+
   const course = courseCandidates[0] ?? asRecord(unwrapApiResponse(courseValue))
+
   const alternateLessons = new Map<string, RecordValue>()
+
   for (const alternate of courseCandidates.slice(1)) {
     for (const module of listFrom(
       alternate.modules ?? alternate.courseModules,
     )) {
       for (const lesson of listFrom(module.lessons ?? module.courseLessons)) {
         const id = String(lesson.id ?? lesson.lessonId ?? "")
+
         if (id) alternateLessons.set(id, lesson)
       }
     }
   }
+
   const progressRows = progressLessons(progress)
+
   const progressById = new Map(
     progressRows.map((lesson) => [
       String(lesson.lessonId ?? lesson.id ?? ""),
+
       lesson,
     ]),
   )
+
   const modules = listFrom(course.modules ?? course.courseModules).map(
     (module) => ({
       ...module,
+
       lessons: listFrom(module.lessons ?? module.courseLessons).map(
         (lesson) => {
           const id = String(lesson.id ?? lesson.lessonId ?? "")
+
           const supplementalLesson = alternateLessons.get(id) ?? {}
+
           const combinedLesson = { ...supplementalLesson, ...lesson }
+
           const savedProgress = progressById.get(id) ?? {}
+
           const lessonVideo =
             getLessonVideo(lesson) ?? getLessonVideo(supplementalLesson)
+
           return {
             ...combinedLesson,
+
             ...savedProgress,
+
             id: combinedLesson.id ?? combinedLesson.lessonId,
+
             lessonId: combinedLesson.id ?? combinedLesson.lessonId,
+
             title:
               combinedLesson.title ??
               combinedLesson.name ??
               savedProgress.title,
+
             video: lessonVideo,
+
             moduleTitle: module.title ?? module.name,
+
             isCompleted: Boolean(savedProgress.isCompleted),
+
             lastPosition: Number(savedProgress.lastPosition ?? 0),
           }
         },
       ),
     }),
   )
+
   const lessons = modules.flatMap((module) => listFrom(module.lessons))
+
   const availableLessons = lessons.length
     ? lessons
     : progressRows.map((lesson) => ({
         ...lesson,
+
         video: getLessonVideo(lesson),
       }))
+
   return { ...course, ...progress, modules, lessons: availableLessons }
 }
 
 async function loadStudentCourseProgress(
   courseId: string,
+
   enrollmentCourse?: unknown,
 ): Promise<RecordValue> {
-  const [progressResult, courseResult] = await Promise.allSettled([
-    studentsApi.courseProgress(courseId),
-    studentsApi.courseDetail(courseId),
-  ])
+  const [progressResult, courseResult, supplementalCourseResult] =
+    await Promise.allSettled([
+      studentsApi.courseProgress(courseId),
+
+      studentsApi.courseDetail(courseId),
+
+      coursesApi.detail(courseId),
+    ])
 
   if (progressResult.status === "rejected") throw progressResult.reason
 
@@ -437,10 +635,17 @@ async function loadStudentCourseProgress(
       ? courseResult.value
       : (enrollmentCourse ??
         (courseResult.status === "fulfilled" ? courseResult.value : null))
+
   const merged = mergeCourseContentWithProgress(
     progressResult.value,
+
     detailSource,
+
     enrollmentCourse,
+
+    supplementalCourseResult.status === "fulfilled"
+      ? supplementalCourseResult.value
+      : undefined,
   )
 
   if (
@@ -451,6 +656,7 @@ async function loadStudentCourseProgress(
   ) {
     return {
       ...merged,
+
       contentLoadError:
         courseResult.status === "rejected" &&
         courseResult.reason instanceof Error
@@ -597,6 +803,7 @@ function hasSubmittedAttempt(quiz: RecordValue): boolean {
 function isSubmittedAttempt(attempt: RecordValue): boolean {
   if (!Object.keys(attempt).length || attempt.isSubmitted === false)
     return false
+
   if (
     attempt.isSubmitted === true ||
     attempt.submittedAt != null ||
@@ -606,37 +813,57 @@ function isSubmittedAttempt(attempt: RecordValue): boolean {
     return true
 
   const status = String(attempt.status ?? attempt.state ?? "").toLowerCase()
+
   if (/draft|in.?progress|pending/.test(status)) return false
+
   if (/submit|complete|finish|graded/.test(status)) return true
+
   return attempt.id !== undefined || attempt.attemptId !== undefined
 }
 
 function attemptBelongsToStudent(
   attempt: RecordValue,
+
   profile: RecordValue,
 ): boolean {
   const student = asRecord(
     attempt.student ?? attempt.studentProfile ?? attempt.user,
   )
+
   const profileUser = asRecord(profile.user)
+
   const attemptIds = [
     attempt.studentId,
+
     attempt.userId,
+
     student.id,
+
     student.studentId,
+
     student.userId,
   ]
+
     .filter((id) => id != null)
+
     .map(String)
+
   const profileIds = [
     profile.studentId,
+
     profile.userId,
+
     profile.id,
+
     profileUser.studentId,
+
     profileUser.id,
+
     profileUser.userId,
   ]
+
     .filter((id) => id != null)
+
     .map(String)
 
   if (attemptIds.some((id) => profileIds.includes(id))) return true
@@ -644,10 +871,15 @@ function attemptBelongsToStudent(
   const attemptEmail = String(
     attempt.studentEmail ?? attempt.email ?? student.email ?? "",
   )
+
     .trim()
+
     .toLowerCase()
+
   const profileEmail = String(profile.email ?? profileUser.email ?? "")
+
     .trim()
+
     .toLowerCase()
 
   return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail)
@@ -655,14 +887,20 @@ function attemptBelongsToStudent(
 
 function attemptRecords(value: unknown): RecordValue[] {
   const unwrapped = unwrapApiResponse(value)
+
   if (Array.isArray(unwrapped)) return unwrapped.filter(isRecordValue)
+
   const response = asRecord(unwrapped)
+
   for (const key of ["attempts", "items", "records", "submissions"]) {
     if (Array.isArray(response[key]))
       return (response[key] as unknown[]).filter(isRecordValue)
   }
+
   const nestedAttempt = asRecord(response.attempt)
+
   if (Object.keys(nestedAttempt).length) return [nestedAttempt]
+
   return isSubmittedAttempt(response) ? [response] : []
 }
 
@@ -673,19 +911,25 @@ const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted"
 
 function AcademicYearsChecklist({
   years,
+
   disabled,
+
   selectedValues = [],
 }: {
   years: AcademicYearResponse[]
+
   disabled: boolean
+
   selectedValues?: unknown
 }) {
   const selected = Array.isArray(selectedValues)
     ? selectedValues.map((value) => {
         if (typeof value === "object" && value !== null) {
           const year = asRecord(value)
+
           return String(year.value ?? year.id ?? "")
         }
+
         return String(value)
       })
     : []
@@ -710,7 +954,7 @@ function AcademicYearsChecklist({
           {years.map((year) => (
             <label
               key={year.id}
-              className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink hover:bg-nuwa-ice"
+              className="group flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-stroke bg-white px-3 py-2 text-sm text-ink transition-all hover:border-nuwa-base/40 hover:bg-nuwa-ice has-[:checked]:border-nuwa-base/50 has-[:checked]:bg-nuwa-soft/70 has-[:checked]:shadow-sm"
             >
               <input
                 type="checkbox"
@@ -720,7 +964,7 @@ function AcademicYearsChecklist({
                   selected.includes(String(year.value)) ||
                   selected.includes(String(year.id))
                 }
-                className="size-4 accent-nuwa-base"
+                className="size-4 shrink-0 accent-nuwa-base"
               />
               {year.arabicName}
             </label>
@@ -749,7 +993,9 @@ export default function RoleForms({
   onFocusCourseHandled,
 }: RoleFormsProps) {
   const confirm = useConfirmation()
+
   const [years, setYears] = useState<AcademicYearResponse[]>([])
+
   const [yearsLoading, setYearsLoading] = useState(false)
 
   const profileFormRef = useRef<HTMLFormElement>(null)
@@ -786,10 +1032,13 @@ export default function RoleForms({
   const [isCourseFree, setIsCourseFree] = useState(false)
 
   const [busy, setBusy] = useState(false)
+
   const [coverCrop, setCoverCrop] = useState<{
     courseId: string
+
     file: File
   } | null>(null)
+
   const [uploadingCoverCourseId, setUploadingCoverCourseId] =
     useState<string | null>(null)
 
@@ -843,6 +1092,12 @@ export default function RoleForms({
 
   const [progressError, setProgressError] = useState<string | null>(null)
 
+  const [openStudentVideoLessonId, setOpenStudentVideoLessonId] =
+    useState<string | null>(null)
+
+  const [openStudentResourcesLessonId, setOpenStudentResourcesLessonId] =
+    useState<string | null>(null)
+
   const [activeQuizLesson, setActiveQuizLesson] = useState<string | null>(null)
 
   const [quiz, setQuiz] = useState<RecordValue | null>(null)
@@ -893,6 +1148,7 @@ export default function RoleForms({
 
   const getTeacherCoursePublished = (course: RecordValue) => {
     const id = String(course.id ?? course.courseId ?? "")
+
     return publishedOverrides[id] ?? courseIsPublished(course)
   }
 
@@ -905,9 +1161,11 @@ export default function RoleForms({
 
   useEffect(() => {
     if (isAdmin && section === "profile") return
+
     if (!isAdmin && !isTeacher && section !== "profile") return
 
     let active = true
+
     setYearsLoading(true)
 
     getAcademicYears()
@@ -925,6 +1183,7 @@ export default function RoleForms({
           )
         }
       })
+
       .finally(() => {
         if (active) setYearsLoading(false)
       })
@@ -991,6 +1250,7 @@ export default function RoleForms({
 
     if (academicYears.length === 0) {
       onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+
       return
     }
 
@@ -1016,7 +1276,9 @@ export default function RoleForms({
       await mutate(() => adminApi.createTeacher(body), "تم إنشاء حساب المعلم.")
     ) {
       formElement.reset()
+
       setAddingTeacher(false)
+
       setShowTeacherPassword(false)
     }
   }
@@ -1032,6 +1294,7 @@ export default function RoleForms({
 
     if (academicYears.length === 0) {
       onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+
       return
     }
 
@@ -1067,6 +1330,7 @@ export default function RoleForms({
       onFeedback(
         "Ø§Ø®ØªØ± Ø§Ù„Ù…Ø§Ø¯Ø© Ø£Ùˆ Ø£Ø¶ÙÙ‡Ø§ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¯ÙˆØ±Ø©.",
       )
+
       return
     }
 
@@ -1092,60 +1356,85 @@ export default function RoleForms({
 
     if (saved) {
       formElement.reset()
+
       setSelectedSubjectId("")
+
       setIsCourseFree(false)
+
       setIsCreatingCourse(false)
     }
   }
 
   async function createSubjectFromCourseForm() {
     const name = newSubjectName.trim()
+
     const academicYear = Number(newSubjectYear)
+
     if (!name || !Number.isFinite(academicYear)) return
 
     const existing = subjects.find(
       (subject) =>
         String(subject.name ?? subject.title ?? "")
+
           .trim()
+
           .toLocaleLowerCase() === name.toLocaleLowerCase() &&
         Number(subject.academicYear ?? subject.academicYearId) === academicYear,
     )
+
     if (existing?.id !== undefined) {
       setSelectedSubjectId(String(existing.id))
+
       setAddingSubject(false)
+
       onFeedback(
         "Ø§Ù„Ù…Ø§Ø¯Ø© Ù…ÙˆØ¬ÙˆØ¯Ø© Ø¨Ø§Ù„ÙØ¹Ù„ØŒ ØªÙ… Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§.",
       )
+
       return
     }
 
     let createResponse: unknown
+
     const created = await mutate(async () => {
       createResponse = await adminApi.createSubject({
         name,
+
         academicYear,
+
         isActive: true,
       })
+
       return createResponse
     }, "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©.")
+
     if (!created) return
 
     setNewSubjectName("")
+
     setAddingSubject(false)
+
     try {
       const refreshed = listFrom(await subjectsApi.list())
+
       setSubjects(refreshed)
+
       const createdSubject = refreshed.find(
         (subject) =>
           String(subject.name ?? subject.title ?? "")
+
             .trim()
+
             .toLocaleLowerCase() === name.toLocaleLowerCase() &&
           Number(subject.academicYear ?? subject.academicYearId) ===
             academicYear,
       )
+
       const response = asRecord(unwrapApiResponse(createResponse))
+
       const id =
         createdSubject?.id ?? response.id ?? asRecord(response.subject).id
+
       if (id !== undefined) setSelectedSubjectId(String(id))
       else
         onFeedback(
@@ -1196,12 +1485,14 @@ export default function RoleForms({
     event.preventDefault()
 
     const file = new FormData(event.currentTarget).get("file")
+
     event.currentTarget.reset()
 
     if (!(file instanceof File) || !file.size) return
 
     if (!file.type.startsWith("image/")) {
       onFeedback("اختر ملف صورة صالحًا.")
+
       return
     }
 
@@ -1232,8 +1523,10 @@ export default function RoleForms({
 
       const saved = await mutate(
         () => teachersApi.updateMe(body),
+
         "تم تحديث الملف الشخصي.",
       )
+
       if (saved) setEditingProfile(false)
     } else {
       const body = {
@@ -1252,8 +1545,10 @@ export default function RoleForms({
 
       const saved = await mutate(
         () => studentsApi.updateMe(body),
+
         "تم تحديث الملف الشخصي.",
       )
+
       if (saved) setEditingProfile(false)
     }
   }
@@ -1262,27 +1557,52 @@ export default function RoleForms({
     event.preventDefault()
 
     const form = new FormData(event.currentTarget)
+
     const name = String(form.get("name") ?? "").trim()
+
     if (!name) {
       onFeedback("اكتب الاسم قبل الحفظ.")
+
       return
     }
 
     const saved = await mutate(
       () => adminApi.updateMe({ name }),
+
       "تم تحديث اسم الحساب.",
     )
 
     if (saved) {
       setAdminNameOverride(name)
+
       window.sessionStorage.setItem("eduhub.auth.name", name)
+
       setEditingAdminName(false)
     }
   }
 
   const openProgress = useCallback(
     async (courseId: string, enrollmentCourse?: unknown) => {
+      if (String(progressCourse) === String(courseId)) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            document
+              .getElementById("student-course-progress")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          })
+        })
+        return
+      }
+
       setProgressCourse(courseId)
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          document
+            .getElementById("student-course-progress")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" })
+        })
+      })
 
       setProgress(null)
 
@@ -1291,6 +1611,10 @@ export default function RoleForms({
       setProgressLoading(true)
 
       setActiveQuizLesson(null)
+
+      setOpenStudentVideoLessonId(null)
+
+      setOpenStudentResourcesLessonId(null)
 
       setQuiz(null)
 
@@ -1312,7 +1636,8 @@ export default function RoleForms({
         setProgressLoading(false)
       }
     },
-    [],
+
+    [progressCourse],
   )
 
   async function toggleLesson(lesson: RecordValue) {
@@ -1354,28 +1679,39 @@ export default function RoleForms({
 
   async function saveVideoPosition(
     lessonId: string,
+
     seconds: number,
+
     completed = false,
   ) {
     try {
       const lastPosition = Math.max(0, Math.floor(seconds))
+
       await studentsApi.updateLessonProgress(lessonId, {
         isCompleted: completed,
+
         lastPosition,
       })
+
       setProgress((current) => {
         if (!current) return current
+
         const lessons = progressLessons(current).map((lesson) =>
           String(lesson.lessonId ?? lesson.id ?? "") === lessonId
             ? {
                 ...lesson,
+
                 lessonId,
+
                 id: lessonId,
+
                 isCompleted: completed || lesson.isCompleted,
+
                 lastPosition,
               }
             : lesson,
         )
+
         return { ...current, lessons }
       })
     } catch (cause) {
@@ -1415,10 +1751,13 @@ export default function RoleForms({
       setQuiz(loadedQuiz)
 
       const quizId = loadedQuiz.id ?? loadedQuiz.quizId
+
       let hasPersistedStudentAttempt = false
+
       if (quizId !== undefined && quizId !== null) {
         const [attemptsResult, profileResult] = await Promise.allSettled([
           quizzesApi.attempts(String(quizId)),
+
           studentsApi.me(),
         ])
 
@@ -1426,6 +1765,7 @@ export default function RoleForms({
           profileResult.status === "fulfilled"
             ? profileRecord(profileResult.value)
             : {}
+
         hasPersistedStudentAttempt =
           attemptsResult.status === "fulfilled" &&
           Object.keys(studentProfile).length > 0 &&
@@ -1708,13 +2048,22 @@ export default function RoleForms({
           </form>
         )}
         {loading ? (
-          <CatalogGridSkeleton kind="person" layout="dashboard" />
+          <CatalogGridSkeleton
+            kind="person"
+            layout="dashboard"
+            count={
+              data === null || data === undefined
+                ? undefined
+                : listFrom(data).length
+            }
+          />
         ) : (
           <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {listFrom(data).map((teacher) => {
               const isEditingTeacher =
                 editingTeacher &&
                 String(editingTeacher.id) === String(teacher.id)
+
               const teacherDetails = isEditingTeacher ? editingTeacher : teacher
 
               return (
@@ -1726,7 +2075,7 @@ export default function RoleForms({
                     <form
                       ref={teacherEditorRef}
                       onSubmit={(event) => void updateTeacher(event)}
-                      className="scroll-mt-6 mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
+                      className="scroll-mt-28 mb-5 grid min-w-0 gap-3 rounded-2xl border border-nuwa-base/20 bg-nuwa-ice/70 p-4 sm:grid-cols-2"
                     >
                       <h3 className="sm:col-span-2 font-bold text-ink">
                         تعديل بيانات المعلم
@@ -1829,8 +2178,10 @@ export default function RoleForms({
                           String(editingTeacher.id) === String(teacher.id)
                         ) {
                           setEditingTeacher(null)
+
                           return
                         }
+
                         try {
                           setEditingTeacher(
                             asRecord(
@@ -1882,6 +2233,7 @@ export default function RoleForms({
                       <p className="mt-2 text-xs text-ink-muted">
                         الصفوف:{" "}
                         {teacherDetails.academicYears
+
                           .map((year) =>
                             typeof year === "object" && year !== null
                               ? String(
@@ -1892,7 +2244,9 @@ export default function RoleForms({
                                 )
                               : String(year),
                           )
+
                           .filter(Boolean)
+
                           .join("، ")}
                       </p>
                     )}
@@ -1986,15 +2340,21 @@ export default function RoleForms({
                   value={addingSubject ? "__add_new__" : selectedSubjectId}
                   onChange={(event) => {
                     const value = event.currentTarget.value
+
                     if (value === "__add_new__") {
                       setAddingSubject(true)
+
                       setSelectedSubjectId("")
+
                       setNewSubjectYear(
                         (current) => current || String(years[0]?.value ?? ""),
                       )
+
                       return
                     }
+
                     setAddingSubject(false)
+
                     setSelectedSubjectId(value)
                   }}
                 >
@@ -2061,6 +2421,7 @@ export default function RoleForms({
                       type="button"
                       onClick={() => {
                         setAddingSubject(false)
+
                         setNewSubjectName("")
                       }}
                       className="rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-muted"
@@ -2131,14 +2492,20 @@ export default function RoleForms({
         <div className="flex flex-wrap gap-2 rounded-2xl border border-stroke bg-white p-3">
           {([
             ["all", "كل الدورات", teacherCourses.length],
+
             [
               "published",
+
               "منشورة",
+
               teacherCourses.filter(getTeacherCoursePublished).length,
             ],
+
             [
               "draft",
+
               "مسودات",
+
               teacherCourses.filter(
                 (course) => !getTeacherCoursePublished(course),
               ).length,
@@ -2170,7 +2537,14 @@ export default function RoleForms({
         </div>
 
         {loading ? (
-          <TeacherCoursesSkeleton dashboard />
+          <TeacherCoursesSkeleton
+            dashboard
+            count={
+              data === null || data === undefined
+                ? undefined
+                : teacherCourses.length
+            }
+          />
         ) : teacherCourses.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stroke-strong bg-white px-5 py-10 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-nuwa-soft text-nuwa-base">
@@ -2338,34 +2712,45 @@ export default function RoleForms({
                           void (async () => {
                             const confirmed = await confirm({
                               title: "حذف الدورة نهائيًا؟",
+
                               message:
                                 "سيتم حذف الدورة ومحتواها نهائيًا، ولن يمكن استعادتها.",
+
                               variant: "danger",
+
                               confirmText: "حذف نهائي",
+
                               onConfirm: async () => {
                                 const saved = await mutate(async () => {
                                   if (isPublished) {
                                     await teachersApi.unpublishCourse(id)
+
                                     setPublishedOverrides((current) => ({
                                       ...current,
+
                                       [id]: false,
                                     }))
                                   }
 
                                   await teachersApi.deleteCourse(id)
                                 }, "تم حذف الدورة نهائياً.")
+
                                 if (!saved) throw new Error("تعذر حذف الدورة.")
                               },
                             })
+
                             if (!confirmed) return
 
                             setDeletedCourseIds((current) => {
                               const next = new Set(current)
+
                               next.add(id)
+
                               return next
                             })
 
                             if (isEditing) setEditingCourse(null)
+
                             if (isShowingContent) setContentCourseId(null)
                           })()
                         }}
@@ -2426,13 +2811,17 @@ export default function RoleForms({
                             onCancel={() => setCoverCrop(null)}
                             onApply={(croppedFile) => {
                               setCoverCrop(null)
+
                               setUploadingCoverCourseId(id)
+
                               void mutate(
                                 () =>
                                   teachersApi.uploadCourseCover(
                                     id,
+
                                     croppedFile,
                                   ),
+
                                 "تم تحديث غلاف الدورة.",
                               ).finally(() => setUploadingCoverCourseId(null))
                             }}
@@ -2445,15 +2834,21 @@ export default function RoleForms({
                             onClick={() => {
                               void confirm({
                                 title: "حذف غلاف الدورة؟",
+
                                 message:
                                   "سيتم إزالة صورة الغلاف الحالية من الدورة.",
+
                                 variant: "danger",
+
                                 confirmText: "حذف الغلاف",
+
                                 onConfirm: async () => {
                                   const saved = await mutate(
                                     () => teachersApi.deleteCourseCover(id),
+
                                     "تم حذف غلاف الدورة.",
                                   )
+
                                   if (!saved)
                                     throw new Error("تعذر حذف غلاف الدورة.")
                                 },
@@ -2472,7 +2867,7 @@ export default function RoleForms({
                         ref={courseEditorRef}
                         key={`edit-${id}`}
                         onSubmit={(event) => void updateCourse(event)}
-                        className="scroll-mt-6 min-w-0 space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-3 sm:p-4"
+                        className="scroll-mt-28 min-w-0 space-y-3 rounded-xl border border-nuwa-base/25 bg-nuwa-ice p-3 sm:p-4"
                       >
                         <div>
                           <h5 className="text-sm font-bold text-nuwa-deep">
@@ -2593,7 +2988,13 @@ export default function RoleForms({
     return (
       <div className="mb-5 space-y-4">
         {loading ? (
-          <EnrollmentGridSkeleton />
+          <EnrollmentGridSkeleton
+            count={
+              data === null || data === undefined
+                ? undefined
+                : studentEnrollments.length
+            }
+          />
         ) : (
           studentEnrollments.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -2689,7 +3090,7 @@ export default function RoleForms({
                           تقدمك في الدورة
                         </span>
                         <span className="font-bold tabular-nums text-ink">
-                          {Math.round(percent)}%
+                          <AnimatedNumber value={`${Math.round(percent)}%`} />
                         </span>
                       </div>
                       <div
@@ -2700,9 +3101,9 @@ export default function RoleForms({
                         aria-valuemax={100}
                         aria-valuenow={Math.round(percent)}
                       >
-                        <div
-                          className="h-full rounded-full bg-nuwa-base transition-[width]"
-                          style={{ width: `${percent}%` }}
+                        <AnimatedBar
+                          className="h-full rounded-full bg-nuwa-base"
+                          value={percent}
                         />
                       </div>
                     </div>
@@ -2741,7 +3142,10 @@ export default function RoleForms({
           </div>
         )}
         {progressCourse && (
-          <section className="rounded-2xl border border-stroke bg-white p-4 shadow-nuwa-md sm:p-6">
+          <section
+            id="student-course-progress"
+            className="scroll-mt-28 rounded-2xl border border-stroke bg-white p-4 shadow-nuwa-md sm:p-6"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold text-nuwa-base">
@@ -2785,9 +3189,9 @@ export default function RoleForms({
               aria-valuemax={100}
               aria-valuenow={Math.round(safeProgressPercent)}
             >
-              <div
-                className="h-full rounded-full bg-nuwa-base transition-[width]"
-                style={{ width: `${safeProgressPercent}%` }}
+              <AnimatedBar
+                className="h-full rounded-full bg-nuwa-base"
+                value={safeProgressPercent}
               />
             </div>
             {progressLoading && (
@@ -2841,6 +3245,8 @@ export default function RoleForms({
                         lesson.lessonId ?? lesson.id ?? "",
                       )
 
+                      const lessonResources = getLessonResources(lesson)
+
                       return (
                         <li key={lessonId} className="py-4">
                           <div className="min-w-0">
@@ -2858,7 +3264,7 @@ export default function RoleForms({
                                 : "لم يكتمل بعد"}
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={() => void toggleLesson(lesson)}
@@ -2879,28 +3285,216 @@ export default function RoleForms({
                                 ? "جارٍ التحميل..."
                                 : "اختبار الدرس"}
                             </button>
+                            {Boolean(lesson.video) && (
+                              <button
+                                type="button"
+                                aria-expanded={
+                                  openStudentVideoLessonId === lessonId
+                                }
+                                onClick={() => {
+                                  const isOpening =
+                                    openStudentVideoLessonId !== lessonId
+                                  setOpenStudentVideoLessonId(
+                                    openStudentVideoLessonId === lessonId
+                                      ? null
+                                      : lessonId,
+                                  )
+                                  if (isOpening)
+                                    scrollToLessonContent(
+                                      `student-video-${lessonId}`,
+                                    )
+                                }}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                                  openStudentVideoLessonId === lessonId
+                                    ? "border-nuwa-base bg-nuwa-soft text-nuwa-deep"
+                                    : "border-stroke text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                }`}
+                              >
+                                <Play size={14} fill="currentColor" />
+                                فيديو الدرس
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform ${
+                                    openStudentVideoLessonId === lessonId
+                                      ? "rotate-180"
+                                      : ""
+                                  }`}
+                                />
+                              </button>
+                            )}
+                            {lessonResources.length > 0 && (
+                              <button
+                                type="button"
+                                aria-expanded={
+                                  openStudentResourcesLessonId === lessonId
+                                }
+                                onClick={() => {
+                                  const isOpening =
+                                    openStudentResourcesLessonId !== lessonId
+                                  setOpenStudentResourcesLessonId(
+                                    openStudentResourcesLessonId === lessonId
+                                      ? null
+                                      : lessonId,
+                                  )
+                                  if (isOpening)
+                                    scrollToLessonContent(
+                                      `student-resources-${lessonId}`,
+                                    )
+                                }}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                                  openStudentResourcesLessonId === lessonId
+                                    ? "border-nuwa-base bg-nuwa-soft text-nuwa-deep"
+                                    : "border-stroke text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                }`}
+                              >
+                                <FileText size={14} />
+                                ملفات ومواد ({lessonResources.length})
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform ${
+                                    openStudentResourcesLessonId === lessonId
+                                      ? "rotate-180"
+                                      : ""
+                                  }`}
+                                />
+                              </button>
+                            )}
                           </div>
-                          {lesson.video ? (
-                            <LessonVideoPlayer
-                              video={lesson.video}
-                              title={String(
-                                lesson.title ?? lesson.name ?? "فيديو الدرس",
-                              )}
-                              lastPosition={Number(lesson.lastPosition ?? 0)}
-                              onPause={(seconds) =>
-                                void saveVideoPosition(
-                                  lessonId,
-                                  seconds,
-                                  Boolean(lesson.isCompleted),
-                                )
-                              }
-                              onEnded={(seconds) =>
-                                void saveVideoPosition(lessonId, seconds, true)
-                              }
-                            />
-                          ) : (
+                          {lesson.video &&
+                          openStudentVideoLessonId === lessonId ? (
+                            <div
+                              id={`student-video-${lessonId}`}
+                              className="scroll-mt-24"
+                            >
+                              <LessonVideoPlayer
+                                video={lesson.video}
+                                title={String(
+                                  lesson.title ?? lesson.name ?? "فيديو الدرس",
+                                )}
+                                lastPosition={Number(lesson.lastPosition ?? 0)}
+                                onPause={(seconds) =>
+                                  void saveVideoPosition(
+                                    lessonId,
+                                    seconds,
+                                    Boolean(lesson.isCompleted),
+                                  )
+                                }
+                                onEnded={(seconds) =>
+                                  void saveVideoPosition(
+                                    lessonId,
+                                    seconds,
+                                    true,
+                                  )
+                                }
+                              />
+                            </div>
+                          ) : null}
+                          {openStudentResourcesLessonId === lessonId &&
+                            lessonResources.length > 0 && (
+                              <section
+                                id={`student-resources-${lessonId}`}
+                                className="mt-4 rounded-2xl border border-stroke bg-slate-50/80 p-4"
+                                aria-label="ملفات ومواد الدرس"
+                              >
+                                <div className="mb-3 flex items-center gap-2.5">
+                                  <span className="grid size-9 place-items-center rounded-xl bg-white text-nuwa-base shadow-sm">
+                                    <FileText size={17} />
+                                  </span>
+                                  <div>
+                                    <h4 className="text-sm font-bold text-ink">
+                                      ملفات ومواد الدرس
+                                    </h4>
+                                    <p className="text-xs text-ink-muted">
+                                      مواد أضافها المدرّس لهذا الدرس.
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {lessonResources.map(
+                                    (resource, resourceIndex) => {
+                                      const url = getLessonResourceUrl(resource)
+
+                                      const name = String(
+                                        resource.name ??
+                                          `مادة الدرس ${resourceIndex + 1}`,
+                                      )
+
+                                      const mime = String(
+                                        resource.contentType ??
+                                          resource.mimeType ??
+                                          resource.type ??
+                                          "",
+                                      ).toLowerCase()
+
+                                      if (!url)
+                                        return (
+                                          <div
+                                            key={String(
+                                              resource.id ?? resourceIndex,
+                                            )}
+                                            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900"
+                                          >
+                                            {name} · رابط الملف غير متاح
+                                          </div>
+                                        )
+
+                                      const isVideo =
+                                        youtubeVideoId(url) !== null ||
+                                        mime.startsWith("video/") ||
+                                        /\.(mp4|webm|mov|m4v|ogv)(?:$|\?)/i.test(
+                                          url,
+                                        ) ||
+                                        name.startsWith("فيديو إضافي")
+
+                                      if (isVideo)
+                                        return (
+                                          <div
+                                            key={String(
+                                              resource.id ?? resourceIndex,
+                                            )}
+                                            className="rounded-xl border border-stroke bg-white p-3"
+                                          >
+                                            <p className="mb-2 text-xs font-semibold text-ink-muted">
+                                              {name}
+                                            </p>
+                                            <LessonVideoPlayer
+                                              video={{ videoUrl: url }}
+                                              title={name}
+                                            />
+                                          </div>
+                                        )
+
+                                      return (
+                                        <a
+                                          key={String(
+                                            resource.id ?? resourceIndex,
+                                          )}
+                                          href={resolveApiAssetUrl(url)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="flex min-h-14 items-center gap-3 rounded-xl border border-stroke bg-white px-3 py-2.5 text-sm font-semibold text-ink transition hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                        >
+                                          <FileText
+                                            size={18}
+                                            className="shrink-0 text-nuwa-base"
+                                          />
+                                          <span className="min-w-0 flex-1 truncate">
+                                            {name}
+                                          </span>
+                                          <ExternalLink
+                                            size={15}
+                                            className="shrink-0 text-nuwa-base"
+                                          />
+                                        </a>
+                                      )
+                                    },
+                                  )}
+                                </div>
+                              </section>
+                            )}
+                          {!lesson.video && lessonResources.length === 0 && (
                             <p className="mt-3 rounded-xl border border-dashed border-stroke bg-canvas px-4 py-3 text-sm text-ink-muted">
-                              لا تتوفر بيانات فيديو لهذا الدرس حاليًا.
+                              لا يوجد فيديو أو مرفقات لهذا الدرس حاليًا.
                             </p>
                           )}
                         </li>
@@ -3180,11 +3774,13 @@ export default function RoleForms({
           window.sessionStorage.getItem("eduhub.auth.name") ??
           "مدير النظام",
       )
+
     const adminImage =
       profileImageOverride ??
       (profileImageSource(record) ||
         window.sessionStorage.getItem("eduhub.auth.image") ||
         "")
+
     return (
       <section className="mb-5 overflow-hidden rounded-3xl border border-emerald-900/10 bg-white shadow-[0_18px_55px_-35px_rgba(12,68,43,0.35)]">
         <div className="relative isolate overflow-hidden bg-gradient-to-l from-[#0b3b25] via-[#176b43] to-[#25845a] px-4 py-6 text-white sm:px-9 sm:py-8">
@@ -3242,7 +3838,7 @@ export default function RoleForms({
           <form
             ref={adminNameEditorRef}
             onSubmit={(event) => void updateAdminName(event)}
-            className="scroll-mt-6 grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end sm:p-7"
+            className="scroll-mt-28 grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end sm:p-7"
           >
             <label className={labelClass}>
               الاسم الظاهر
@@ -3274,7 +3870,7 @@ export default function RoleForms({
         {editingProfile && (
           <div
             ref={profileEditorRef}
-            className="scroll-mt-6 min-w-0 p-4 pt-0 sm:px-7 sm:pb-7"
+            className="scroll-mt-28 min-w-0 p-4 pt-0 sm:px-7 sm:pb-7"
           >
             <ProfileImageEditor
               role="admin"
@@ -3316,13 +3912,18 @@ export default function RoleForms({
       record.fullName ??
         [
           record.firstName,
+
           isTeacher ? record.lastName : record.secondName,
+
           ...(!isTeacher ? [record.thirdName] : []),
         ]
+
           .filter((part) => typeof part === "string" && part.trim())
+
           .join(" ") ??
         "حسابي",
     )
+
     const profileImage = profileImageOverride ?? profileImageSource(record)
 
     return (
@@ -3375,9 +3976,12 @@ export default function RoleForms({
           <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
             {[
               ["البريد الإلكتروني", record.email ?? "غير مضاف"],
+
               ["رقم الهاتف", record.phoneNumber ?? "غير مضاف"],
+
               [
                 isTeacher ? "التخصص" : "الصف الدراسي",
+
                 isTeacher
                   ? (record.specialization ?? record.subject ?? "غير محدد")
                   : (record.academicYearName ??
@@ -3385,8 +3989,10 @@ export default function RoleForms({
                     studentAcademicYear ??
                     "غير محدد"),
               ],
+
               [
                 "حالة الحساب",
+
                 record.isApproved === false ? "بانتظار الاعتماد" : "نشط",
               ],
             ].map(([label, value]) => (
@@ -3404,7 +4010,7 @@ export default function RoleForms({
         {editingProfile && (
           <section
             ref={profileEditorRef}
-            className="scroll-mt-6 min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7"
+            className="scroll-mt-28 min-w-0 rounded-3xl border border-stroke bg-white p-4 shadow-sm sm:p-7"
           >
             <div className="mb-5">
               <h3 className="text-xl font-bold text-ink">الملف الشخصي</h3>
@@ -3587,6 +4193,7 @@ export default function RoleForms({
                   type="button"
                   onClick={() => {
                     profileFormRef.current?.reset()
+
                     setEditingProfile(false)
                   }}
                   disabled={busy}

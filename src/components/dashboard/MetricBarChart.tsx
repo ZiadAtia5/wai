@@ -1,3 +1,5 @@
+import { AnimatedBar, AnimatedNumber } from "./DashboardMotion"
+
 interface MetricBar {
   key: string
   label: string
@@ -22,7 +24,7 @@ export default function MetricBarChart({
   return (
     <section
       dir="rtl"
-      className="min-w-0 rounded-2xl border border-stroke bg-surface p-4 shadow-nuwa sm:rounded-[28px] sm:p-6"
+      className="mt-5 min-w-0 rounded-2xl border border-stroke bg-surface p-4 shadow-nuwa sm:rounded-[28px] sm:p-6"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -46,7 +48,7 @@ export default function MetricBarChart({
                 {label}
               </span>
               <span className="shrink-0 text-sm font-bold tabular-nums text-ink">
-                {new Intl.NumberFormat("ar-EG").format(value)}
+                <AnimatedNumber value={value} />
               </span>
             </div>
             <div
@@ -57,11 +59,9 @@ export default function MetricBarChart({
               aria-valuemax={maxValue}
               aria-valuenow={value}
             >
-              <div
-                className="h-full rounded-full bg-gradient-to-l from-nuwa-deep to-nuwa-bright transition-[width] duration-700 ease-out"
-                style={{
-                  width: `${Math.max((value / maxValue) * 100, value > 0 ? 3 : 0)}%`,
-                }}
+              <AnimatedBar
+                className="h-full rounded-full bg-gradient-to-l from-nuwa-deep to-nuwa-bright"
+                value={Math.max((value / maxValue) * 100, value > 0 ? 3 : 0)}
               />
             </div>
           </div>

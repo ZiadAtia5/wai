@@ -306,7 +306,9 @@ export default function App() {
               window.scrollTo({
                 top: 0,
                 behavior:
-                  view === "public:courses" || view === "public:teachers"
+                  view === "public:courses" ||
+                  view === "public:teachers" ||
+                  view === "public:course-detail"
                     ? "auto"
                     : "smooth",
               })
@@ -318,7 +320,9 @@ export default function App() {
               }`}
               direction={transitionDirection}
               animatePage={
-                view !== "public:courses" && view !== "public:teachers"
+                view !== "public:courses" &&
+                view !== "public:teachers" &&
+                view !== "public:course-detail"
               }
             >
               <div className={view === "landing" ? "-mt-24" : undefined}>

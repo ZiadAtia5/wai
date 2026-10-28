@@ -1,13 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react"
 import {
   ChevronDown,
+  ExternalLink,
   FileVideo2,
+  FileText,
   Link2,
   LoaderCircle,
+  Trash2,
   Upload,
 } from "lucide-react"
 
-import { ApiError } from "../../api/client"
+import { ApiError, resolveApiAssetUrl } from "../../api/client"
 import { useConfirmation } from "../ConfirmationProvider"
 
 import { quizzesApi, teachersApi } from "../../api/endpoints"
@@ -27,6 +30,37 @@ function records(value: unknown): DataRecord[] {
   return value.filter(
     (item): item is DataRecord => typeof item === "object" && item !== null,
   )
+}
+
+function resourceUrl(resource: DataRecord): string {
+  const file = record(
+    resource.file ?? resource.attachment ?? resource.resourceFile,
+  )
+  const candidates = [
+    resource.externalUrl,
+    resource.externalLink,
+    resource.fileUrl,
+    resource.resourceFileUrl,
+    resource.resourceUrl,
+    resource.downloadUrl,
+    resource.mediaUrl,
+    resource.publicUrl,
+    resource.storageUrl,
+    resource.href,
+    resource.filePath,
+    resource.path,
+    resource.url,
+    typeof resource.file === "string" ? resource.file : undefined,
+    file.downloadUrl,
+    file.fileUrl,
+    file.url,
+    file.path,
+  ]
+  const value = candidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.trim().length > 0,
+  )
+  return value?.trim() ?? ""
 }
 
 function unwrapRecord(value: unknown, key: string): DataRecord {
@@ -920,21 +954,27 @@ export default function TeacherCourseContent({
                                 }
                                 className="col-span-2 grid min-w-0 gap-2 sm:col-span-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]"
                               >
-                                <input
-                                  name="title"
-                                  required
-                                  defaultValue={String(lesson.title ?? "")}
-                                  aria-label="عنوان الدرس"
-                                  className={control}
-                                />
-                                <input
-                                  name="description"
-                                  defaultValue={String(
-                                    lesson.description ?? "",
-                                  )}
-                                  aria-label="وصف الدرس"
-                                  className={control}
-                                />
+                                <label className={field}>
+                                  عنوان الدرس
+                                  <input
+                                    name="title"
+                                    required
+                                    defaultValue={String(lesson.title ?? "")}
+                                    placeholder="اكتب عنوانًا واضحًا"
+                                    className={control}
+                                  />
+                                </label>
+                                <label className={field}>
+                                  وصف مختصر
+                                  <input
+                                    name="description"
+                                    defaultValue={String(
+                                      lesson.description ?? "",
+                                    )}
+                                    placeholder="ما الذي سيتعلمه الطالب؟"
+                                    className={control}
+                                  />
+                                </label>
                                 <button
                                   disabled={busy}
                                   className="min-h-10 rounded-lg border border-stroke px-3 text-xs font-semibold text-ink disabled:opacity-50"
@@ -959,55 +999,122 @@ export default function TeacherCourseContent({
                                 حذف الدرس
                               </button>
                             </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                            <div className="mt-5 grid min-w-0 gap-3">
+                              {Boolean(
+                                video.videoUrl || video.providerVideoId,
+                              ) && (
+                                <LessonVideoPlayer
+                                  video={video}
+                                  title={String(
+                                    lesson.title ?? "معاينة فيديو الدرس",
+                                  )}
+                                />
+                              )}
                               {Boolean(video.videoUrl) && (
                                 <a
                                   href={String(video.videoUrl)}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-nuwa-base underline"
+                                  className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-nuwa-base/20 bg-nuwa-soft/50 px-3 text-xs font-semibold text-nuwa-deep transition hover:bg-nuwa-soft"
                                 >
                                   عرض الفيديو الحالي
+                                  <ExternalLink size={14} aria-hidden="true" />
                                 </a>
                               )}
-                              {resources.map((resource) => (
-                                <span
-                                  key={String(resource.id)}
-                                  className="inline-flex max-w-full break-all items-center gap-1 rounded bg-canvas px-2 py-1"
-                                >
-                                  {String(resource.name ?? "مورد")}
-                                  <button
-                                    type="button"
-                                    aria-label="حذف المورد"
-                                    onClick={() => {
-                                      void confirmMutation(
-                                        "حذف المورد؟",
-                                        `سيتم حذف المورد «${String(resource.name ?? "المورد")}» من الدرس.`,
-                                        () =>
-                                          teachersApi.deleteResource(
-                                            String(resource.id),
-                                          ),
-                                        "تم حذف المورد.",
-                                        "حذف المورد",
+                              {resources.length > 0 && (
+                                <section className="overflow-hidden rounded-2xl border border-stroke bg-slate-50/80">
+                                  <header className="flex items-center justify-between gap-3 border-b border-stroke bg-white px-4 py-3">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                                        <FileText
+                                          size={19}
+                                          aria-hidden="true"
+                                        />
+                                      </span>
+                                      <div className="min-w-0">
+                                        <h4 className="truncate text-sm font-bold text-ink">
+                                          ملفات ومواد الدرس
+                                        </h4>
+                                        <p className="mt-0.5 text-xs text-ink-muted">
+                                          مرفقات هذا الدرس التي يستطيع الطلاب
+                                          فتحها.
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-nuwa-soft px-2.5 py-1 text-xs font-bold text-nuwa-deep">
+                                      {resources.length} ملف
+                                    </span>
+                                  </header>
+                                  <div className="grid gap-2 p-3 sm:grid-cols-2">
+                                    {resources.map((resource) => {
+                                      const url = resourceUrl(resource)
+                                      const resourceName = String(
+                                        resource.name ?? "مورد",
                                       )
-                                    }}
-                                    className="text-danger"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
+                                      return (
+                                        <span
+                                          key={String(resource.id)}
+                                          className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-stroke bg-white p-3 shadow-sm transition hover:border-nuwa-base/30 hover:shadow-nuwa"
+                                        >
+                                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-canvas text-nuwa-base">
+                                            <FileText
+                                              size={17}
+                                              aria-hidden="true"
+                                            />
+                                          </span>
+                                          {url ? (
+                                            <a
+                                              href={resolveApiAssetUrl(url)}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="inline-flex min-w-0 flex-1 items-center gap-2 font-semibold text-ink transition hover:text-nuwa-base"
+                                              title={resourceName}
+                                            >
+                                              <span className="truncate">
+                                                {resourceName}
+                                              </span>
+                                              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-nuwa-soft px-2.5 py-1.5 text-xs font-bold text-nuwa-deep">
+                                                فتح <ExternalLink size={13} />
+                                              </span>
+                                            </a>
+                                          ) : (
+                                            <span
+                                              className="min-w-0 flex-1 truncate text-xs text-ink-muted"
+                                              title={resourceName}
+                                            >
+                                              {resourceName} — الرابط غير متاح
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            aria-label="حذف المورد"
+                                            title="حذف الملف من الدرس"
+                                            onClick={() => {
+                                              void confirmMutation(
+                                                "حذف المورد؟",
+                                                `سيتم حذف المورد «${resourceName}» من الدرس.`,
+                                                () =>
+                                                  teachersApi.deleteResource(
+                                                    String(resource.id),
+                                                  ),
+                                                "تم حذف المورد.",
+                                                "حذف المورد",
+                                              )
+                                            }}
+                                            className="grid size-9 shrink-0 place-items-center rounded-lg text-danger transition hover:bg-danger-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+                                          >
+                                            <Trash2
+                                              size={16}
+                                              aria-hidden="true"
+                                            />
+                                          </button>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                </section>
+                              )}
                             </div>
-                            {Boolean(
-                              video.videoUrl || video.providerVideoId,
-                            ) && (
-                              <LessonVideoPlayer
-                                video={video}
-                                title={String(
-                                  lesson.title ?? "معاينة فيديو الدرس",
-                                )}
-                              />
-                            )}
                             <section className="mt-4 rounded-2xl border border-stroke bg-white p-4 shadow-sm">
                               <div className="flex items-start gap-3">
                                 <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
@@ -1023,6 +1130,17 @@ export default function TeacherCourseContent({
                                   </p>
                                 </div>
                               </div>
+                              {Boolean(
+                                video.id !== undefined ||
+                                  video.videoUrl ||
+                                  video.providerVideoId,
+                              ) && (
+                                <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">
+                                  الفيديو الحالي سيظل محفوظًا. أي فيديو جديد
+                                  تضيفه من هنا سيظهر كمادة إضافية أسفله، ولن
+                                  يستبدل الفيديو الحالي.
+                                </p>
+                              )}
                               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                 {([
                                   {
@@ -1085,15 +1203,27 @@ export default function TeacherCourseContent({
                                     const file = new FormData(form).get("file")
 
                                     if (file instanceof File && file.size) {
+                                      const hasPrimaryVideo = Boolean(
+                                        video.id !== undefined ||
+                                          video.videoUrl ||
+                                          video.providerVideoId,
+                                      )
                                       const saved = await mutate(
                                         () =>
-                                          teachersApi.uploadLessonVideo(
-                                            lessonId,
+                                          hasPrimaryVideo
+                                            ? teachersApi.uploadLessonResource(
+                                                lessonId,
+                                                file,
+                                                `فيديو إضافي — ${file.name}`,
+                                              )
+                                            : teachersApi.uploadLessonVideo(
+                                                lessonId,
+                                                file,
+                                              ),
 
-                                            file,
-                                          ),
-
-                                        "تم رفع فيديو الدرس.",
+                                        hasPrimaryVideo
+                                          ? "تمت إضافة الفيديو كمرفق إضافي، والفيديو الحالي ما زال محفوظًا."
+                                          : "تم رفع فيديو الدرس.",
                                       )
                                       if (saved) form.reset()
                                     }
@@ -1142,16 +1272,27 @@ export default function TeacherCourseContent({
                                       return
                                     }
 
+                                    const hasPrimaryVideo = Boolean(
+                                      video.id !== undefined ||
+                                        video.videoUrl ||
+                                        video.providerVideoId,
+                                    )
                                     const saved = await mutate(
                                       () =>
-                                        teachersApi.setLessonYoutubeVideo(
-                                          lessonId,
-                                          {
-                                            youTubeUrl: url,
-                                          },
-                                        ),
+                                        hasPrimaryVideo
+                                          ? teachersApi.addExternalLessonResource(
+                                              lessonId,
+                                              "فيديو إضافي — YouTube",
+                                              url,
+                                            )
+                                          : teachersApi.setLessonYoutubeVideo(
+                                              lessonId,
+                                              { youTubeUrl: url },
+                                            ),
 
-                                      "تم ربط فيديو YouTube.",
+                                      hasPrimaryVideo
+                                        ? "تمت إضافة فيديو YouTube كمرفق إضافي، والفيديو الحالي ما زال محفوظًا."
+                                        : "تم ربط فيديو YouTube.",
                                     )
 
                                     if (saved) form.reset()
