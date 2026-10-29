@@ -54,6 +54,12 @@ import { formatEgp } from "../utils/currency"
 
 import { notifyError, notifySuccess } from "../utils/notifications"
 
+import {
+  forgetPendingEnrollment,
+  readPendingEnrollments,
+  rememberPendingEnrollment,
+} from "../utils/pendingEnrollments"
+
 interface PublicCatalogPageProps {
   title: string
 
@@ -446,6 +452,10 @@ export default function PublicCatalogPage({
     () => new Set(),
   )
 
+  const [pendingEnrollmentIds, setPendingEnrollmentIds] = useState<Map<string, string>>(
+    () => readPendingEnrollments(),
+  )
+
   const [enrollmentChecked, setEnrollmentChecked] = useState(false)
 
   useEffect(() => {
@@ -495,6 +505,41 @@ export default function PublicCatalogPage({
         })
 
         setEnrolledCourseIds(new Set(ids))
+
+        const serverPending = new Map(
+            items.flatMap((item) => {
+              const record = asRecord(item)
+              const course = asRecord(record?.course)
+              const courseId = record?.courseId ?? course?.id ?? course?.courseId
+              const requestId = record?.id ?? record?.enrollmentId
+              const status = String(
+                record?.status ?? record?.enrollmentStatus ?? record?.state ?? "",
+              ).toLowerCase()
+              const pending =
+                record?.isApproved === false ||
+                (!record?.isApproved &&
+                  !["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status) &&
+                  !["2", "rejected", "declined", "cancelled", "canceled"].includes(status))
+
+              return pending && courseId != null && requestId != null
+                ? [[String(courseId), String(requestId)] as [string, string]]
+                : []
+            }),
+          )
+        const storedPending = readPendingEnrollments()
+        const returnedCourseIds = new Set(ids)
+        for (const storedCourseId of storedPending.keys()) {
+          if (
+            returnedCourseIds.has(storedCourseId) &&
+            !serverPending.has(storedCourseId)
+          ) {
+            forgetPendingEnrollment(storedCourseId)
+            storedPending.delete(storedCourseId)
+          }
+        }
+        setPendingEnrollmentIds((stored) =>
+          new Map([...storedPending, ...stored, ...serverPending]),
+        )
       })
 
       .catch(() => undefined)
@@ -844,9 +889,58 @@ export default function PublicCatalogPage({
     setContactRequestMessage("")
 
     try {
-      await action(String(courseId))
+      const response = await action(String(courseId))
       setContactRequestSent(true)
       setEnrolledCourseIds((current) => new Set(current).add(String(courseId)))
+      const enrollment = asRecord(unwrapApiResponse(response))
+      const requestId = enrollment?.id ?? enrollment?.enrollmentId
+      rememberPendingEnrollment(
+        String(courseId),
+        requestId == null ? "" : String(requestId),
+      )
+      if (requestId != null) {
+        setPendingEnrollmentIds((current) =>
+          new Map(current).set(String(courseId), String(requestId)),
+        )
+      } else {
+        setPendingEnrollmentIds((current) =>
+          new Map(current).set(String(courseId), ""),
+        )
+        try {
+          const enrollmentResponse = await studentsApi.enrollments({
+            page: 1,
+            pageSize: 100,
+          })
+          const root = asRecord(enrollmentResponse)
+          const nested = asRecord(root?.data)
+          const entries = Array.isArray(enrollmentResponse)
+            ? enrollmentResponse
+            : Array.isArray(root?.items)
+              ? root.items
+              : Array.isArray(root?.enrollments)
+                ? root.enrollments
+                : Array.isArray(nested?.items)
+                  ? nested.items
+                  : Array.isArray(nested?.enrollments)
+                    ? nested.enrollments
+                    : []
+          const matching = entries.map(asRecord).find((entry) => {
+            const nestedCourse = asRecord(entry?.course)
+            return String(
+              entry?.courseId ?? nestedCourse?.id ?? nestedCourse?.courseId ?? "",
+            ) === String(courseId)
+          })
+          const fetchedId = matching?.id ?? matching?.enrollmentId
+          if (fetchedId != null) {
+            rememberPendingEnrollment(String(courseId), String(fetchedId))
+            setPendingEnrollmentIds((current) =>
+              new Map(current).set(String(courseId), String(fetchedId)),
+            )
+          }
+        } catch {
+          // The request was sent successfully; the next enrollment refresh can recover its ID.
+        }
+      }
       setContactRequestMessage(
         "تم إرسال طلبك للمعلم. تواصل معه عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
       )
@@ -872,6 +966,60 @@ export default function PublicCatalogPage({
       notifyError(cause, "تعذر إرسال طلب الالتحاق.")
     } finally {
       setContactRequestLoading(false)
+    }
+  }
+
+  async function cancelEnrollmentRequest(courseId: string): Promise<void> {
+    if (actionLoading) return
+
+    setActionLoading(true)
+    try {
+      let requestId = pendingEnrollmentIds.get(courseId) ?? ""
+      if (!requestId) {
+        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
+        const root = asRecord(response)
+        const nested = asRecord(root?.data)
+        const entries = Array.isArray(response)
+          ? response
+          : Array.isArray(root?.items)
+            ? root.items
+            : Array.isArray(root?.enrollments)
+              ? root.enrollments
+              : Array.isArray(nested?.items)
+                ? nested.items
+                : Array.isArray(nested?.enrollments)
+                  ? nested.enrollments
+                  : []
+        const enrollment = entries.map(asRecord).find((entry) => {
+          const nestedCourse = asRecord(entry?.course)
+          return String(
+            entry?.courseId ?? nestedCourse?.id ?? nestedCourse?.courseId ?? "",
+          ) === courseId
+        })
+        requestId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "")
+      }
+      if (!requestId) {
+        throw new Error("تعذر العثور على طلب الالتحاق لإلغائه. يمكنك التواصل مع المدرس عبر واتساب.")
+      }
+      await studentsApi.cancelEnrollment(requestId)
+      forgetPendingEnrollment(courseId)
+      setPendingEnrollmentIds((current) => {
+        const next = new Map(current)
+        next.delete(courseId)
+        return next
+      })
+      setEnrolledCourseIds((current) => {
+        const next = new Set(current)
+        next.delete(courseId)
+        return next
+      })
+      setContactRequestSent(false)
+      setContactRequestMessage("")
+      notifySuccess("تم سحب طلب الالتحاق بنجاح.")
+    } catch (cause) {
+      notifyError(cause, "تعذر سحب طلب الالتحاق.")
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -2009,24 +2157,31 @@ export default function PublicCatalogPage({
                                 type="button"
                                 disabled={
                                   courseIdentifier == null ||
-                                  (enrolledCourseIds.has(
-                                    String(courseIdentifier),
-                                  ) &&
-                                    enrollmentChecked)
+                                  (enrolledCourseIds.has(String(courseIdentifier)) &&
+                                    enrollmentChecked &&
+                                    !pendingEnrollmentIds.has(String(courseIdentifier)))
                                 }
                                 onClick={(event) => {
                                   event.stopPropagation()
-
-                                  void openEnrollmentContact(record)
+                                  const id = String(courseIdentifier)
+                                  if (pendingEnrollmentIds.has(id)) {
+                                    void cancelEnrollmentRequest(id)
+                                  } else {
+                                    void openEnrollmentContact(record)
+                                  }
                                 }}
                                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-nuwa-base px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-nuwa-base/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink-muted"
                               >
-                                <MessageCircle size={17} />
-                                {enrolledCourseIds.has(
-                                  String(courseIdentifier),
-                                ) && enrollmentChecked
-                                  ? "مسجل بالفعل"
-                                  : "طلب الالتحاق بالدورة"}
+                                {pendingEnrollmentIds.has(String(courseIdentifier)) ? (
+                                  <X size={17} />
+                                ) : (
+                                  <MessageCircle size={17} />
+                                )}
+                                {pendingEnrollmentIds.has(String(courseIdentifier))
+                                  ? "سحب طلب الالتحاق"
+                                  : enrolledCourseIds.has(String(courseIdentifier)) && enrollmentChecked
+                                    ? "مسجل بالفعل"
+                                    : "طلب الالتحاق بالدورة"}
                               </button>
                             </div>
                           )}
@@ -2055,9 +2210,9 @@ export default function PublicCatalogPage({
                         setPage((value) => Math.max(1, value - 1))
                         setDetail(null)
                       }}
-                      className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-ink shadow-[0_4px_18px_rgba(15,23,42,0.10)] transition hover:-translate-y-0.5 hover:text-nuwa-base disabled:cursor-not-allowed disabled:opacity-40"
+                      className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <ChevronLeft size={20} aria-hidden="true" />
+                      <ChevronRight size={18} aria-hidden="true" />
                     </button>
                     <div className="flex items-center justify-center gap-2.5">
                       {Array.from(
@@ -2078,12 +2233,14 @@ export default function PublicCatalogPage({
                             setPage(pageNumber)
                             setDetail(null)
                           }}
-                          className={`h-3 rounded-full transition-all duration-300 disabled:cursor-wait ${
+                          className={`grid size-11 place-items-center rounded-xl border text-sm font-bold tabular-nums transition disabled:cursor-wait ${
                             page === pageNumber
-                              ? "w-12 bg-[#6d28d9]"
-                              : "w-3 bg-[#e6e7ef] hover:bg-[#c4b5fd]"
+                              ? "border-nuwa-base bg-nuwa-base text-white shadow-nuwa"
+                              : "border-[#cddbd0] bg-white text-[#234736] hover:border-nuwa-base hover:bg-nuwa-ice"
                           }`}
-                        />
+                        >
+                          {pageNumber.toLocaleString("ar-EG")}
+                        </button>
                       ))}
                     </div>
                     <button
@@ -2096,9 +2253,9 @@ export default function PublicCatalogPage({
                         setPage((value) => Math.min(data.totalPages, value + 1))
                         setDetail(null)
                       }}
-                      className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-ink shadow-[0_4px_18px_rgba(15,23,42,0.10)] transition hover:-translate-y-0.5 hover:text-nuwa-base disabled:cursor-not-allowed disabled:opacity-40"
+                      className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <ChevronRight size={20} aria-hidden="true" />
+                      <ChevronLeft size={18} aria-hidden="true" />
                     </button>
                     <span className="sr-only" aria-live="polite">
                       صفحة {page.toLocaleString("ar-EG")} من{" "}
@@ -2160,13 +2317,13 @@ export default function PublicCatalogPage({
               role="dialog"
               aria-modal="true"
               aria-labelledby="course-contact-title"
-              className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-md flex-col overflow-hidden overscroll-contain rounded-2xl border border-white/60 bg-surface shadow-2xl shadow-emerald-950/25 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px]"
+              className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden overscroll-contain rounded-2xl border border-white/60 bg-surface shadow-2xl shadow-emerald-950/25 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px] md:flex-row"
               initial={{ opacity: 0, y: 18, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
             >
-              <div className="relative shrink-0 overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] px-5 pb-4 pt-5 text-white sm:px-6 sm:pb-5 sm:pt-6">
+              <div className="relative shrink-0 overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] px-5 pb-4 pt-5 text-white sm:px-6 sm:pb-5 sm:pt-6 md:flex md:w-[40%] md:flex-col md:justify-center md:px-8">
                 <span
                   aria-hidden="true"
                   className="absolute -left-7 -top-14 size-36 rounded-full border-[18px] border-white/10"
@@ -2196,7 +2353,7 @@ export default function PublicCatalogPage({
                 </p>
               </div>
 
-              <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 sm:space-y-4 sm:p-5">
+              <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 sm:space-y-4 sm:p-5 md:flex-1 md:p-7">
                 <div className="flex items-center gap-3 rounded-2xl border border-stroke bg-white p-3 sm:p-4">
                   <CourseTeacherAvatar
                     course={contactCourse}
@@ -2283,10 +2440,18 @@ export default function PublicCatalogPage({
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => void requestContactEnrollment()}
+                    onClick={() => {
+                      const id = String(contactCourse.id ?? contactCourse.courseId)
+                      if (pendingEnrollmentIds.has(id)) void cancelEnrollmentRequest(id)
+                      else void requestContactEnrollment()
+                    }}
                     disabled={
                       contactRequestLoading ||
-                      contactRequestSent ||
+                      (contactRequestSent &&
+                        !pendingEnrollmentIds.has(
+                          String(contactCourse.id ?? contactCourse.courseId),
+                        )) ||
+                      actionLoading ||
                       (contactCourse.id == null &&
                         contactCourse.courseId == null)
                     }
@@ -2297,8 +2462,12 @@ export default function PublicCatalogPage({
                     ) : (
                       <MessageCircle size={17} />
                     )}
-                    {contactRequestLoading
-                      ? "جارٍ إرسال الطلب..."
+                    {contactRequestLoading || actionLoading
+                      ? "جارٍ معالجة الطلب..."
+                      : pendingEnrollmentIds.has(
+                            String(contactCourse.id ?? contactCourse.courseId),
+                          )
+                        ? "سحب طلب الالتحاق"
                       : contactRequestSent
                         ? "تم إرسال طلب الالتحاق"
                         : "طلب الالتحاق بالدورة"}

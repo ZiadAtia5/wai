@@ -9,14 +9,16 @@ import {
   GraduationCap,
   FileText,
   LockKeyhole,
+  MessageCircle,
   Play,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react"
 
 import { ApiError, getAuthToken, resolveApiAssetUrl } from "../api/client"
 
-import { coursesApi, quizzesApi, studentsApi } from "../api/endpoints"
+import { coursesApi, quizzesApi, studentsApi, teachersApi } from "../api/endpoints"
 
 import LessonVideoPlayer, {
   youtubeVideoId,
@@ -34,6 +36,12 @@ import { notifyError, notifySuccess } from "../utils/notifications"
 import type { NavigateFn } from "../types"
 
 import { formatEgp } from "../utils/currency"
+
+import {
+  forgetPendingEnrollment,
+  readPendingEnrollments,
+  rememberPendingEnrollment,
+} from "../utils/pendingEnrollments"
 
 type RecordValue = Record<string, unknown>
 
@@ -595,11 +603,15 @@ function statusMessage(access: AccessState): string {
 export default function CourseDetailsPage({
   courseId,
 
+  teacherId,
+
   navigate,
 
   onBack,
 }: {
   courseId: string
+
+  teacherId?: string | null
 
   navigate: NavigateFn
 
@@ -614,6 +626,14 @@ export default function CourseDetailsPage({
   const [error, setError] = useState("")
 
   const [requesting, setRequesting] = useState(false)
+
+  const [enrollmentId, setEnrollmentId] = useState<string | null>(
+    () => readPendingEnrollments().get(courseId) || null,
+  )
+
+  const [contactOpen, setContactOpen] = useState(false)
+
+  const [teacherProfilePhone, setTeacherProfilePhone] = useState("")
 
   const [lessonProgress, setLessonProgress] = useState(
     () => new Map<string, RecordValue>(),
@@ -639,6 +659,8 @@ export default function CourseDetailsPage({
 
   async function loadPage(active = () => true) {
     setLoading(true)
+
+    setEnrollmentId(null)
 
     setError("")
 
@@ -690,11 +712,37 @@ export default function CourseDetailsPage({
           )
         })
 
-        nextAccess = enrollmentState(enrollment)
+        const serverState = enrollmentState(enrollment)
+        const serverId = enrollment?.id ?? enrollment?.enrollmentId
+        const storedId = readPendingEnrollments().get(courseId)
+        if (enrollment) {
+          nextAccess = serverState
+          if (serverState === "pending") {
+            rememberPendingEnrollment(
+              courseId,
+              serverId == null ? storedId ?? "" : String(serverId),
+            )
+          } else {
+            forgetPendingEnrollment(courseId)
+          }
+          setEnrollmentId(
+            serverId == null
+              ? serverState === "pending"
+                ? storedId || null
+                : null
+              : String(serverId),
+          )
+        } else if (storedId !== undefined) {
+          nextAccess = "pending"
+          setEnrollmentId(storedId || null)
+        } else {
+          setEnrollmentId(null)
+        }
       } catch {
         // Fail closed: do not request a video-bearing response when enrollment cannot be verified.
-
-        nextAccess = "verification-failed"
+        const storedId = readPendingEnrollments().get(courseId)
+        nextAccess = storedId === undefined ? "verification-failed" : "pending"
+        setEnrollmentId(storedId || null)
       }
     }
 
@@ -869,9 +917,15 @@ export default function CourseDetailsPage({
     setRequesting(true)
 
     try {
-      await coursesApi.enroll(courseId)
+      const response = await coursesApi.enroll(courseId)
+      const enrollment = record(unwrap(response))
+      const id = enrollment.id ?? enrollment.enrollmentId
+      setEnrollmentId(id == null ? null : String(id))
+      rememberPendingEnrollment(courseId, id == null ? "" : String(id))
 
       setAccess("pending")
+
+      if (id == null) await loadPage()
 
       notifySuccess("تم إرسال طلب الالتحاق، وسيظهر محتوى الفيديو بعد الموافقة.")
     } catch (cause) {
@@ -880,6 +934,36 @@ export default function CourseDetailsPage({
       } else {
         notifyError(cause, "تعذر إرسال طلب الالتحاق.")
       }
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  async function cancelEnrollment() {
+    if (requesting) return
+
+    setRequesting(true)
+    try {
+      let targetId = enrollmentId
+      if (!targetId) {
+        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
+        const enrollment = list(response).find((item) => {
+          const nestedCourse = record(item.course)
+          return String(
+            item.courseId ?? nestedCourse.id ?? nestedCourse.courseId ?? "",
+          ) === String(courseId)
+        })
+        targetId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "")
+      }
+      if (!targetId) throw new Error("تعذر العثور على طلب الالتحاق.")
+      await studentsApi.cancelEnrollment(targetId)
+      forgetPendingEnrollment(courseId)
+      setAccess("not-enrolled")
+      setEnrollmentId(null)
+      setContactOpen(false)
+      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.")
+    } catch (cause) {
+      notifyError(cause, "تعذر إلغاء طلب الالتحاق.")
     } finally {
       setRequesting(false)
     }
@@ -925,6 +1009,65 @@ export default function CourseDetailsPage({
   )
 
   const canWatch = access === "approved"
+
+  const courseTeacher = record(course?.teacher ?? course?.instructor)
+  const teacherPhone = String(
+    course?.teacherPhoneNumber ??
+      course?.teacherPhone ??
+      course?.instructorPhoneNumber ??
+      course?.whatsappPhoneNumber ??
+      course?.whatsAppPhoneNumber ??
+      course?.phoneNumber ??
+      course?.phone ??
+      courseTeacher.whatsappPhoneNumber ??
+      courseTeacher.whatsAppPhoneNumber ??
+      courseTeacher.whatsappNumber ??
+      courseTeacher.whatsAppNumber ??
+      courseTeacher.phoneNumber ??
+      courseTeacher.phone ??
+      courseTeacher.mobileNumber ??
+      teacherProfilePhone ??
+      "",
+  ).trim()
+  const whatsappNumber = teacherPhone.replace(/\D/g, "")
+  const whatsappPhone = whatsappNumber.startsWith("00")
+    ? whatsappNumber.slice(2)
+    : whatsappNumber.startsWith("0")
+      ? `20${whatsappNumber.slice(1)}`
+      : whatsappNumber.startsWith("20")
+        ? whatsappNumber
+        : whatsappNumber
+          ? `20${whatsappNumber}`
+          : ""
+  const courseTitle = String(course?.title ?? "الدورة")
+
+  useEffect(() => {
+    if (!contactOpen || teacherPhone || !teacherId) return
+
+    let active = true
+    teachersApi
+      .byId(teacherId)
+      .then((response) => {
+        if (!active) return
+        const profile = record(unwrap(response))
+        const phone =
+          profile.teacherPhoneNumber ??
+          profile.teacherPhone ??
+          profile.whatsappPhoneNumber ??
+          profile.whatsAppPhoneNumber ??
+          profile.whatsappNumber ??
+          profile.whatsAppNumber ??
+          profile.phoneNumber ??
+          profile.phone ??
+          profile.mobileNumber
+        if (phone != null) setTeacherProfilePhone(String(phone).trim())
+      })
+      .catch(() => undefined)
+
+    return () => {
+      active = false
+    }
+  }, [contactOpen, teacherId, teacherPhone])
 
   function moduleIsComplete(module: RecordValue): boolean {
     if (!progressVerified) return false
@@ -1639,10 +1782,10 @@ export default function CourseDetailsPage({
                   <button
                     type="button"
                     disabled={requesting}
-                    onClick={() => void requestEnrollment()}
+                    onClick={() => setContactOpen(true)}
                     className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#176b43] to-[#0b3b25] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-nuwa-base/15 transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {requesting ? "جارٍ إرسال الطلب..." : "طلب الالتحاق بالدورة"}
+                    <MessageCircle size={18} /> تواصل مع المدرس
                   </button>
                 )}
                 {access === "guest" && (
@@ -1655,9 +1798,18 @@ export default function CourseDetailsPage({
                   </button>
                 )}
                 {access === "pending" && (
-                  <span className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">
-                    <LockKeyhole size={16} /> الطلب قيد المراجعة
-                  </span>
+                  <div className="mt-4 space-y-2">
+                    <span className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">
+                      <LockKeyhole size={16} /> الطلب قيد المراجعة
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setContactOpen(true)}
+                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-[#176b43] to-[#0b3b25] px-4 py-2 text-sm font-bold text-white"
+                    >
+                      <MessageCircle size={17} /> تواصل مع المدرس
+                    </button>
+                  </div>
                 )}
                 {access === "checking" && (
                   <span className="mt-4 block rounded-xl bg-canvas px-4 py-3 text-center text-sm text-ink-muted">
@@ -1669,6 +1821,110 @@ export default function CourseDetailsPage({
           </>
         ) : null}
       </div>
+      {contactOpen && (
+        <div
+          className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-emerald-950/55 p-3 backdrop-blur-sm sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setContactOpen(false)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="course-contact-title"
+            className="my-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/60 bg-white shadow-2xl md:flex-row"
+          >
+            <div className="relative flex shrink-0 flex-col justify-center overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] p-6 text-white sm:p-8 md:w-[40%]">
+              <button
+                type="button"
+                onClick={() => setContactOpen(false)}
+                aria-label="إغلاق نافذة التواصل"
+                className="absolute left-4 top-4 grid size-9 place-items-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
+              >
+                <X size={18} />
+              </button>
+              <span className="grid size-12 place-items-center rounded-2xl bg-white/15 text-emerald-100">
+                <MessageCircle size={24} />
+              </span>
+              <p className="mt-5 text-xs font-semibold text-white/75">
+                طلب الالتحاق بالدورة
+              </p>
+              <h2 id="course-contact-title" className="mt-1 text-xl font-bold leading-8 sm:text-2xl">
+                {courseTitle}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-white/75">
+                تواصل مع المدرس عبر واتساب لإتمام خطوات الالتحاق والدفع.
+              </p>
+            </div>
+            <div className="min-h-0 space-y-4 overflow-y-auto p-5 sm:p-7 md:flex-1 md:p-8">
+              <div className="rounded-2xl border border-stroke bg-canvas/60 p-4">
+                <p className="text-xs font-semibold text-ink-muted">
+                  رقم التواصل عبر واتساب
+                </p>
+                {teacherPhone ? (
+                  <a
+                    href={`tel:${teacherPhone.replace(/[^\d+]/g, "")}`}
+                    dir="ltr"
+                    className="mt-2 inline-flex items-center gap-2 text-lg font-bold text-ink hover:text-nuwa-base"
+                  >
+                    <MessageCircle size={18} className="text-nuwa-base" />
+                    {teacherPhone}
+                  </a>
+                ) : (
+                  <p className="mt-2 text-sm leading-6 text-ink-muted">
+                    رقم التواصل غير متاح حاليًا. يمكنك إرسال طلب الالتحاق وسيتواصل معك المدرس.
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={requesting}
+                  onClick={() =>
+                    access === "pending"
+                      ? void cancelEnrollment()
+                      : void requestEnrollment()
+                  }
+                  className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 ${
+                    access === "pending"
+                      ? "bg-danger hover:bg-danger/90"
+                      : "bg-nuwa-base hover:bg-nuwa-deep"
+                  }`}
+                >
+                  {requesting ? (
+                    "جارٍ المعالجة..."
+                  ) : access === "pending" ? (
+                    "إلغاء الطلب"
+                  ) : (
+                    "طلب الالتحاق بالدورة"
+                  )}
+                </button>
+                {whatsappPhone ? (
+                  <a
+                    href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+                      `السلام عليكم، أرغب في الالتحاق بدورة ${courseTitle} وإتمام الدفع.`,
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#16855b] px-4 py-3 text-sm font-bold text-white hover:bg-[#116b49]"
+                  >
+                    <MessageCircle size={18} /> تواصل مع المدرس واتساب
+                  </a>
+                ) : (
+                  <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-ink-muted px-4 py-3 text-sm font-bold text-white opacity-60">
+                    <MessageCircle size={18} /> واتساب غير متاح
+                  </span>
+                )}
+              </div>
+              {access === "pending" && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                  تم إرسال طلبك بالفعل. يمكنك إلغاؤه من هنا.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

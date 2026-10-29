@@ -15,13 +15,19 @@ import {
 
 import { ApiError, getAuthToken } from "../../api/client"
 
-import { coursesApi, teachersApi } from "../../api/endpoints"
+import { coursesApi, studentsApi, teachersApi } from "../../api/endpoints"
 
 import CourseTeacherAvatar from "../CourseTeacherAvatar"
 
 import type { NavigateFn } from "../../types"
 
 import { notifyError, notifySuccess } from "../../utils/notifications"
+
+import {
+  forgetPendingEnrollment,
+  readPendingEnrollments,
+  rememberPendingEnrollment,
+} from "../../utils/pendingEnrollments"
 
 type CourseRecord = Record<string, unknown>
 
@@ -176,6 +182,7 @@ export default function CourseEnrollmentContactDialog({
   navigate,
   isEnrolled = false,
   onEnrollmentRequested,
+  onEnrollmentCancelled,
 }: {
   course: CourseRecord | null
 
@@ -183,6 +190,7 @@ export default function CourseEnrollmentContactDialog({
   navigate?: NavigateFn
   isEnrolled?: boolean
   onEnrollmentRequested?: (courseId: string) => void
+  onEnrollmentCancelled?: (courseId: string) => void
 }) {
   const [phone, setPhone] = useState("")
 
@@ -193,6 +201,10 @@ export default function CourseEnrollmentContactDialog({
   const [requesting, setRequesting] = useState(false)
 
   const [requestSent, setRequestSent] = useState(false)
+
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
+
+  const [checkingRequest, setCheckingRequest] = useState(false)
 
   const [requestMessage, setRequestMessage] = useState("")
 
@@ -213,8 +225,17 @@ export default function CourseEnrollmentContactDialog({
 
     setError("")
     setLoading(false)
-    setRequestSent(false)
-    setRequestMessage("")
+    const id = course.id ?? course.courseId
+    const storedPending =
+      id == null ? undefined : readPendingEnrollments().get(String(id))
+    setPendingRequestId(storedPending === undefined ? null : storedPending)
+    setRequestSent(isEnrolled || storedPending !== undefined)
+    setCheckingRequest(false)
+    setRequestMessage(
+      storedPending !== undefined
+        ? "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب."
+        : "",
+    )
 
     const loadContact = async () => {
       let resolvedCourse = course
@@ -305,6 +326,89 @@ export default function CourseEnrollmentContactDialog({
   useEffect(() => {
     if (!course) return
 
+    const id = course.id ?? course.courseId
+    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+      .toLowerCase()
+    if (id == null || !getAuthToken() || !role.includes("student")) return
+
+    let active = true
+    setCheckingRequest(true)
+    studentsApi
+      .enrollments({ page: 1, pageSize: 100 })
+      .then((response) => {
+        if (!active) return
+        const value = unwrap(response)
+        const root = asRecord(value)
+        const nested = asRecord(root?.data)
+        const rows = Array.isArray(value)
+          ? value
+          : Array.isArray(root?.items)
+            ? root.items
+            : Array.isArray(root?.enrollments)
+              ? root.enrollments
+              : Array.isArray(nested?.items)
+                ? nested.items
+                : Array.isArray(nested?.enrollments)
+                  ? nested.enrollments
+                  : []
+        const existing = rows.map(asRecord).find((row) => {
+          const relatedCourse = asRecord(row?.course)
+          return String(
+            row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
+          ) === String(id)
+        })
+        if (!existing) return
+
+        const status = String(
+          existing.status ?? existing.enrollmentStatus ?? "",
+        ).toLowerCase()
+        const rejected =
+          ["2", "rejected", "declined", "cancelled", "canceled"].includes(status)
+        if (rejected) {
+          forgetPendingEnrollment(String(id))
+          setPendingRequestId(null)
+          setRequestSent(false)
+          onEnrollmentCancelled?.(String(id))
+          return
+        }
+
+        const approved =
+          existing.isApproved === true ||
+          ["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status)
+        const enrollmentId = existing.id ?? existing.enrollmentId
+        if (approved) {
+          forgetPendingEnrollment(String(id))
+          setPendingRequestId(null)
+        } else {
+          rememberPendingEnrollment(
+            String(id),
+            enrollmentId == null ? "" : String(enrollmentId),
+          )
+          setPendingRequestId(
+            enrollmentId == null ? "" : String(enrollmentId),
+          )
+        }
+        onEnrollmentRequested?.(String(id))
+        setRequestSent(true)
+        setRequestMessage(
+          approved
+            ? "أنت مسجل بالفعل في هذه الدورة."
+            : "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
+        )
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setCheckingRequest(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [course])
+
+  useEffect(() => {
+    if (!course) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose()
     }
@@ -316,10 +420,17 @@ export default function CourseEnrollmentContactDialog({
 
   const normalizedPhone = whatsappPhone(phone)
   const courseId = course?.id ?? course?.courseId
+  const pending = pendingRequestId !== null
   const enrollmentComplete = isEnrolled || requestSent
 
   async function requestEnrollment() {
-    if (!course || courseId === undefined || courseId === null || requesting) {
+    if (
+      !course ||
+      courseId === undefined ||
+      courseId === null ||
+      requesting ||
+      checkingRequest
+    ) {
       return
     }
 
@@ -347,11 +458,81 @@ export default function CourseEnrollmentContactDialog({
       return
     }
 
+    const storedRequest = readPendingEnrollments().get(String(courseId))
+    if (storedRequest !== undefined) {
+      setPendingRequestId(storedRequest)
+      setRequestSent(true)
+      setRequestMessage(
+        "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
+      )
+      return
+    }
+
     setRequesting(true)
     setRequestMessage("")
 
     try {
-      await coursesApi.enroll(String(courseId))
+      const currentEnrollments = unwrap(
+        await studentsApi.enrollments({ page: 1, pageSize: 100 }),
+      )
+      const root = asRecord(currentEnrollments)
+      const nested = asRecord(root?.data)
+      const rows = Array.isArray(currentEnrollments)
+        ? currentEnrollments
+        : Array.isArray(root?.items)
+          ? root.items
+          : Array.isArray(root?.enrollments)
+            ? root.enrollments
+            : Array.isArray(nested?.items)
+              ? nested.items
+              : Array.isArray(nested?.enrollments)
+                ? nested.enrollments
+                : []
+      const existing = rows.map(asRecord).find((row) => {
+        const relatedCourse = asRecord(row?.course)
+        return String(
+          row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
+        ) === String(courseId)
+      })
+      if (existing) {
+        const status = String(
+          existing.status ?? existing.enrollmentStatus ?? "",
+        ).toLowerCase()
+        const rejected =
+          ["2", "rejected", "declined", "cancelled", "canceled"].includes(status)
+        if (!rejected) {
+          const approved =
+            existing.isApproved === true ||
+            ["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status)
+          if (!approved) {
+            const id = existing.id ?? existing.enrollmentId
+            rememberPendingEnrollment(
+              String(courseId),
+              id == null ? "" : String(id),
+            )
+            setPendingRequestId(id == null ? "" : String(id))
+          } else {
+            forgetPendingEnrollment(String(courseId))
+            setPendingRequestId(null)
+          }
+          setRequestSent(true)
+          setRequestMessage(
+            approved
+              ? "أنت مسجل بالفعل في هذه الدورة."
+              : "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
+          )
+          return
+        }
+      }
+
+      const response = await coursesApi.enroll(String(courseId))
+      const enrollment = asRecord(unwrap(response))
+      const id = enrollment?.id ?? enrollment?.enrollmentId
+      rememberPendingEnrollment(
+        String(courseId),
+        id == null ? "" : String(id),
+      )
+      setPendingRequestId(id == null ? "" : String(id))
       setRequestSent(true)
       setRequestMessage(
         "تم إرسال طلبك للمعلم. تواصل معه عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
@@ -366,6 +547,8 @@ export default function CourseEnrollmentContactDialog({
             cause.message,
           ))
       ) {
+        rememberPendingEnrollment(String(courseId), "")
+        setPendingRequestId("")
         setRequestSent(true)
         setRequestMessage(
           "لديك طلب التحاق مسجل بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
@@ -378,6 +561,56 @@ export default function CourseEnrollmentContactDialog({
         cause instanceof Error ? cause.message : "تعذر إرسال طلب الالتحاق."
       setRequestMessage(message)
       notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  async function cancelEnrollment() {
+    if (courseId == null || requesting) return
+
+    setRequesting(true)
+    setRequestMessage("")
+    try {
+      let id = pendingRequestId || ""
+      if (!id) {
+        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
+        const enrollment = unwrap(response)
+        const root = asRecord(enrollment)
+        const nested = asRecord(root?.data)
+        const rows = Array.isArray(enrollment)
+          ? enrollment
+          : Array.isArray(root?.items)
+            ? root.items
+            : Array.isArray(root?.enrollments)
+              ? root.enrollments
+              : Array.isArray(nested?.items)
+                ? nested.items
+                : Array.isArray(nested?.enrollments)
+                  ? nested.enrollments
+                  : []
+        const match = rows.map(asRecord).find((row) => {
+          const relatedCourse = asRecord(row?.course)
+          return String(
+            row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
+          ) === String(courseId)
+        })
+        id = String(match?.id ?? match?.enrollmentId ?? "")
+      }
+      if (!id) throw new Error("تعذر العثور على طلب الالتحاق لإلغائه.")
+
+      await studentsApi.cancelEnrollment(id)
+      forgetPendingEnrollment(String(courseId))
+      setPendingRequestId(null)
+      setRequestSent(false)
+      setRequestMessage("")
+      onEnrollmentCancelled?.(String(courseId))
+      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.")
+    } catch (cause) {
+      setRequestMessage(
+        cause instanceof Error ? cause.message : "تعذر إلغاء طلب الالتحاق.",
+      )
+      notifyError(cause, "تعذر إلغاء طلب الالتحاق.")
     } finally {
       setRequesting(false)
     }
@@ -401,13 +634,13 @@ export default function CourseEnrollmentContactDialog({
             role="dialog"
             aria-modal="true"
             aria-labelledby="course-contact-title"
-            className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-md flex-col overflow-hidden overscroll-contain rounded-2xl border border-white/60 bg-surface shadow-2xl shadow-emerald-950/25 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px]"
+            className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden overscroll-contain rounded-2xl bg-surface shadow-2xl shadow-emerald-950/25 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px] md:flex-row"
             initial={{ opacity: 0, y: 18, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
           >
-            <div className="relative shrink-0 overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] px-5 pb-4 pt-5 text-white sm:px-6 sm:pb-5 sm:pt-6">
+            <div className="relative shrink-0 overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] px-5 pb-4 pt-5 text-white sm:px-6 sm:pb-5 sm:pt-6 md:flex md:w-[40%] md:flex-col md:justify-center md:px-8">
               <span
                 aria-hidden="true"
                 className="absolute -left-7 -top-14 size-36 rounded-full border-[18px] border-white/10"
@@ -438,7 +671,7 @@ export default function CourseEnrollmentContactDialog({
               </p>
             </div>
 
-            <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 sm:space-y-4 sm:p-5">
+            <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 sm:space-y-4 sm:p-5 md:flex-1 md:p-7">
               <div className="flex items-center gap-3 rounded-2xl border border-stroke bg-white p-3 sm:p-4">
                 <CourseTeacherAvatar
                   course={course}
@@ -530,24 +763,41 @@ export default function CourseEnrollmentContactDialog({
               <div className="grid gap-2 lg:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => void requestEnrollment()}
+                  onClick={() =>
+                    pending ? void cancelEnrollment() : void requestEnrollment()
+                  }
                   disabled={
                     requesting ||
-                    enrollmentComplete ||
+                    checkingRequest ||
+                    (enrollmentComplete && !pending) ||
                     courseId === undefined ||
                     courseId === null
                   }
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-nuwa-base px-3 py-2.5 text-xs font-bold leading-5 text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-12 sm:px-4 sm:py-3 sm:text-sm"
+                  className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold leading-5 text-white shadow-sm transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-12 sm:px-4 sm:py-3 sm:text-sm ${
+                    pending
+                      ? "bg-danger hover:bg-danger/90"
+                      : "bg-nuwa-base hover:bg-nuwa-deep"
+                  }`}
                 >
                   {requesting ? (
                     <LoaderCircle size={17} className="animate-spin" />
+                  ) : checkingRequest ? (
+                    <LoaderCircle size={17} className="animate-spin" />
+                  ) : pending ? (
+                    <X size={17} />
                   ) : enrollmentComplete ? (
                     <CheckCircle2 size={17} />
                   ) : (
                     <Send size={17} />
                   )}
                   {requesting
-                    ? "جارٍ إرسال الطلب..."
+                    ? pending
+                      ? "جارٍ إلغاء الطلب..."
+                      : "جارٍ إرسال الطلب..."
+                    : checkingRequest
+                      ? "جارٍ التحقق من الطلب..."
+                    : pending
+                      ? "إلغاء الطلب"
                     : enrollmentComplete
                       ? "تم إرسال طلب الالتحاق"
                       : "طلب الالتحاق بالدورة"}
