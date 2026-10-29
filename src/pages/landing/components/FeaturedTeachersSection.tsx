@@ -1,14 +1,18 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
 
 import { motion, useReducedMotion } from "framer-motion"
 
 import { resolveApiAssetUrl } from "../../../api/client"
 
+import { getPublicTeachers } from "../../../api/catalog"
+
 import type { NavigateFn } from "../../../types"
 
 import { TeacherCardSkeleton } from "./LandingSkeletons"
+
+const TEACHERS_PER_PAGE = 3
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -61,11 +65,13 @@ function TeacherCard({
 
   const subjects = Array.isArray(rawSubjects)
     ? rawSubjects
+
         .map((subject) => {
           const value = asRecord(subject)
 
           return String(value.name ?? value.subjectName ?? subject ?? "").trim()
         })
+
         .filter(Boolean)
     : []
 
@@ -160,27 +166,118 @@ function TeacherCard({
 export default function FeaturedTeachersSection({
   teachers,
 
+  teacherCount,
+
   loading,
 
   navigate,
 }: {
   teachers: unknown[]
 
+  teacherCount: number
+
   loading: boolean
 
   navigate: NavigateFn
 }) {
-  const visibleTeachers = teachers.slice(0, 4)
+  const [page, setPage] = useState(1)
+
+  const [pageTeachers, setPageTeachers] = useState<unknown[] | null>(null)
+
+  const [pageLoading, setPageLoading] = useState(false)
+
+  const [pageError, setPageError] = useState<string | null>(null)
+
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const totalPages = Math.max(1, Math.ceil(teacherCount / TEACHERS_PER_PAGE))
+
+  const visibleTeachers = (pageTeachers ?? teachers).slice(
+    0,
+
+    TEACHERS_PER_PAGE,
+  )
+
   const reduce = !!useReducedMotion()
 
+  useEffect(() => {
+    if (page === 1) {
+      setPageTeachers(null)
+
+      setPageError(null)
+
+      setPageLoading(false)
+
+      return
+    }
+
+    let active = true
+
+    setPageTeachers(null)
+
+    setPageLoading(true)
+
+    setPageError(null)
+
+    getPublicTeachers(page, TEACHERS_PER_PAGE)
+
+      .then((result) => {
+        if (active) setPageTeachers(result.items)
+      })
+
+      .catch((cause: unknown) => {
+        if (active) {
+          setPageError(
+            cause instanceof Error
+              ? cause.message
+              : "تعذر تحميل قائمة المعلمين.",
+          )
+        }
+      })
+
+      .finally(() => {
+        if (active) setPageLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [page, reloadKey])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(Math.max(1, totalPages))
+  }, [page, totalPages])
+
+  const isLoading = loading || pageLoading
+
   const gridLayout =
-    loading || visibleTeachers.length > 2
-      ? "lg:grid-cols-4"
+    isLoading || visibleTeachers.length > 2
+      ? "lg:grid-cols-3"
       : visibleTeachers.length === 2
         ? "lg:mx-auto lg:max-w-4xl lg:grid-cols-2"
         : "lg:mx-auto lg:max-w-sm lg:grid-cols-1"
 
-  if (!loading && visibleTeachers.length === 0) return null
+  const pageNumbers =
+    totalPages <= 7
+      ? Array.from({ length: totalPages }, (_, index) => index + 1)
+      : [
+          1,
+
+          ...(page > 3 ? ["start-gap"] as const : []),
+
+          ...Array.from(
+            { length: Math.min(3, totalPages - 2) },
+
+            (_, index) =>
+              Math.max(2, Math.min(page - 1, totalPages - 3)) + index,
+          ),
+
+          ...(page < totalPages - 2 ? ["end-gap"] as const : []),
+
+          totalPages,
+        ]
+
+  if (!isLoading && visibleTeachers.length === 0 && !pageError) return null
 
   return (
     <section className="border-y border-stroke bg-[#f5f8f5] py-14 sm:py-16">
@@ -194,6 +291,7 @@ export default function FeaturedTeachersSection({
             viewport={{ once: true, margin: "-80px" }}
             transition={{
               duration: 0.7,
+
               ease: [0.22, 1, 0.36, 1],
             }}
           >
@@ -212,7 +310,9 @@ export default function FeaturedTeachersSection({
             viewport={{ once: true, margin: "-80px" }}
             transition={{
               duration: 0.55,
+
               delay: reduce ? 0 : 0.15,
+
               ease: [0.22, 1, 0.36, 1],
             }}
             className="inline-flex items-center gap-2 text-sm font-bold text-nuwa-base transition hover:text-nuwa-deep"
@@ -223,20 +323,10 @@ export default function FeaturedTeachersSection({
         </div>
 
         <div
-          className={`mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 ${gridLayout}`}
-          style={{
-            maxWidth:
-              loading || visibleTeachers.length > 2
-                ? undefined
-                : visibleTeachers.length === 2
-                  ? "56rem"
-                  : "24rem",
-
-            marginInline: "auto",
-          }}
+          className={`mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 ${gridLayout}`}
         >
-          {loading
-            ? [0, 1, 2, 3].map((item) => <TeacherCardSkeleton key={item} />)
+          {isLoading
+            ? [0, 1, 2].map((item) => <TeacherCardSkeleton key={item} />)
             : visibleTeachers.map((item, index) => {
                 const record = asRecord(item)
 
@@ -249,6 +339,78 @@ export default function FeaturedTeachersSection({
                 )
               })}
         </div>
+        {pageError && (
+          <div
+            role="alert"
+            className="mt-5 rounded-2xl border border-danger/20 bg-danger-light p-4 text-center text-sm text-danger"
+          >
+            <p>{pageError}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-2 font-bold underline"
+            >
+              حاول مرة أخرى
+            </button>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <nav
+            aria-label="صفحات المعلمين"
+            className="mt-8 flex flex-wrap items-center justify-center gap-2"
+          >
+            <button
+              type="button"
+              aria-label="صفحة المعلمين السابقة"
+              disabled={page === 1 || pageLoading}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="grid size-11 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+            {pageNumbers.map((pageNumber) =>
+              typeof pageNumber === "string" ? (
+                <span
+                  key={pageNumber}
+                  aria-hidden="true"
+                  className="px-1 text-sm text-ink-muted"
+                >
+                  …
+                </span>
+              ) : (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  aria-current={page === pageNumber ? "page" : undefined}
+                  disabled={pageLoading}
+                  onClick={() => setPage(pageNumber)}
+                  className={`grid size-11 place-items-center rounded-xl border text-sm font-bold tabular-nums transition disabled:cursor-wait ${
+                    page === pageNumber
+                      ? "border-nuwa-base bg-nuwa-base text-white shadow-nuwa"
+                      : "border-[#cddbd0] bg-white text-[#234736] hover:border-nuwa-base hover:bg-nuwa-ice"
+                  }`}
+                >
+                  {pageNumber.toLocaleString("ar-EG")}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              aria-label="صفحة المعلمين التالية"
+              disabled={page === totalPages || pageLoading}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              className="grid size-11 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={18} aria-hidden="true" />
+            </button>
+            <span className="basis-full text-center text-xs text-ink-muted">
+              صفحة {page.toLocaleString("ar-EG")} من{" "}
+              {totalPages.toLocaleString("ar-EG")}
+            </span>
+          </nav>
+        )}
       </div>
     </section>
   )

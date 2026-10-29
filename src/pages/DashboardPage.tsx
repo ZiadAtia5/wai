@@ -65,10 +65,18 @@ import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
 
 import RoleForms from "../components/dashboard/RoleForms"
 
+import CourseCard from "../components/CourseCard"
+
+import CoursePagination from "../components/CoursePagination"
+
 import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests"
 
 import MetricBarChart from "../components/dashboard/MetricBarChart"
+
 import NotificationDialog from "../components/dashboard/NotificationDialog"
+
+import AdminSubscriptions from "../components/dashboard/AdminSubscriptions"
+
 import {
   AnimatedBar,
   AnimatedNumber,
@@ -96,6 +104,49 @@ interface Section {
   icon?: string
 
   load: () => Promise<unknown>
+}
+
+async function loadAllPagedCourses(
+  load: (query: PageQuery) => Promise<unknown>,
+  query: PageQuery,
+): Promise<unknown> {
+  const pageSize = 100
+  const firstPage = await load({ ...query, page: 1, pageSize })
+  const firstResponse = unwrapApiResponse(firstPage)
+  const paging =
+    isRecord(firstResponse) && isRecord(firstResponse.pagination)
+      ? firstResponse.pagination
+      : firstResponse
+  const explicitPages = isRecord(paging)
+    ? Number(paging.totalPages ?? paging.pageCount)
+    : Number.NaN
+  const totalCount = isRecord(paging)
+    ? Number(paging.totalCount ?? paging.totalItems)
+    : Number.NaN
+  const responsePageSize =
+    isRecord(paging) && Number.isFinite(Number(paging.pageSize))
+      ? Number(paging.pageSize)
+      : Number.NaN
+  const actualPageSize = responsePageSize > 0 ? responsePageSize : pageSize
+  const totalPages =
+    Number.isInteger(explicitPages) && explicitPages > 0
+      ? explicitPages
+      : Number.isFinite(totalCount) && totalCount > 0
+        ? Math.ceil(totalCount / actualPageSize)
+        : 1
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      load({ ...query, page: index + 2, pageSize }),
+    ),
+  )
+
+  return {
+    items: [firstPage, ...remainingPages].flatMap(getRecords),
+  }
+}
+
+async function loadAllAdminTeachers(query: PageQuery): Promise<unknown> {
+  return loadAllPagedCourses(adminApi.teachers, query)
 }
 
 function getSections(
@@ -130,7 +181,11 @@ function getSections(
         },
       },
 
-      { key: "courses", label: "الدورات", load: () => adminApi.courses(query) },
+      {
+        key: "courses",
+        label: "الدورات",
+        load: () => loadAllPagedCourses(adminApi.courses, query),
+      },
 
       {
         key: "teachers",
@@ -138,6 +193,14 @@ function getSections(
         label: "المعلمون",
 
         load: () => adminApi.teachers(query),
+      },
+
+      {
+        key: "subscriptions",
+
+        label: "تفاصيل الاشتراكات",
+
+        load: () => loadAllAdminTeachers(query),
       },
 
       {
@@ -227,7 +290,7 @@ function getSections(
         load: () =>
           enrollmentPreview
             ? Promise.resolve({ items: [] })
-            : teachersApi.coursesMine(query),
+            : loadAllPagedCourses(teachersApi.coursesMine, query),
       },
 
       {
@@ -876,20 +939,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const [search, setSearch] = useState("")
 
-  const query: PageQuery = {
-    page,
-
-    pageSize: 12,
-
-    ...(search ? { search } : {}),
-  }
-
   const [activeKey, setActiveKey] = useState(() =>
     (() => {
       const availableSections = getSections(
         role,
 
-        query,
+        { page: 1, pageSize: 12 },
 
         useTeacherEnrollmentMock,
       )
@@ -910,6 +965,18 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       return useTeacherEnrollmentMock ? "enrollments" : availableSections[0].key
     })(),
   )
+
+  const query: PageQuery = {
+    page:
+      activeKey === "courses" &&
+      (role.includes("admin") || role.includes("teacher"))
+        ? 1
+        : page,
+
+    pageSize: activeKey === "courses" ? 3 : 12,
+
+    ...(search ? { search } : {}),
+  }
 
   const sidebarNavRef = useRef<HTMLElement | null>(null)
 
@@ -1075,7 +1142,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
   const sections = useMemo(
     () => getSections(role, query, useTeacherEnrollmentMock),
 
-    [role, page, search, useTeacherEnrollmentMock],
+    [role, activeKey, query.page, search, useTeacherEnrollmentMock],
   )
 
   const changeDashboardSection = (section: string) => {
@@ -1137,8 +1204,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const { data, error, loading } = useApiQuery(
     section.load,
+
     reloadKey,
+
     true,
+
     `dashboard:${role}:${activeKey}`,
   )
 
@@ -1367,14 +1437,31 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       ? responseData.requests
       : responseData
 
-  const pagination =
-    isRecord(paginationData) && typeof paginationData.totalPages === "number"
+  const pagination = isAdminCourseSection
+    ? {
+        page,
+        totalPages: Math.max(1, Math.ceil(displayedRecords.length / 3)),
+      }
+    : isRecord(paginationData) && typeof paginationData.totalPages === "number"
       ? { page: paginationData.page, totalPages: paginationData.totalPages }
       : null
+
+  const visibleRecords = isAdminCourseSection
+    ? displayedRecords.slice((page - 1) * 3, page * 3)
+    : displayedRecords
+
+  useEffect(() => {
+    if (!isAdminCourseSection) return
+
+    const lastPage = Math.max(1, Math.ceil(displayedRecords.length / 3))
+
+    if (page > lastPage) setPage(lastPage)
+  }, [displayedRecords.length, isAdminCourseSection, page])
 
   const showGenericRecords =
     !(role.includes("admin") && activeKey === "stats") &&
     !(role.includes("admin") && activeKey === "teachers") &&
+    !(role.includes("admin") && activeKey === "subscriptions") &&
     activeKey !== "profile" &&
     !(
       role.includes("teacher") &&
@@ -1389,7 +1476,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
   const supportsSearch =
     (role.includes("admin") &&
-      ["courses", "teachers", "students"].includes(activeKey)) ||
+      ["courses", "teachers", "subscriptions", "students"].includes(
+        activeKey,
+      )) ||
     (role.includes("teacher") && activeKey === "courses")
 
   useEffect(() => {
@@ -1514,11 +1603,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       setReloadKey((key) => key + 1)
 
       setNotificationReloadKey((key) => key + 1)
+
       return true
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الإشعارات.",
       )
+
       return false
     } finally {
       setActionLoading(null)
@@ -1549,11 +1640,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       setReloadKey((key) => key + 1)
 
       setNotificationReloadKey((key) => key + 1)
+
       return true
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف الإشعار.",
       )
+
       return false
     } finally {
       setActionLoading(null)
@@ -1903,6 +1996,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     teachers: "المعلمون",
 
+    subscriptions: "تفاصيل الاشتراكات",
+
     students: role.includes("teacher") ? "طلابي" : "الطلاب",
 
     pending: "طلاب بانتظار الاعتماد",
@@ -2077,6 +2172,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   courses: BookOpen,
 
                   teachers: Users,
+
+                  subscriptions: BookOpenCheck,
 
                   students: role.includes("teacher")
                     ? UsersRound
@@ -2307,7 +2404,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       key={status}
                       type="button"
                       aria-pressed={courseStatusFilter === status}
-                      onClick={() => setCourseStatusFilter(status)}
+                      onClick={() => {
+                        setCourseStatusFilter(status)
+                        setPage(1)
+                      }}
                       className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                         courseStatusFilter === status
                           ? "bg-nuwa-base text-white shadow-sm"
@@ -2512,6 +2612,16 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               description: "إضافة المعلمين وتحديث بياناتهم",
 
                               Icon: Users,
+                            },
+
+                            {
+                              key: "subscriptions",
+
+                              label: "تفاصيل الاشتراكات",
+
+                              description: "متابعة دورات المعلمين وعدد الطلاب",
+
+                              Icon: BookOpenCheck,
                             },
 
                             {
@@ -2794,55 +2904,58 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                     )
 
                                   return (
-                                    <article
+                                    <CourseCard
                                       key={String(
                                         enrollment.id ?? courseId ?? index,
                                       )}
-                                      className="rounded-xl border border-stroke bg-white p-4 shadow-nuwa transition hover:-translate-y-0.5 hover:border-nuwa-base/40 hover:shadow-nuwa-md"
+                                      course={{
+                                        ...course,
+                                        teacher:
+                                          enrollment.teacher ?? course.teacher,
+                                        teacherId:
+                                          enrollment.teacherId ??
+                                          course.teacherId,
+                                      }}
+                                      title={String(title)}
+                                      teacherName={
+                                        teacherName == null
+                                          ? undefined
+                                          : String(teacherName)
+                                      }
+                                      statusLabel={enrollmentStatusLabel(
+                                        enrollment.status ??
+                                          enrollment.enrollmentStatus,
+                                        enrollment.isApproved,
+                                      )}
+                                      statusTone="bg-nuwa-soft text-nuwa-base"
+                                      footer={
+                                        <div className="mt-4">
+                                          <div className="flex items-center justify-between text-xs text-ink-muted">
+                                            <span>التقدم في الدورة</span>
+                                            <span className="font-bold tabular-nums text-ink">
+                                              <AnimatedNumber
+                                                value={`${Math.round(progressPercent)}%`}
+                                              />
+                                            </span>
+                                          </div>
+                                          <div
+                                            className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
+                                            role="progressbar"
+                                            aria-label={`التقدم في دورة ${String(title)}`}
+                                            aria-valuemin={0}
+                                            aria-valuemax={100}
+                                            aria-valuenow={Math.round(
+                                              progressPercent,
+                                            )}
+                                          >
+                                            <AnimatedBar
+                                              className="h-full rounded-full bg-nuwa-base"
+                                              value={progressPercent}
+                                            />
+                                          </div>
+                                        </div>
+                                      }
                                     >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <h5 className="font-bold leading-6 text-ink">
-                                          {String(title)}
-                                        </h5>
-                                        <span className="shrink-0 rounded-full bg-nuwa-soft px-2.5 py-1 text-[11px] font-semibold text-nuwa-base">
-                                          {enrollmentStatusLabel(
-                                            enrollment.status ??
-                                              enrollment.enrollmentStatus,
-
-                                            enrollment.isApproved,
-                                          )}
-                                        </span>
-                                      </div>
-                                      {teacherName !== undefined &&
-                                        teacherName !== null &&
-                                        String(teacherName).trim() && (
-                                          <p className="mt-2 text-xs text-ink-muted">
-                                            المعلم: {String(teacherName)}
-                                          </p>
-                                        )}
-                                      <div className="mt-4 flex items-center justify-between text-xs text-ink-muted">
-                                        <span>التقدم في الدورة</span>
-                                        <span className="font-bold tabular-nums text-ink">
-                                          <AnimatedNumber
-                                            value={`${Math.round(progressPercent)}%`}
-                                          />
-                                        </span>
-                                      </div>
-                                      <div
-                                        className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
-                                        role="progressbar"
-                                        aria-label={`التقدم في دورة ${String(title)}`}
-                                        aria-valuemin={0}
-                                        aria-valuemax={100}
-                                        aria-valuenow={Math.round(
-                                          progressPercent,
-                                        )}
-                                      >
-                                        <AnimatedBar
-                                          className="h-full rounded-full bg-nuwa-base"
-                                          value={progressPercent}
-                                        />
-                                      </div>
                                       {courseId !== undefined &&
                                         canOpenCourse && (
                                           <button
@@ -2851,21 +2964,17 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                               setFocusStudentCourseId(
                                                 String(courseId),
                                               )
-
                                               changeDashboardSection("courses")
-
                                               setPage(1)
-
                                               setSearch("")
-
                                               setSearchInput("")
                                             }}
-                                            className="mt-4 w-full rounded-lg bg-nuwa-soft px-3 py-2 text-sm font-semibold text-nuwa-base transition hover:bg-nuwa-base hover:text-white"
+                                            className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep"
                                           >
                                             متابعة هذه الدورة
                                           </button>
                                         )}
-                                    </article>
+                                    </CourseCard>
                                   )
                                 },
                               )}
@@ -2991,8 +3100,16 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   </div>
                 </form>
               )}
-              {(role.includes("teacher") || role.includes("admin")) &&
-              activeKey === "enrollments" ? (
+              {role.includes("admin") && activeKey === "subscriptions" ? (
+                <AdminSubscriptions
+                  data={data}
+                  loading={loading}
+                  error={error}
+                  reloadKey={reloadKey}
+                  onRetry={() => setReloadKey((key) => key + 1)}
+                />
+              ) : (role.includes("teacher") || role.includes("admin")) &&
+                activeKey === "enrollments" ? (
                 <TeacherEnrollmentRequests
                   data={
                     useTeacherEnrollmentMock
@@ -3033,10 +3150,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       className={
                         activeKey === "notifications"
                           ? "grid gap-3"
-                          : "grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
+                          : activeKey === "courses"
+                            ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                            : "grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
                       }
                     >
-                      {displayedRecords.map((record, index) => {
+                      {visibleRecords.map((record, index) => {
                         const recordId =
                           activeKey === "notifications"
                             ? (record.id ?? record.notificationId)
@@ -3070,6 +3189,70 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             record.email ??
                             `عنصر #${index + 1}`,
                         )
+
+                        if (activeKey === "courses") {
+                          const statusTone =
+                            publicationState === "published"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : publicationState === "draft"
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-neutral-100 text-neutral-700"
+
+                          return (
+                            <CourseCard
+                              key={id === "—" ? index : id}
+                              course={record}
+                              title={String(title)}
+                              statusLabel={
+                                publicationState === "published"
+                                  ? "منشورة"
+                                  : publicationState === "draft"
+                                    ? "مسودة"
+                                    : "غير منشورة"
+                              }
+                              statusTone={statusTone}
+                            >
+                              {(role.includes("admin") ||
+                                role.includes("teacher")) &&
+                                id !== "—" && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleCoursePublish(id, true)
+                                      }
+                                      disabled={
+                                        actionLoading === `${id}-publish`
+                                      }
+                                      className={`rounded-lg bg-nuwa-base px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${
+                                        publicationState === "published"
+                                          ? "hidden"
+                                          : ""
+                                      }`}
+                                    >
+                                      نشر الدورة
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleCoursePublish(id, false)
+                                      }
+                                      disabled={
+                                        actionLoading === `${id}-publish`
+                                      }
+                                      className={`rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50 ${
+                                        publicationState !== "published"
+                                          ? "hidden"
+                                          : ""
+                                      }`}
+                                    >
+                                      إلغاء النشر
+                                    </button>
+                                  </div>
+                                )}
+                            </CourseCard>
+                          )
+                        }
 
                         if (activeKey === "notifications") {
                           const sender = isRecord(record.sender)
@@ -3123,6 +3306,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   event.key === " "
                                 ) {
                                   event.preventDefault()
+
                                   setSelectedNotification(record)
                                 }
                               }}
@@ -3540,32 +3724,16 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   )}
                 </ApiQueryState>
               )}
-              {pagination && pagination.totalPages > 1 && (
-                <nav
-                  aria-label="صفحات النتائج"
-                  className="mt-5 flex items-center justify-between rounded-xl border border-stroke bg-surface p-3"
-                >
-                  <button
-                    type="button"
-                    disabled={page <= 1 || loading}
-                    onClick={() => setPage((value) => Math.max(1, value - 1))}
-                    className="rounded-lg border border-stroke px-4 py-2 text-sm disabled:opacity-40"
-                  >
-                    السابق
-                  </button>
-                  <span className="text-sm text-ink-muted">
-                    صفحة {String(pagination.page ?? page)} من{" "}
-                    {String(pagination.totalPages)}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={page >= pagination.totalPages || loading}
-                    onClick={() => setPage((value) => value + 1)}
-                    className="rounded-lg border border-stroke px-4 py-2 text-sm disabled:opacity-40"
-                  >
-                    التالي
-                  </button>
-                </nav>
+              {pagination && (
+                <CoursePagination
+                  page={Number(pagination.page ?? page)}
+                  totalPages={pagination.totalPages}
+                  disabled={loading}
+                  onPageChange={setPage}
+                  label={
+                    activeKey === "courses" ? "صفحات الدورات" : "صفحات النتائج"
+                  }
+                />
               )}
             </div>
           </main>
@@ -3576,12 +3744,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   selectedNotification.notificationId ??
                   "",
               )
+
               const notificationTitle = String(
                 selectedNotification.title ??
                   selectedNotification.subject ??
                   selectedNotification.eventName ??
                   "إشعار من المنصة",
               )
+
               const notificationMessage =
                 selectedNotification.message ??
                 selectedNotification.body ??
@@ -3589,16 +3759,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 selectedNotification.content ??
                 selectedNotification.text ??
                 selectedNotification.details
+
               const notificationDate =
                 selectedNotification.createdAt ??
                 selectedNotification.sentAt ??
                 selectedNotification.createdOn ??
                 selectedNotification.date
+
               const notificationSender = isRecord(selectedNotification.sender)
                 ? selectedNotification.sender
                 : isRecord(selectedNotification.actor)
                   ? selectedNotification.actor
                   : {}
+
               const notificationSenderName = String(
                 selectedNotification.senderName ??
                   selectedNotification.actorName ??
@@ -3606,6 +3779,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   notificationSender.name ??
                   "إشعار من المنصة",
               )
+
               const notificationDetails = Object.entries(
                 selectedNotification,
               ).filter(
@@ -3634,12 +3808,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   onClose={() => setSelectedNotification(null)}
                   onMarkRead={() => {
                     if (!notificationId) return
+
                     void handleMarkRead(notificationId).then((success) => {
                       if (success) setSelectedNotification(null)
                     })
                   }}
                   onDelete={() => {
                     if (!notificationId) return
+
                     void handleNotificationDelete(notificationId).then(
                       (success) => {
                         if (success) setSelectedNotification(null)

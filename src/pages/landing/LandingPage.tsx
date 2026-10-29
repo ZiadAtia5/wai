@@ -22,9 +22,9 @@ import PlatformBenefitsSection from "./components/PlatformBenefitsSection"
 
 async function loadCatalogSummary(): Promise<LandingCatalogSummary> {
   const [courses, teachers] = await Promise.all([
-    getPublicCourses(1, 24),
+    getPublicCourses(1, 3),
 
-    getPublicTeachers(1, 4),
+    getPublicTeachers(1, 3),
   ])
 
   return {
@@ -64,6 +64,7 @@ export default function LandingPage({ navigate }: { navigate: NavigateFn }) {
       <FeaturedTeachersSection
         navigate={navigate}
         teachers={data?.featuredTeachers ?? []}
+        teacherCount={data?.teacherCount ?? 0}
         loading={loading}
       />
       <CallToActionSection

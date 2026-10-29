@@ -15,6 +15,8 @@ export interface PageQuery extends Record<string, QueryValue> {
 
   teacherId?: string | number
 
+  courseId?: string | number
+
   subjectId?: string | number
 
   price?: string | number
@@ -48,6 +50,7 @@ function upload<T>(
   fields: Record<string, string> = {},
 ): Promise<T> {
   const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000
+
   const form = new FormData()
 
   form.append("file", file)
@@ -166,6 +169,12 @@ export const teachersApi = {
     get<unknown>(`/teachers${queryString(query)}`),
 
   byId: (id: string | number) => get<unknown>(`/teachers/${idPath(id)}`),
+
+  publicById: (id: string | number) =>
+    apiRequest<unknown>(`/teachers/${idPath(id)}`, {
+      method: "GET",
+      skipAuth: true,
+    }),
 
   courses: (teacherId: string | number, query: PageQuery = {}) =>
     get<unknown>(`/teachers/${idPath(teacherId)}/courses${queryString(query)}`),
@@ -296,6 +305,7 @@ export const coursesApi = {
   publicDetail: (courseId: string | number) =>
     apiRequest<unknown>(`/courses/${idPath(courseId)}`, {
       method: "GET",
+
       skipAuth: true,
     }),
 

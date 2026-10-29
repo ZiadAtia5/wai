@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { ArrowLeft, BookOpen, GraduationCap, UserRound } from "lucide-react"
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  GraduationCap,
+  LoaderCircle,
+  MessageCircle,
+  Phone,
+  X,
+} from "lucide-react"
 
 import { AnimatePresence, motion } from "framer-motion"
 
@@ -8,7 +18,7 @@ import { ApiError, resolveApiAssetUrl } from "../api/client"
 
 import { getAuthToken } from "../api/client"
 
-import { studentsApi } from "../api/endpoints"
+import { studentsApi, teachersApi } from "../api/endpoints"
 
 import {
   getAcademicYears,
@@ -22,6 +32,10 @@ import ApiQueryState from "../components/ApiQueryState"
 import SearchBar from "../components/SearchBar"
 
 import PersonAvatar from "../components/PersonAvatar"
+
+import CourseMetadataBadges from "../components/CourseMetadataBadges"
+
+import CourseTeacherAvatar from "../components/CourseTeacherAvatar"
 
 import { Skeleton, SkeletonText } from "../components/Skeleton"
 
@@ -120,9 +134,126 @@ function teacherNameOf(record: Record<string, unknown>): string | null {
     record.teacherName ??
     record.instructorName ??
     nested?.fullName ??
-    nested?.name
+    nested?.name ??
+    asRecord(record.instructor)?.fullName ??
+    asRecord(record.instructor)?.name
 
   return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function nestedRecord(
+  record: Record<string, unknown>,
+
+  key: string,
+): Record<string, unknown> {
+  return asRecord(record[key]) ?? {}
+}
+
+function teacherPhoneOf(record: Record<string, unknown>): string {
+  const queue = [record]
+
+  const visited = new Set<Record<string, unknown>>()
+
+  const nestedKeys = [
+    "teacher",
+
+    "instructor",
+
+    "teacherProfile",
+
+    "instructorProfile",
+
+    "profile",
+
+    "user",
+
+    "owner",
+  ]
+
+  while (queue.length && visited.size < 12) {
+    const candidate = queue.shift()
+
+    if (!candidate || visited.has(candidate)) continue
+
+    visited.add(candidate)
+
+    for (const key of [
+      "teacherPhoneNumber",
+      "instructorPhoneNumber",
+      "whatsappPhoneNumber",
+
+      "whatsAppPhoneNumber",
+
+      "whatsappNumber",
+
+      "whatsAppNumber",
+
+      "phoneNumber",
+
+      "phone",
+
+      "mobileNumber",
+
+      "mobile",
+    ]) {
+      const value = candidate[key]
+
+      if (
+        (typeof value === "string" || typeof value === "number") &&
+        String(value).trim()
+      ) {
+        return String(value).trim()
+      }
+    }
+
+    for (const key of nestedKeys) {
+      const nested = asRecord(candidate[key])
+
+      if (nested) queue.push(nested)
+    }
+  }
+
+  return ""
+}
+
+function teacherIdOf(record: Record<string, unknown>): string {
+  const teacher =
+    Object.keys(nestedRecord(record, "teacher")).length > 0
+      ? nestedRecord(record, "teacher")
+      : nestedRecord(record, "instructor")
+
+  const id =
+    record.teacherId ??
+    record.instructorId ??
+    teacher.id ??
+    teacher.teacherId ??
+    teacher.userId
+
+  return id === undefined || id === null ? "" : String(id).trim()
+}
+
+function whatsappPhone(phone: string): string {
+  let digits = phone.replace(/\D/g, "")
+
+  if (digits.startsWith("00")) digits = digits.slice(2)
+
+  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`
+
+  return digits
+}
+
+function unwrapApiResponse(value: unknown): unknown {
+  let current = value
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    const response = asRecord(current)
+
+    if (!response || !("data" in response)) break
+
+    current = response.data
+  }
+
+  return current
 }
 
 function scalarFields(record: Record<string, unknown>): [string, unknown][] {
@@ -256,6 +387,41 @@ export default function PublicCatalogPage({
 
   const [actionLoading, setActionLoading] = useState(false)
 
+  const [contactCourse, setContactCourse] =
+    useState<Record<string, unknown> | null>(null)
+
+  const [contactPhone, setContactPhone] = useState("")
+
+  const [contactLoading, setContactLoading] = useState(false)
+
+  const [contactError, setContactError] = useState("")
+
+  const [contactRequestSent, setContactRequestSent] = useState(false)
+
+  const [contactRequestLoading, setContactRequestLoading] = useState(false)
+
+  const [contactRequestMessage, setContactRequestMessage] = useState("")
+
+  const contactRequestId = useRef(0)
+
+  function closeEnrollmentContact() {
+    contactRequestId.current += 1
+    setContactCourse(null)
+    setContactLoading(false)
+  }
+
+  useEffect(() => {
+    if (!contactCourse) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeEnrollmentContact()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [contactCourse])
+
   const [searchInput, setSearchInput] = useState(
     () =>
       new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
@@ -367,9 +533,9 @@ export default function PublicCatalogPage({
   }, [personCards])
 
   const pageLoader = useCallback(
-    () => load(page, 12, search, academicYear),
+    () => load(page, personCards ? 3 : 12, search, academicYear),
 
-    [load, page, search, academicYear],
+    [load, page, personCards, search, academicYear],
   )
 
   const catalogCacheKey =
@@ -410,7 +576,7 @@ export default function PublicCatalogPage({
   const visibleItems = useMemo(() => {
     const query = normalizeArabic(search)
 
-    return (data?.items ?? []).filter((item) => {
+    const filteredItems = (data?.items ?? []).filter((item) => {
       const record = asRecord(item)
 
       if (!record) return false
@@ -456,7 +622,35 @@ export default function PublicCatalogPage({
 
       return searchable.some((value) => normalizeArabic(value).includes(query))
     })
-  }, [academicYear, data, filterOptions, personCards, search, subjectFilter])
+
+    if (!courseCatalog || enrolledCourseIds.size === 0) return filteredItems
+
+    return filteredItems.sort((first, second) => {
+      const firstRecord = asRecord(first)
+      const secondRecord = asRecord(second)
+      const firstId = firstRecord?.id ?? firstRecord?.courseId
+      const secondId = secondRecord?.id ?? secondRecord?.courseId
+      const firstEnrolled =
+        firstId !== undefined &&
+        firstId !== null &&
+        enrolledCourseIds.has(String(firstId))
+      const secondEnrolled =
+        secondId !== undefined &&
+        secondId !== null &&
+        enrolledCourseIds.has(String(secondId))
+
+      return Number(secondEnrolled) - Number(firstEnrolled)
+    })
+  }, [
+    academicYear,
+    courseCatalog,
+    data,
+    enrolledCourseIds,
+    filterOptions,
+    personCards,
+    search,
+    subjectFilter,
+  ])
 
   async function selectRecord(item: ApiRecord) {
     const record = asRecord(item)
@@ -498,7 +692,196 @@ export default function PublicCatalogPage({
     }
   }
 
+  async function openEnrollmentContact(
+    course: Record<string, unknown>,
+  ): Promise<void> {
+    const requestId = ++contactRequestId.current
+    setContactCourse(course)
+    const courseId = course.id ?? course.courseId
+    setContactRequestSent(
+      courseId !== undefined &&
+        courseId !== null &&
+        enrollmentChecked &&
+        enrolledCourseIds.has(String(courseId)),
+    )
+    setContactRequestMessage("")
+
+    setContactError("")
+
+    const listedPhone = teacherPhoneOf(course)
+
+    setContactPhone(listedPhone)
+
+    if (listedPhone) {
+      setContactLoading(false)
+
+      return
+    }
+
+    setContactLoading(true)
+
+    let resolvedCourse = course
+
+    let detailError: unknown = null
+
+    let lookupError = ""
+
+    try {
+      const courseId = course.id ?? course.courseId
+
+      if (loadDetail && courseId !== undefined && courseId !== null) {
+        const detailResponse = await loadDetail(String(courseId))
+        if (requestId !== contactRequestId.current) return
+
+        const detailRecord = asRecord(unwrapApiResponse(detailResponse))
+
+        if (detailRecord) {
+          const nestedCourse =
+            asRecord(detailRecord.course) ??
+            asRecord(detailRecord.courseDetails) ??
+            detailRecord
+
+          resolvedCourse = { ...course, ...nestedCourse }
+
+          setContactCourse(resolvedCourse)
+        }
+      }
+    } catch (cause) {
+      detailError = cause
+    }
+
+    let phone = teacherPhoneOf(resolvedCourse)
+
+    if (!phone) {
+      const teacherId = teacherIdOf(resolvedCourse)
+
+      if (teacherId) {
+        try {
+          const teacherResponse = await teachersApi.byId(teacherId)
+          if (requestId !== contactRequestId.current) return
+
+          const teacherRecord = asRecord(unwrapApiResponse(teacherResponse))
+
+          if (teacherRecord) {
+            phone = teacherPhoneOf(teacherRecord)
+
+            resolvedCourse = {
+              ...resolvedCourse,
+
+              teacher: teacherRecord,
+            }
+
+            setContactCourse(resolvedCourse)
+          }
+        } catch (cause) {
+          if (requestId !== contactRequestId.current) return
+          lookupError =
+            cause instanceof Error
+              ? cause.message
+              : "تعذر تحميل رقم تواصل المعلم."
+        }
+      }
+    }
+
+    if (requestId !== contactRequestId.current) return
+
+    setContactPhone(phone)
+
+    if (!phone) {
+      if (lookupError) {
+        setContactError(lookupError)
+      } else if (detailError && !teacherIdOf(resolvedCourse)) {
+        setContactError(
+          detailError instanceof Error
+            ? detailError.message
+            : "تعذر تحميل بيانات التواصل الخاصة بالدورة.",
+        )
+      }
+    }
+
+    setContactLoading(false)
+  }
+
+  async function requestContactEnrollment(): Promise<void> {
+    const courseId = contactCourse?.id ?? contactCourse?.courseId
+
+    if (
+      courseId === undefined ||
+      courseId === null ||
+      !action ||
+      contactRequestLoading
+    ) {
+      return
+    }
+
+    if (contactRequestSent) {
+      setContactRequestMessage(
+        "تم إرسال طلبك بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع.",
+      )
+      return
+    }
+
+    if (!getAuthToken()) {
+      setContactRequestMessage(
+        "سجّل الدخول بحساب الطالب أولًا لإرسال طلب الالتحاق.",
+      )
+      navigate?.("login")
+      return
+    }
+
+    const role = (
+      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    ).toLowerCase()
+
+    if (!role.includes("student")) {
+      const message = "طلب الالتحاق متاح لحساب الطالب فقط."
+      setContactRequestMessage(message)
+      notifyError(new Error(message))
+      return
+    }
+
+    setContactRequestLoading(true)
+    setContactRequestMessage("")
+
+    try {
+      await action(String(courseId))
+      setContactRequestSent(true)
+      setEnrolledCourseIds((current) => new Set(current).add(String(courseId)))
+      setContactRequestMessage(
+        "تم إرسال طلبك للمعلم. تواصل معه عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
+      )
+      notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : ""
+      const duplicate =
+        (cause instanceof ApiError && cause.status === 409) ||
+        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message)
+
+      if (duplicate) {
+        setContactRequestSent(true)
+        setEnrolledCourseIds((current) =>
+          new Set(current).add(String(courseId)),
+        )
+        setContactRequestMessage(
+          "لديك طلب التحاق مسجل بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
+        )
+        return
+      }
+
+      setContactRequestMessage(message || "تعذر إرسال طلب الالتحاق.")
+      notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+    } finally {
+      setContactRequestLoading(false)
+    }
+  }
+
   async function runAction() {
+    if (courseCatalog) {
+      if (detail) void openEnrollmentContact(detail)
+
+      return
+    }
+
     if (!action || detail?.id === undefined || detail.id === null) return
 
     const courseId = String(detail.id)
@@ -590,6 +973,8 @@ export default function PublicCatalogPage({
   const resultCount = subjectFilter
     ? visibleItems.length
     : (data?.totalCount ?? visibleItems.length)
+
+  const contactWhatsappPhone = whatsappPhone(contactPhone)
 
   const submitSearch = () => {
     const nextSearch = searchInput.trim()
@@ -1114,7 +1499,7 @@ export default function PublicCatalogPage({
                 ) : relatedItems.length === 0 ? (
                   <p className="text-sm text-ink-muted">لا توجد دورات متاحة.</p>
                 ) : (
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2 lg:grid-cols-2">
                     {relatedItems.map((item, index) => {
                       const record = asRecord(item)
 
@@ -1340,6 +1725,8 @@ export default function PublicCatalogPage({
 
                       const isFree = price === 0 || price === "0"
 
+                      const courseIdentifier = record.id ?? record.courseId
+
                       const teacherImage = String(
                         record.avatarUrl ??
                           record.profileImageUrl ??
@@ -1348,9 +1735,8 @@ export default function PublicCatalogPage({
                       )
 
                       return (
-                        <motion.button
+                        <motion.article
                           key={String(record.id ?? index)}
-                          type="button"
                           layout={!disableEntryAnimations}
                           variants={
                             disableEntryAnimations
@@ -1379,41 +1765,52 @@ export default function PublicCatalogPage({
                                   damping: 26,
                                 }
                           }
-                          onClick={() => {
-                            if (
-                              courseCatalog &&
-                              navigate &&
-                              record.id != null
-                            ) {
-                              navigate("public:course-detail", {
-                                courseId: String(record.id),
-                              })
-
-                              return
-                            }
-
-                            if (personCards) {
-                              const teacherId = record.id ?? record.teacherId
-
-                              if (
-                                teacherId !== undefined &&
-                                teacherId !== null &&
-                                navigate
-                              ) {
-                                navigate("teacher:platform", {
-                                  teacherId: String(teacherId),
-                                })
-
-                                return
-                              }
-                            }
-
-                            void selectRecord(item)
-                          }}
                           className={`group relative flex flex-col overflow-hidden rounded-3xl ${
                             personCards ? "min-h-[26rem]" : "min-h-80"
                           } border border-stroke bg-surface text-start shadow-sm transition-shadow duration-300 hover:border-emerald-300/60 hover:shadow-[0_24px_48px_-24px_rgba(11,59,37,.45)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800`}
                         >
+                          <button
+                            type="button"
+                            aria-label={
+                              courseCatalog
+                                ? `عرض تفاصيل الدورة: ${cardTitle}`
+                                : personCards
+                                  ? `عرض ملف المعلم: ${cardTitle}`
+                                  : `عرض التفاصيل: ${cardTitle}`
+                            }
+                            onClick={() => {
+                              if (
+                                courseCatalog &&
+                                navigate &&
+                                courseIdentifier != null
+                              ) {
+                                navigate("public:course-detail", {
+                                  courseId: String(courseIdentifier),
+                                })
+
+                                return
+                              }
+
+                              if (personCards) {
+                                const id = record.id ?? record.teacherId
+
+                                if (
+                                  id !== undefined &&
+                                  id !== null &&
+                                  navigate
+                                ) {
+                                  navigate("teacher:platform", {
+                                    teacherId: String(id),
+                                  })
+
+                                  return
+                                }
+                              }
+
+                              void selectRecord(item)
+                            }}
+                            className="absolute inset-0 z-20 rounded-3xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                          />
                           {/* ============ كارت الدورة ============ */}
                           {courseCatalog && (
                             <>
@@ -1480,6 +1877,7 @@ export default function PublicCatalogPage({
                               {/* ============ جسم الكارت والمحتوى ============ */}
                               <div className="flex flex-1 flex-col justify-between p-5 bg-surface transition-colors duration-300 group-hover:bg-emerald-50/20">
                                 <div>
+                                  <CourseMetadataBadges course={record} />
                                   {/* عنوان الدورة */}
                                   <h2 className="line-clamp-2 text-base font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-nuwa-base">
                                     {highlightMatch(cardTitle, search)}
@@ -1495,9 +1893,10 @@ export default function PublicCatalogPage({
                                 <div className="mt-5 flex items-center justify-between gap-3 border-t border-stroke/50 pt-3.5">
                                   {/* بيانات المعلم */}
                                   <div className="flex min-w-0 items-center gap-2.5">
-                                    <div className="relative grid size-8 shrink-0 place-items-center rounded-full bg-emerald-100/80 text-emerald-900 ring-2 ring-emerald-500/20 shadow-sm transition-transform duration-300 group-hover:scale-105">
-                                      <UserRound size={15} />
-                                    </div>
+                                    <CourseTeacherAvatar
+                                      course={record}
+                                      name={teacherNameOf(record) ?? "معلم وَعي"}
+                                    />
                                     <div className="flex min-w-0 flex-col">
                                       <span className="text-[10px] font-medium text-ink-muted/70">
                                         المعلم
@@ -1604,48 +2003,350 @@ export default function PublicCatalogPage({
                               </span>
                             </div>
                           )}
-                        </motion.button>
+                          {courseCatalog && (
+                            <div className="relative z-30 bg-surface px-4 pb-4 pt-1">
+                              <button
+                                type="button"
+                                disabled={
+                                  courseIdentifier == null ||
+                                  (enrolledCourseIds.has(
+                                    String(courseIdentifier),
+                                  ) &&
+                                    enrollmentChecked)
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation()
+
+                                  void openEnrollmentContact(record)
+                                }}
+                                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-nuwa-base px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-nuwa-base/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink-muted"
+                              >
+                                <MessageCircle size={17} />
+                                {enrolledCourseIds.has(
+                                  String(courseIdentifier),
+                                ) && enrollmentChecked
+                                  ? "مسجل بالفعل"
+                                  : "طلب الالتحاق بالدورة"}
+                              </button>
+                            </div>
+                          )}
+                        </motion.article>
                       )
                     })}
                   </AnimatePresence>
                 </motion.div>
               )}
-              {data.totalPages > 1 && (
-                <nav
-                  className="mt-6 flex items-center justify-between border-t border-stroke pt-4"
-                  aria-label="صفحات النتائج"
-                >
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => {
-                      setPage((value) => value - 1)
-
-                      setDetail(null)
-                    }}
-                    className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
+              {data.totalPages > 1 &&
+                (courseCatalog || personCards ? (
+                  <nav
+                    className="mt-10 flex items-center justify-center gap-5"
+                    aria-label={
+                      personCards ? "صفحات المعلمين" : "صفحات الدورات"
+                    }
+                    dir="ltr"
                   >
-                    السابق
-                  </button>
-                  <span className="text-sm text-ink-muted">
-                    صفحة {data.page} من {data.totalPages}
-                  </span>
-                  <button
-                    disabled={page >= data.totalPages}
-                    onClick={() => {
-                      setPage((value) => value + 1)
-
-                      setDetail(null)
-                    }}
-                    className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
+                    <button
+                      type="button"
+                      aria-label={
+                        personCards ? "صفحة المعلمين السابقة" : "الصفحة السابقة"
+                      }
+                      disabled={page <= 1 || loading}
+                      onClick={() => {
+                        setPage((value) => Math.max(1, value - 1))
+                        setDetail(null)
+                      }}
+                      className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-ink shadow-[0_4px_18px_rgba(15,23,42,0.10)] transition hover:-translate-y-0.5 hover:text-nuwa-base disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft size={20} aria-hidden="true" />
+                    </button>
+                    <div className="flex items-center justify-center gap-2.5">
+                      {Array.from(
+                        { length: Math.min(data.totalPages, 5) },
+                        (_, index) =>
+                          Math.max(1, Math.min(page - 2, data.totalPages - 4)) +
+                          index,
+                      ).map((pageNumber) => (
+                        <button
+                          key={pageNumber}
+                          type="button"
+                          aria-label={`الانتقال إلى الصفحة ${pageNumber.toLocaleString("ar-EG")}`}
+                          aria-current={
+                            page === pageNumber ? "page" : undefined
+                          }
+                          disabled={loading}
+                          onClick={() => {
+                            setPage(pageNumber)
+                            setDetail(null)
+                          }}
+                          className={`h-3 rounded-full transition-all duration-300 disabled:cursor-wait ${
+                            page === pageNumber
+                              ? "w-12 bg-[#6d28d9]"
+                              : "w-3 bg-[#e6e7ef] hover:bg-[#c4b5fd]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={
+                        personCards ? "صفحة المعلمين التالية" : "الصفحة التالية"
+                      }
+                      disabled={page >= data.totalPages || loading}
+                      onClick={() => {
+                        setPage((value) => Math.min(data.totalPages, value + 1))
+                        setDetail(null)
+                      }}
+                      className="grid size-11 shrink-0 place-items-center rounded-full bg-white text-ink shadow-[0_4px_18px_rgba(15,23,42,0.10)] transition hover:-translate-y-0.5 hover:text-nuwa-base disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronRight size={20} aria-hidden="true" />
+                    </button>
+                    <span className="sr-only" aria-live="polite">
+                      صفحة {page.toLocaleString("ar-EG")} من{" "}
+                      {data.totalPages.toLocaleString("ar-EG")}
+                    </span>
+                  </nav>
+                ) : (
+                  <nav
+                    className="mt-6 flex items-center justify-between border-t border-stroke pt-4"
+                    aria-label="صفحات النتائج"
                   >
-                    التالي
-                  </button>
-                </nav>
-              )}
+                    <button
+                      disabled={page <= 1}
+                      onClick={() => {
+                        setPage((value) => value - 1)
+
+                        setDetail(null)
+                      }}
+                      className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
+                    >
+                      السابق
+                    </button>
+                    <span className="text-sm text-ink-muted">
+                      صفحة {data.page} من {data.totalPages}
+                    </span>
+                    <button
+                      disabled={page >= data.totalPages}
+                      onClick={() => {
+                        setPage((value) => value + 1)
+
+                        setDetail(null)
+                      }}
+                      className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
+                    >
+                      التالي
+                    </button>
+                  </nav>
+                ))}
             </>
           )}
         </ApiQueryState>
       </main>
+      <AnimatePresence>
+        {contactCourse && (
+          <motion.div
+            className="fixed inset-0 z-[200] grid place-items-center overflow-hidden bg-emerald-950/55 p-2 backdrop-blur-sm sm:p-4"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeEnrollmentContact()
+              }
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="course-contact-title"
+              className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-md flex-col overflow-hidden overscroll-contain rounded-2xl border border-white/60 bg-surface shadow-2xl shadow-emerald-950/25 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px]"
+              initial={{ opacity: 0, y: 18, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+            >
+              <div className="relative shrink-0 overflow-hidden bg-gradient-to-l from-nuwa-deep via-nuwa-base to-[#24865b] px-5 pb-4 pt-5 text-white sm:px-6 sm:pb-5 sm:pt-6">
+                <span
+                  aria-hidden="true"
+                  className="absolute -left-7 -top-14 size-36 rounded-full border-[18px] border-white/10"
+                />
+                <button
+                  type="button"
+                  onClick={closeEnrollmentContact}
+                  aria-label="إغلاق نافذة التواصل"
+                  className="absolute left-4 top-4 z-10 grid size-9 place-items-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                >
+                  <X size={18} />
+                </button>
+                <span className="relative inline-flex size-10 items-center justify-center rounded-xl bg-white/15 text-emerald-100 ring-1 ring-white/15 sm:size-12 sm:rounded-2xl">
+                  <MessageCircle size={21} className="sm:size-6" />
+                </span>
+                <p className="relative mt-4 text-xs font-semibold text-white/75">
+                  طلب الالتحاق بالدورة
+                </p>
+                <h2
+                  id="course-contact-title"
+                  className="relative mt-1 line-clamp-2 text-xl font-bold"
+                >
+                  {titleOf(contactCourse)}
+                </h2>
+                <p className="relative mt-2 text-xs leading-5 text-white/75 sm:text-sm sm:leading-6">
+                  أرسل طلبك للمعلم أولًا، ثم تواصل معه عبر واتساب لإتمام الدفع.
+                </p>
+              </div>
+
+              <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4 sm:space-y-4 sm:p-5">
+                <div className="flex items-center gap-3 rounded-2xl border border-stroke bg-white p-3 sm:p-4">
+                  <CourseTeacherAvatar
+                    course={contactCourse}
+                    name={teacherNameOf(contactCourse) ?? "معلم الدورة"}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-ink-muted">
+                      معلم الدورة
+                    </p>
+                    <p className="mt-1 truncate text-sm font-bold text-ink">
+                      {teacherNameOf(contactCourse) ?? "معلم الدورة"}
+                    </p>
+                  </div>
+                </div>
+
+                <ol className="grid gap-2 rounded-2xl border border-stroke bg-white p-3 text-xs sm:gap-3 sm:p-4 sm:text-sm">
+                  <li className="flex items-start gap-3">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-nuwa-soft text-[11px] font-extrabold text-nuwa-base sm:size-7 sm:text-xs">
+                      ١
+                    </span>
+                    <span className="leading-6 text-ink">
+                      اضغط <strong>طلب الالتحاق بالدورة</strong> لإرسال طلبك إلى
+                      المعلم.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-nuwa-soft text-[11px] font-extrabold text-nuwa-base sm:size-7 sm:text-xs">
+                      ٢
+                    </span>
+                    <span className="leading-6 text-ink">
+                      تواصل مع المعلم عبر واتساب لإتمام الدفع؛ وبعد تأكيد الدفع
+                      يعتمد اشتراكك في الدورة.
+                    </span>
+                  </li>
+                </ol>
+
+                {contactLoading ? (
+                  <div
+                    aria-live="polite"
+                    className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-stroke bg-canvas/60 text-sm font-semibold text-ink-muted"
+                  >
+                    <LoaderCircle size={18} className="animate-spin" />
+                    جارٍ تحميل رقم التواصل...
+                  </div>
+                ) : contactPhone ? (
+                  <div className="rounded-2xl border border-emerald-900/10 bg-emerald-50/70 p-3 sm:p-4">
+                    <p className="text-xs font-semibold text-ink-muted">
+                      رقم التواصل عبر واتساب
+                    </p>
+                    <a
+                      href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`}
+                      dir="ltr"
+                      className="mt-1 inline-flex items-center gap-2 text-lg font-bold tabular-nums text-ink transition hover:text-nuwa-base"
+                    >
+                      <Phone size={17} className="text-nuwa-base" />
+                      {contactPhone}
+                    </a>
+                  </div>
+                ) : (
+                  <div
+                    role={contactError ? "alert" : "status"}
+                    className={`rounded-2xl border p-4 text-sm leading-6 ${
+                      contactError
+                        ? "border-danger/20 bg-danger-light text-danger"
+                        : "border-warning/25 bg-warning-light text-ink"
+                    }`}
+                  >
+                    {contactError ||
+                      "لم يضف المعلم رقم واتساب للتواصل بعد. يرجى المحاولة لاحقاً أو التواصل مع إدارة المنصة."}
+                    {contactError && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void openEnrollmentContact(contactCourse)
+                        }
+                        className="mt-2 block font-bold underline"
+                      >
+                        إعادة المحاولة
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => void requestContactEnrollment()}
+                    disabled={
+                      contactRequestLoading ||
+                      contactRequestSent ||
+                      (contactCourse.id == null &&
+                        contactCourse.courseId == null)
+                    }
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-nuwa-base px-3 py-2.5 text-xs font-bold leading-5 text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-12 sm:px-4 sm:py-3 sm:text-sm"
+                  >
+                    {contactRequestLoading ? (
+                      <LoaderCircle size={17} className="animate-spin" />
+                    ) : (
+                      <MessageCircle size={17} />
+                    )}
+                    {contactRequestLoading
+                      ? "جارٍ إرسال الطلب..."
+                      : contactRequestSent
+                        ? "تم إرسال طلب الالتحاق"
+                        : "طلب الالتحاق بالدورة"}
+                  </button>
+                  {contactPhone && contactWhatsappPhone ? (
+                    <a
+                      href={`https://wa.me/${contactWhatsappPhone}?text=${encodeURIComponent(
+                        `السلام عليكم، أرسلت طلب الالتحاق بدورة ${titleOf(contactCourse)} وأرغب في إتمام الدفع.`,
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#16855b] px-3 py-2.5 text-xs font-bold leading-5 text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#116b49] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16855b] focus-visible:ring-offset-2 sm:min-h-12 sm:px-4 sm:py-3 sm:text-sm"
+                    >
+                      <MessageCircle size={18} />
+                      تواصل مع المعلم واتساب
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#16855b] px-3 py-2.5 text-xs font-bold leading-5 text-white opacity-50 sm:min-h-12 sm:px-4 sm:py-3 sm:text-sm"
+                    >
+                      <MessageCircle size={18} />
+                      رقم واتساب غير متاح
+                    </button>
+                  )}
+                </div>
+                {contactRequestMessage && (
+                  <p
+                    role={contactRequestSent ? "status" : "alert"}
+                    className={`rounded-xl px-3 py-2.5 text-xs leading-5 ${
+                      contactRequestSent
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+                        : "border border-amber-200 bg-amber-50 text-amber-900"
+                    }`}
+                  >
+                    {contactRequestMessage}
+                  </p>
+                )}
+                <p className="text-center text-[11px] leading-5 text-ink-muted">
+                  بعد إرسال طلب الالتحاق، أكمل الدفع مع المعلم واتساب وانتظر
+                  اعتماده.
+                </p>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

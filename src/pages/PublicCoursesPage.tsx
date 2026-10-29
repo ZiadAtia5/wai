@@ -17,7 +17,7 @@ export default function PublicCoursesPage({
       description="الدورات المنشورة المتاحة من منصة وَعي"
       emptyMessage="لا توجد دورات منشورة متاحة حالياً."
       load={getPublicCourses}
-      loadDetail={coursesApi.detail}
+      loadDetail={coursesApi.publicDetail}
       action={coursesApi.enroll}
       actionLabel="طلب الالتحاق بالدورة"
       courseCatalog
