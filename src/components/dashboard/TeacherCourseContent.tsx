@@ -743,7 +743,7 @@ export default function TeacherCourseContent({
         </summary>
         <form
           onSubmit={(event) => void createModule(event)}
-          className="grid gap-3 border-t border-stroke p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end"
+          className="grid min-w-0 gap-3 border-t border-stroke p-4 sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-end"
         >
           <label className={field}>
             عنوان الوحدة
@@ -751,17 +751,6 @@ export default function TeacherCourseContent({
               name="title"
               required
               placeholder="مثال: الوحدة الأولى — أساسيات المادة"
-              className={control}
-            />
-          </label>
-          <label className={field}>
-            الترتيب
-            <input
-              name="order"
-              type="number"
-              min="1"
-              required
-              defaultValue={modules.length + 1}
               className={control}
             />
           </label>

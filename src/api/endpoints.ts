@@ -154,6 +154,9 @@ export const studentsApi = {
   enrollment: (id: string | number) =>
     get<unknown>(`/students/me/enrollments/${idPath(id)}`),
 
+  cancelEnrollment: (id: string | number) =>
+    del<void>(`/students/me/enrollments/${idPath(id)}`),
+
   courseDetail: (courseId: string | number) =>
     get<unknown>(`/students/me/courses/${idPath(courseId)}`),
 

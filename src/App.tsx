@@ -350,6 +350,7 @@ export default function App() {
                   {view === "public:course-detail" && selectedCourseId && (
                     <CourseDetailsPage
                       courseId={selectedCourseId}
+                      teacherId={teacherId}
                       navigate={navigate}
                       onBack={
                         teacherId

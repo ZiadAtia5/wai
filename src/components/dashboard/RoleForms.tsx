@@ -2594,7 +2594,7 @@ export default function RoleForms({
             لا توجد دورات في هذا القسم حاليًا.
           </div>
         ) : (
-          <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={`grid items-start gap-4 ${contentCourseId ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
             {pagedTeacherCourses.map((course) => {
               const id = String(course.id ?? course.courseId ?? "")
 
@@ -2615,7 +2615,7 @@ export default function RoleForms({
                 <div
                   key={id}
                   className={`min-w-0 ${
-                    isShowingContent ? "md:col-span-2 2xl:col-span-3" : ""
+                    isShowingContent ? "col-span-full" : ""
                   }`}
                 >
                   <CourseCard

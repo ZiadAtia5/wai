@@ -11,9 +11,9 @@ import {
   Sparkles,
 } from "lucide-react"
 
-import { resolveApiAssetUrl } from "../api/client"
+import { getAuthToken, resolveApiAssetUrl } from "../api/client"
 
-import { teachersApi } from "../api/endpoints"
+import { studentsApi, teachersApi } from "../api/endpoints"
 
 import ApiQueryState from "../components/ApiQueryState"
 
@@ -27,6 +27,8 @@ import CoursePagination from "../components/CoursePagination"
 
 import CourseEnrollmentContactDialog from "../components/dashboard/CourseEnrollmentContactDialog"
 
+import { readPendingEnrollments } from "../utils/pendingEnrollments"
+
 import { useApiQuery } from "../hooks/useApiQuery"
 
 import type { NavigateFn } from "../types"
@@ -39,6 +41,8 @@ interface TeacherPlatformData {
   courses: PublicRecord[]
 
   totalCourses: number
+
+  enrolledCourseIds: string[]
 }
 
 function asRecord(value: unknown): PublicRecord | null {
@@ -89,7 +93,7 @@ function recordsFrom(value: unknown): PublicRecord[] {
 
   if (!record) return []
 
-  for (const key of ["items", "courses", "results"]) {
+  for (const key of ["items", "courses", "enrollments", "results"]) {
     if (Array.isArray(record[key])) {
       return recordsFrom(record[key])
     }
@@ -180,13 +184,46 @@ function teacherImageOf(record: PublicRecord): string {
     : ""
 }
 
+function isApprovedEnrollment(enrollment: PublicRecord): boolean {
+  if (enrollment.isApproved === false) return false
+
+  if (enrollment.isApproved === true) return true
+
+  const status = String(
+    enrollment.status ?? enrollment.enrollmentStatus ?? "",
+  )
+    .trim()
+    .toLowerCase()
+
+  return [
+    "1",
+    "3",
+    "approved",
+    "accepted",
+    "active",
+    "enrolled",
+    "completed",
+    "complete",
+  ].includes(status)
+}
+
 async function loadTeacherPlatform(
   teacherId: string,
 ): Promise<TeacherPlatformData> {
-  const [teacherResponse, coursesResponse] = await Promise.all([
+  const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+    .toLowerCase()
+  const shouldLoadEnrollments =
+    Boolean(getAuthToken()) && role.includes("student")
+  const [
+    teacherResponse,
+    coursesResponse,
+    enrollmentsResponse,
+  ] = await Promise.all([
     teachersApi.byId(teacherId),
-
     teachersApi.courses(teacherId, { page: 1, pageSize: 100 }),
+    shouldLoadEnrollments
+      ? studentsApi.enrollments({ page: 1, pageSize: 100 })
+      : Promise.resolve(undefined),
   ])
 
   const teacher = teacherRecordFrom(teacherResponse)
@@ -206,11 +243,45 @@ async function loadTeacherPlatform(
       )
     : []
   const courses = [...firstPageCourses, ...remainingPages.flatMap(recordsFrom)]
+  const enrollmentPages = enrollmentsResponse
+    ? [recordsFrom(enrollmentsResponse)]
+    : []
+  const enrollmentPagination = enrollmentsResponse
+    ? paginationFrom(enrollmentsResponse)
+    : null
+  if (enrollmentPagination) {
+    enrollmentPages.push(
+      ...await Promise.all(
+        Array.from(
+          { length: Math.max(0, enrollmentPagination.totalPages - 1) },
+          (_, index) =>
+            studentsApi.enrollments({
+              page: index + 2,
+              pageSize: 100,
+            }).then(recordsFrom),
+        ),
+      ),
+    )
+  }
+  const enrolledCourseIds = [
+    ...new Set(
+      enrollmentPages
+        .flat()
+        .filter(isApprovedEnrollment)
+        .map((enrollment) => {
+          const course = asRecord(enrollment.course)
+          const id = enrollment.courseId ?? course?.id ?? course?.courseId
+          return id == null ? "" : String(id)
+        })
+        .filter(Boolean),
+    ),
+  ]
 
   return {
     teacher,
     courses,
     totalCourses: pagination?.totalCount ?? courses.length,
+    enrolledCourseIds,
   }
 }
 
@@ -228,6 +299,22 @@ export default function TeacherPlatformPage({
   const [coursePage, setCoursePage] = useState(1)
 
   const [contactCourse, setContactCourse] = useState<PublicRecord | null>(null)
+
+  const [requestedCourseIds, setRequestedCourseIds] = useState<Set<string>>(
+    () => new Set(readPendingEnrollments().keys()),
+  )
+
+  const markEnrollmentRequested = useCallback((id: string) => {
+    setRequestedCourseIds((current) => new Set(current).add(id))
+  }, [])
+
+  const markEnrollmentCancelled = useCallback((id: string) => {
+    setRequestedCourseIds((current) => {
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+  }, [])
 
   const [failedTeacherImageUrl, setFailedTeacherImageUrl] =
     useState<string | null>(null)
@@ -511,6 +598,15 @@ export default function TeacherPlatformPage({
                   const moduleCount = Number(
                     course.modulesCount ?? course.moduleCount ?? 0,
                   )
+                  const isEnrolled =
+                    courseId != null &&
+                    (data.enrolledCourseIds.includes(String(courseId)) ||
+                      course.isEnrolled === true)
+                  const enrollmentActionLabel = isEnrolled
+                    ? "مسجل بالفعل"
+                    : courseId != null && requestedCourseIds.has(String(courseId))
+                      ? "تواصل مع المدرس"
+                      : "طلب الالتحاق"
 
                   return (
                     <CourseCard
@@ -529,7 +625,11 @@ export default function TeacherPlatformPage({
                       <div className="grid gap-2 sm:grid-cols-2">
                         <button
                           type="button"
-                          disabled={courseId === undefined || courseId === null}
+                          disabled={
+                            courseId === undefined ||
+                            courseId === null ||
+                            isEnrolled
+                          }
                           onClick={() =>
                             setContactCourse({
                               ...course,
@@ -543,7 +643,7 @@ export default function TeacherPlatformPage({
                           }
                           className="w-full rounded-xl bg-nuwa-base px-3 py-3 text-xs font-bold text-white transition hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-60"
                         >
-                          طلب الالتحاق بالدورة
+                          {enrollmentActionLabel}
                         </button>
                         <button
                           type="button"
@@ -681,6 +781,8 @@ export default function TeacherPlatformPage({
         course={contactCourse}
         onClose={() => setContactCourse(null)}
         navigate={navigate}
+        onEnrollmentRequested={markEnrollmentRequested}
+        onEnrollmentCancelled={markEnrollmentCancelled}
       />
     </div>
   )
