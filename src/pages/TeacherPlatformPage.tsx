@@ -3,8 +3,11 @@ import { useCallback, useState } from "react"
 import {
   ArrowDown,
   ArrowLeft,
+  BadgeCheck,
   BookOpen,
+  CheckCircle2,
   GraduationCap,
+  Layers3,
   Sparkles,
 } from "lucide-react"
 
@@ -14,9 +17,15 @@ import { teachersApi } from "../api/endpoints"
 
 import ApiQueryState from "../components/ApiQueryState"
 
-import { Skeleton, SkeletonButton, SkeletonText } from "../components/Skeleton"
+import { Skeleton, SkeletonText } from "../components/Skeleton"
 
 import { TeacherCoursesSkeleton } from "../components/loading/SkeletonLayouts"
+
+import CourseCard from "../components/CourseCard"
+
+import CoursePagination from "../components/CoursePagination"
+
+import CourseEnrollmentContactDialog from "../components/dashboard/CourseEnrollmentContactDialog"
 
 import { useApiQuery } from "../hooks/useApiQuery"
 
@@ -28,12 +37,43 @@ interface TeacherPlatformData {
   teacher: PublicRecord
 
   courses: PublicRecord[]
+
+  totalCourses: number
 }
 
 function asRecord(value: unknown): PublicRecord | null {
   return typeof value === "object" && value !== null
     ? value as PublicRecord
     : null
+}
+
+function paginationFrom(
+  value: unknown,
+): {
+  totalPages: number
+  totalCount: number
+} | null {
+  let current = value
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    const record = asRecord(current)
+
+    if (!record) return null
+
+    if (
+      typeof record.totalPages === "number" &&
+      typeof record.totalCount === "number"
+    ) {
+      return {
+        totalPages: record.totalPages,
+        totalCount: record.totalCount,
+      }
+    }
+
+    current = record.data ?? record.result
+  }
+
+  return null
 }
 
 function recordsFrom(value: unknown): PublicRecord[] {
@@ -146,14 +186,32 @@ async function loadTeacherPlatform(
   const [teacherResponse, coursesResponse] = await Promise.all([
     teachersApi.byId(teacherId),
 
-    teachersApi.courses(teacherId),
+    teachersApi.courses(teacherId, { page: 1, pageSize: 100 }),
   ])
 
   const teacher = teacherRecordFrom(teacherResponse)
 
-  const courses = recordsFrom(coursesResponse)
+  const firstPageCourses = recordsFrom(coursesResponse)
+  const pagination = paginationFrom(coursesResponse)
+  const remainingPages = pagination
+    ? await Promise.all(
+        Array.from(
+          { length: Math.max(0, pagination.totalPages - 1) },
+          (_, index) =>
+            teachersApi.courses(teacherId, {
+              page: index + 2,
+              pageSize: 100,
+            }),
+        ),
+      )
+    : []
+  const courses = [...firstPageCourses, ...remainingPages.flatMap(recordsFrom)]
 
-  return { teacher, courses }
+  return {
+    teacher,
+    courses,
+    totalCourses: pagination?.totalCount ?? courses.length,
+  }
 }
 
 export default function TeacherPlatformPage({
@@ -167,6 +225,10 @@ export default function TeacherPlatformPage({
 }) {
   const [reloadKey, setReloadKey] = useState(0)
 
+  const [coursePage, setCoursePage] = useState(1)
+
+  const [contactCourse, setContactCourse] = useState<PublicRecord | null>(null)
+
   const [failedTeacherImageUrl, setFailedTeacherImageUrl] =
     useState<string | null>(null)
 
@@ -178,8 +240,11 @@ export default function TeacherPlatformPage({
 
   const { data, error, loading } = useApiQuery(
     loadPage,
+
     reloadKey,
+
     true,
+
     `teacher-platform:${teacherId}`,
   )
 
@@ -198,18 +263,48 @@ export default function TeacherPlatformPage({
         ? teacher.description
         : ""
 
+  const subjectNames = [
+    ...new Set(
+      (data?.courses ?? [])
+
+        .map((course) => course.subjectName)
+
+        .filter(
+          (subject): subject is string =>
+            typeof subject === "string" && subject.trim().length > 0,
+        )
+
+        .map((subject) => subject.trim()),
+    ),
+  ]
+
+  const moduleCount = (data?.courses ?? []).reduce((total, course) => {
+    const count = Number(course.modulesCount ?? course.moduleCount ?? 0)
+
+    return Number.isFinite(count) && count > 0 ? total + count : total
+  }, 0)
+
+  const coursesPerPage = 3
+  const courseTotalPages = Math.ceil(
+    (data?.courses.length ?? 0) / coursesPerPage,
+  )
+  const visibleCourses = (data?.courses ?? []).slice(
+    (coursePage - 1) * coursesPerPage,
+    coursePage * coursesPerPage,
+  )
+
   return (
-    <div className="min-h-screen bg-canvas pb-16">
-      <header className="px-4 pb-4 pt-7 sm:px-6 sm:pt-10 lg:px-8">
-        <section className="relative mx-auto grid max-w-360 overflow-hidden rounded-[32px] border border-stroke bg-white shadow-xl shadow-emerald-950/5 lg:min-h-[570px] lg:grid-cols-2">
-          <div className="relative order-1 min-h-[360px] overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 sm:min-h-[460px] lg:min-h-[570px]">
+    <div className="min-h-screen overflow-hidden bg-[#edf2ef] pb-16 text-ink">
+      <header className="px-4 pb-2 pt-5 sm:px-6 sm:pt-8 lg:px-8">
+        <section className="relative mx-auto grid max-w-7xl overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_22px_60px_-38px_rgba(11,59,37,.38)] sm:rounded-[34px] lg:min-h-[430px] lg:grid-cols-2">
+          <div className="relative order-1 min-h-[270px] overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 sm:min-h-[380px] lg:min-h-[430px]">
             <div
               aria-hidden="true"
-              className="absolute -right-16 -top-16 size-64 rounded-full border border-white/15 sm:size-80"
+              className="absolute -right-16 -top-20 size-56 rounded-full border border-white/15 sm:size-72"
             />
             <div
               aria-hidden="true"
-              className="absolute -bottom-24 -left-12 size-72 rounded-full border border-white/15 sm:size-96"
+              className="absolute -bottom-28 -left-16 size-72 rounded-full border border-white/15 sm:size-96"
             />
             {loading ? (
               <Skeleton className="absolute inset-0 rounded-none bg-white/10" />
@@ -222,35 +317,36 @@ export default function TeacherPlatformPage({
               />
             ) : (
               <div className="absolute inset-0 grid place-items-center">
-                <div className="grid size-48 place-items-center rounded-full border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm sm:size-64">
-                  {loading ? (
-                    <Skeleton className="size-24 rounded-full bg-white/20 sm:size-32" />
-                  ) : (
-                    <span className="text-7xl font-bold tracking-tight text-white/90 sm:text-8xl">
-                      {teacherName
+                <div className="grid size-36 place-items-center rounded-full border border-white/20 bg-white/10 text-5xl font-bold text-white/90 shadow-2xl backdrop-blur-sm sm:size-52 sm:text-7xl">
+                  {teacherName
 
-                        .trim()
+                    .trim()
 
-                        .split(/\s+/)
+                    .split(/\s+/)
 
-                        .slice(0, 2)
+                    .slice(0, 2)
 
-                        .map((part) => part[0] ?? "")
+                    .map((part) => part[0] ?? "")
 
-                        .join("")}
-                    </span>
-                  )}
+                    .join("")}
                 </div>
               </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/80 via-transparent to-emerald-950/10" />
-            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-6 text-white sm:p-9">
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
-                  <GraduationCap size={15} />
-                  {teacherSpecialization || "معلم على منصة وَعي"}
+            <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/90 via-emerald-950/10 to-emerald-950/15" />
+            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white sm:p-7">
+              <div className="min-w-0">
+                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-semibold backdrop-blur sm:text-xs">
+                  <GraduationCap size={15} aria-hidden="true" />
+                  <span className="truncate">
+                    {teacherSpecialization ||
+                      subjectNames.join("، ") ||
+                      "معلم على منصة وَعي"}
+                  </span>
                 </span>
-                <p dir="auto" className="mt-3 text-2xl font-bold sm:text-3xl">
+                <p
+                  dir="auto"
+                  className="mt-2 truncate text-xl font-bold sm:mt-3 sm:text-3xl"
+                >
                   {loading ? (
                     <Skeleton className="h-8 w-48 bg-white/25 sm:h-9" />
                   ) : (
@@ -258,41 +354,34 @@ export default function TeacherPlatformPage({
                   )}
                 </p>
               </div>
-              {loading ? (
-                <div className="shrink-0 rounded-2xl border border-white/20 bg-black/15 px-4 py-3 text-center backdrop-blur">
-                  <Skeleton className="mx-auto h-7 w-10 bg-white/25" />
-                  <Skeleton className="mx-auto mt-2 h-3 w-20 bg-white/20" />
-                </div>
-              ) : data ? (
-                <div className="shrink-0 rounded-2xl border border-white/20 bg-black/15 px-4 py-3 text-center backdrop-blur">
-                  <strong className="block text-2xl leading-none">
-                    {data.courses.length}
-                  </strong>
-                  <span className="mt-1 block text-xs text-white/80">
-                    دورة تعليمية
-                  </span>
-                </div>
-              ) : null}
+              <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-white/20 bg-black/20 text-center backdrop-blur sm:size-[4.5rem]">
+                {loading ? (
+                  <Skeleton className="h-7 w-8 bg-white/25" />
+                ) : (
+                  <>
+                    <strong className="self-end text-xl leading-none sm:text-2xl">
+                      {data?.totalCourses ?? 0}
+                    </strong>
+                    <span className="self-start text-[9px] text-white/75 sm:text-[10px]">
+                      دورة
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="order-2 flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-14 lg:px-14 xl:px-20">
-            <span className="inline-flex w-fit items-center gap-2 rounded-full bg-nuwa-soft px-3.5 py-2 text-xs font-bold text-nuwa-deep">
-              <Sparkles size={15} />
-              مرحبًا بك في منصتي التعليمية
+          <div className="order-2 flex flex-col justify-center px-5 py-7 sm:px-9 sm:py-10 lg:px-12 xl:px-16">
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-nuwa-base/10 bg-nuwa-soft px-3.5 py-2 text-xs font-bold text-nuwa-deep">
+              <BadgeCheck size={15} aria-hidden="true" />
+              معلم على منصة وَعي
             </span>
-            <p className="mt-7 text-sm font-semibold text-nuwa-base">
-              رحلة تعلم تبدأ بخطوة
+            <p className="mt-5 text-sm font-semibold text-nuwa-base sm:mt-7">
+              تعلّم من خبرة متخصصة
             </p>
-            {teacherSpecialization && (
-              <span className="mt-3 inline-flex w-fit items-center gap-2 rounded-full border border-nuwa-base/15 bg-nuwa-soft px-4 py-2 text-sm font-bold text-nuwa-deep">
-                <GraduationCap size={17} aria-hidden="true" />
-                التخصص: {teacherSpecialization}
-              </span>
-            )}
             <h1
               dir="auto"
-              className="mt-2 text-3xl font-bold leading-tight tracking-tight text-ink sm:text-4xl xl:text-5xl"
+              className="mt-2 text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl xl:text-5xl"
             >
               تعلّم مع
               <span className="mt-1 block text-nuwa-base">
@@ -305,16 +394,48 @@ export default function TeacherPlatformPage({
             </h1>
             <p
               dir="auto"
-              className="mt-5 max-w-xl whitespace-pre-line text-sm leading-8 text-ink-muted sm:text-base"
+              className="mt-4 max-w-xl whitespace-pre-line text-sm leading-7 text-ink-muted sm:mt-5 sm:text-base sm:leading-8"
             >
               {loading ? (
-                <SkeletonText className="mt-5 max-w-xl" lines={3} />
+                <SkeletonText className="mt-3 max-w-xl" lines={3} />
               ) : (
                 teacherBio ||
                 "اكتشف الدورات التعليمية وتعلّم بأسلوب واضح ومنظم، خطوة بخطوة."
               )}
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+
+            <div className="mt-6 grid grid-cols-2 gap-2.5 sm:mt-7 sm:gap-3">
+              <div className="flex min-w-0 items-center gap-2.5 rounded-2xl border border-stroke bg-[#f7faf8] p-3 sm:p-3.5">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                  <BookOpen size={17} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <strong className="block truncate text-sm font-bold text-ink">
+                    {data?.totalCourses ?? 0}
+                  </strong>
+                  <span className="block truncate text-[10px] text-ink-muted sm:text-xs">
+                    دورة تعليمية
+                  </span>
+                </span>
+              </div>
+              {moduleCount > 0 && (
+                <div className="flex min-w-0 items-center gap-2.5 rounded-2xl border border-stroke bg-[#f7faf8] p-3 sm:p-3.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                    <Layers3 size={17} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <strong className="block truncate text-sm font-bold text-ink">
+                      {moduleCount.toLocaleString("ar-EG")}
+                    </strong>
+                    <span className="block truncate text-[10px] text-ink-muted sm:text-xs">
+                      وحدة تعليمية
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-7">
               <button
                 type="button"
                 disabled={loading}
@@ -325,37 +446,46 @@ export default function TeacherPlatformPage({
 
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
-                className="inline-flex h-12 items-center gap-2 rounded-xl bg-nuwa-base px-5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep"
+                className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-nuwa-base px-5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:opacity-60"
               >
-                {loading ? (
-                  <>
-                    <SkeletonButton className="h-4 w-24 bg-white/25" />
-                    <Skeleton className="size-4 rounded bg-white/25" />
-                  </>
-                ) : (
-                  <>
-                    استكشف الدورات
-                    <ArrowDown size={17} />
-                  </>
-                )}
+                استكشف الدورات
+                <ArrowDown size={17} aria-hidden="true" />
               </button>
               <span className="text-xs font-medium text-ink-muted">
-                محتوى تعليمي أُعدّ بعناية
+                {subjectNames.length
+                  ? subjectNames.slice(0, 2).join(" · ")
+                  : "محتوى تعليمي أُعدّ بعناية"}
               </span>
             </div>
           </div>
         </section>
       </header>
 
-      <main className="mx-auto max-w-360 px-4 py-8 sm:px-6 md:px-10">
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <section id="teacher-courses" className="scroll-mt-24">
-          <div className="mb-5 flex items-end justify-between gap-4">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
             <div>
-              <p className="text-sm font-semibold text-nuwa-base">اختَر مسارك</p>
-              <h2 className="mt-1 text-2xl font-bold text-ink">
+              <p className="inline-flex items-center gap-2 text-xs font-bold text-nuwa-base sm:text-sm">
+                <span className="size-1.5 rounded-full bg-nuwa-bright" />
+                ابدأ رحلتك التعليمية
+              </p>
+              <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
                 الدورات التعليمية
               </h2>
+              <p className="mt-1.5 text-xs leading-6 text-ink-muted sm:text-sm">
+                اختر الدورة المناسبة لك وتعرّف على محتواها قبل أن تبدأ.
+              </p>
             </div>
+            {data && data.courses.length > 0 && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-3.5 py-2 text-xs font-bold text-ink-muted shadow-sm">
+                <BookOpen
+                  size={15}
+                  className="text-nuwa-base"
+                  aria-hidden="true"
+                />
+                {data.totalCourses.toLocaleString("ar-EG")} دورات
+              </span>
+            )}
           </div>
 
           <ApiQueryState
@@ -371,89 +501,187 @@ export default function TeacherPlatformPage({
             onRetry={() => setReloadKey((key) => key + 1)}
           >
             {data && data.courses.length > 0 && (
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {data.courses.map((course, index) => {
-                  const courseId = course.id
-
-                  const coverImage = String(
-                    course.coverImageUrl ??
-                      course.thumbnailUrl ??
-                      course.imageUrl ??
-                      "",
-                  )
-
-                  const coverImageUrl = coverImage
-                    ? resolveApiAssetUrl(coverImage)
-                    : ""
+              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                {visibleCourses.map((course, index) => {
+                  const courseId = course.id ?? course.courseId
 
                   const title = String(
                     course.title ?? course.name ?? "دورة تعليمية",
                   )
-
-                  const description =
-                    typeof course.description === "string"
-                      ? course.description
-                      : "محتوى تعليمي منظم يساعدك على التقدم خطوة بخطوة."
+                  const moduleCount = Number(
+                    course.modulesCount ?? course.moduleCount ?? 0,
+                  )
 
                   return (
-                    <button
+                    <CourseCard
                       key={String(courseId ?? index)}
-                      type="button"
-                      disabled={courseId === undefined || courseId === null}
-                      onClick={() => {
-                        if (courseId !== undefined && courseId !== null) {
-                          navigate("public:course-detail", {
-                            courseId: String(courseId),
-                          })
-                        }
-                      }}
-                      className="group flex min-h-80 flex-col overflow-hidden rounded-[24px] border border-stroke bg-white text-start shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default"
+                      course={course}
+                      title={title}
+                      teacherName={teacherName}
+                      footer={
+                        moduleCount > 0 ? (
+                          <p className="mt-3 text-xs font-semibold text-ink-muted">
+                            {moduleCount.toLocaleString("ar-EG")} وحدات تعليمية
+                          </p>
+                        ) : undefined
+                      }
                     >
-                      <div className="relative flex h-44 w-full items-end overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4">
-                        {coverImageUrl ? (
-                          <img
-                            src={coverImageUrl}
-                            alt=""
-                            className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <>
-                            <div className="absolute -left-6 -top-10 size-40 rounded-full border border-white/15" />
-                            <BookOpen
-                              size={40}
-                              className="absolute left-5 top-5 text-white/75"
-                            />
-                          </>
-                        )}
-                        <span className="relative rounded-full border border-white/20 bg-black/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-                          {String(course.academicYear ?? "دورة تعليمية")}
-                        </span>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={courseId === undefined || courseId === null}
+                          onClick={() =>
+                            setContactCourse({
+                              ...course,
+                              teacher: course.teacher ?? data.teacher,
+                              teacherId:
+                                course.teacherId ??
+                                data.teacher.id ??
+                                data.teacher.teacherId,
+                              teacherName,
+                            })
+                          }
+                          className="w-full rounded-xl bg-nuwa-base px-3 py-3 text-xs font-bold text-white transition hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-60"
+                        >
+                          طلب الالتحاق بالدورة
+                        </button>
+                        <button
+                          type="button"
+                          disabled={courseId === undefined || courseId === null}
+                          onClick={() => {
+                            if (courseId !== undefined && courseId !== null) {
+                              navigate("public:course-detail", {
+                                courseId: String(courseId),
+                              })
+                            }
+                          }}
+                          className="w-full rounded-xl bg-nuwa-soft px-3 py-3 text-xs font-bold text-nuwa-deep transition hover:bg-nuwa-base hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-60"
+                        >
+                          تفاصيل الدورة
+                        </button>
                       </div>
-                      <div className="flex flex-1 flex-col p-5">
-                        <h3 className="line-clamp-1 text-lg font-bold text-ink">
-                          {title}
-                        </h3>
-                        <p className="mt-2 line-clamp-3 min-h-18 text-sm leading-7 text-ink-muted">
-                          {description}
-                        </p>
-                        <div className="mt-auto flex items-center justify-between gap-3 border-t border-stroke pt-4 text-sm">
-                          <span className="line-clamp-1 text-ink-muted">
-                            {String(course.subjectName ?? "دورة تعليمية")}
-                          </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-nuwa-base">
-                            اكتشف الدورة
-                            <ArrowLeft size={15} />
-                          </span>
-                        </div>
-                      </div>
-                    </button>
+                    </CourseCard>
                   )
                 })}
               </div>
             )}
           </ApiQueryState>
+          {data && (
+            <CoursePagination
+              page={coursePage}
+              totalPages={courseTotalPages}
+              onPageChange={(nextPage) => {
+                setCoursePage(nextPage)
+                document
+                  .getElementById("teacher-courses")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }}
+              disabled={loading}
+            />
+          )}
+        </section>
+
+        <section
+          aria-labelledby="teacher-learning-path"
+          className="mt-12 overflow-hidden rounded-[28px] border border-emerald-900/5 bg-white shadow-sm sm:mt-16 sm:rounded-[32px]"
+        >
+          <div className="grid lg:grid-cols-[.8fr_1.2fr]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#0b3b25] via-[#125b39] to-[#176b43] p-6 text-white sm:p-9 lg:p-10">
+              <span
+                aria-hidden="true"
+                className="absolute -bottom-20 -left-14 size-56 rounded-full border border-white/10"
+              />
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-100">
+                <Sparkles size={15} aria-hidden="true" />
+                خطوة بخطوة
+              </span>
+              <h2
+                id="teacher-learning-path"
+                className="relative mt-4 text-2xl font-extrabold leading-tight sm:text-3xl"
+              >
+                طريقك للتعلّم
+                <span className="block text-emerald-200">يبدأ من هنا</span>
+              </h2>
+              <p className="relative mt-3 max-w-md text-sm leading-7 text-white/75">
+                تصفّح الدورات، اختر ما يناسب هدفك، وابدأ التعلّم بالوتيرة المناسبة
+                لك.
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  document
+
+                    .getElementById("teacher-courses")
+
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className="relative mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-nuwa-deep transition hover:-translate-y-0.5 hover:bg-emerald-50"
+              >
+                اختر دورتك
+                <ArrowLeft size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-3 sm:gap-4 sm:p-6 lg:p-8">
+              {[
+                {
+                  icon: BookOpen,
+
+                  number: "١",
+
+                  title: "اختر الدورة",
+
+                  detail: "تعرّف على الدورات ومحتوى كل واحدة.",
+                },
+
+                {
+                  icon: Layers3,
+
+                  number: "٢",
+
+                  title: "استكشف المحتوى",
+
+                  detail: "ابدأ بالوحدات التعليمية المرتبة.",
+                },
+
+                {
+                  icon: CheckCircle2,
+
+                  number: "٣",
+
+                  title: "تابع تقدّمك",
+
+                  detail: "واصل التعلّم خطوة جديدة كل مرة.",
+                },
+              ].map(({ icon: Icon, number, title, detail }) => (
+                <div
+                  key={number}
+                  className="rounded-2xl border border-stroke bg-[#f8faf8] p-4 sm:p-5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="grid size-10 place-items-center rounded-xl bg-nuwa-soft text-nuwa-base">
+                      <Icon size={19} aria-hidden="true" />
+                    </span>
+                    <span className="text-sm font-extrabold text-nuwa-base/40">
+                      {number}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-sm font-extrabold text-ink">
+                    {title}
+                  </h3>
+                  <p className="mt-1.5 text-xs leading-6 text-ink-muted">
+                    {detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       </main>
+      <CourseEnrollmentContactDialog
+        course={contactCourse}
+        onClose={() => setContactCourse(null)}
+        navigate={navigate}
+      />
     </div>
   )
 }

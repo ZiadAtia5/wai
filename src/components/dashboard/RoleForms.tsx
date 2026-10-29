@@ -20,6 +20,10 @@ import {
 
 import { ApiError, resolveApiAssetUrl } from "../../api/client"
 
+import CourseCard from "../CourseCard"
+
+import CoursePagination from "../CoursePagination"
+
 import TeacherStudentProgress from "./TeacherStudentProgress"
 
 import TeacherStudents from "./TeacherStudents"
@@ -39,8 +43,6 @@ import TeacherCourseContent from "./TeacherCourseContent"
 import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
 
 import { useConfirmation } from "../ConfirmationProvider"
-
-import { formatEgp } from "../../utils/currency"
 
 import { AnimatedBar, AnimatedNumber } from "./DashboardMotion"
 
@@ -1052,6 +1054,8 @@ export default function RoleForms({
   const [teacherCourseFilter, setTeacherCourseFilter] =
     useState<"all" | "published" | "draft">("all")
 
+  const [teacherCoursePage, setTeacherCoursePage] = useState(1)
+
   const [editingCourse, setEditingCourse] = useState<RecordValue | null>(null)
 
   const [isCreatingCourse, setIsCreatingCourse] = useState(false)
@@ -1158,6 +1162,17 @@ export default function RoleForms({
       (getTeacherCoursePublished(course) ? "published" : "draft") ===
         teacherCourseFilter,
   )
+  const teacherCourseTotalPages = Math.ceil(visibleTeacherCourses.length / 3)
+  const pagedTeacherCourses = visibleTeacherCourses.slice(
+    (teacherCoursePage - 1) * 3,
+    teacherCoursePage * 3,
+  )
+
+  useEffect(() => {
+    if (teacherCoursePage > teacherCourseTotalPages) {
+      setTeacherCoursePage(Math.max(1, teacherCourseTotalPages))
+    }
+  }, [teacherCoursePage, teacherCourseTotalPages])
 
   useEffect(() => {
     if (isAdmin && section === "profile") return
@@ -1989,11 +2004,14 @@ export default function RoleForms({
               />
             </label>
             <label className={labelClass}>
-              رقم الهاتف
+              رقم واتساب للتواصل مع الطلاب
               <input
                 name="phoneNumber"
                 type="tel"
                 required
+                dir="ltr"
+                autoComplete="tel"
+                placeholder="01012345678"
                 className={fieldClass}
               />
             </label>
@@ -2099,13 +2117,18 @@ export default function RoleForms({
                         />
                       </label>
                       <label className={labelClass}>
-                        رقم الهاتف
+                        رقم واتساب للتواصل مع الطلاب
                         <input
                           name="phoneNumber"
                           type="tel"
                           required
+                          dir="ltr"
+                          autoComplete="tel"
+                          placeholder="01012345678"
                           defaultValue={String(
-                            editingTeacher.phoneNumber ?? "",
+                            editingTeacher.phoneNumber ??
+                              editingTeacher.whatsappPhoneNumber ??
+                              "",
                           )}
                           className={fieldClass}
                         />
@@ -2216,10 +2239,18 @@ export default function RoleForms({
                         {String(teacherDetails.email)}
                       </p>
                     )}
-                  {teacherDetails.phoneNumber != null &&
-                    String(teacherDetails.phoneNumber).trim() !== "" && (
+                  {(teacherDetails.phoneNumber ??
+                    teacherDetails.whatsappPhoneNumber) != null &&
+                    String(
+                      teacherDetails.phoneNumber ??
+                        teacherDetails.whatsappPhoneNumber,
+                    ).trim() !== "" && (
                       <p className="mt-1 text-xs text-ink-muted">
-                        {String(teacherDetails.phoneNumber)}
+                        رقم واتساب:{" "}
+                        {String(
+                          teacherDetails.phoneNumber ??
+                            teacherDetails.whatsappPhoneNumber,
+                        )}
                       </p>
                     )}
                   {teacherDetails.bio != null &&
@@ -2515,7 +2546,10 @@ export default function RoleForms({
               key={filter}
               type="button"
               aria-pressed={teacherCourseFilter === filter}
-              onClick={() => setTeacherCourseFilter(filter)}
+              onClick={() => {
+                setTeacherCourseFilter(filter)
+                setTeacherCoursePage(1)
+              }}
               className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                 teacherCourseFilter === filter
                   ? "bg-nuwa-base text-white"
@@ -2560,8 +2594,8 @@ export default function RoleForms({
             لا توجد دورات في هذا القسم حاليًا.
           </div>
         ) : (
-          <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {visibleTeacherCourses.map((course) => {
+          <div className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {pagedTeacherCourses.map((course) => {
               const id = String(course.id ?? course.courseId ?? "")
 
               const isPublished = getTeacherCoursePublished(course)
@@ -2578,74 +2612,22 @@ export default function RoleForms({
                   : ""
 
               return (
-                <article
+                <div
                   key={id}
-                  className={`min-w-0 overflow-hidden rounded-2xl border border-stroke bg-white shadow-sm transition duration-200 hover:border-nuwa-base/30 hover:shadow-nuwa-md ${
+                  className={`min-w-0 ${
                     isShowingContent ? "md:col-span-2 2xl:col-span-3" : ""
                   }`}
                 >
-                  <div className="relative flex h-36 items-end overflow-hidden bg-gradient-to-br from-nuwa-deep via-nuwa-base to-emerald-400 p-4">
-                    {coverUrl ? (
-                      <img
-                        src={coverUrl}
-                        alt=""
-                        loading="lazy"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none"
-                        }}
-                        className="absolute inset-0 size-full object-cover"
-                      />
-                    ) : (
-                      <>
-                        <div className="absolute -left-6 -top-14 size-40 rounded-full border border-white/20" />
-                        <div className="absolute -left-2 -top-8 size-28 rounded-full border border-white/20" />
-                        <BookOpen
-                          size={32}
-                          className="absolute left-4 top-4 text-white/70"
-                        />
-                      </>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/65 via-transparent to-transparent" />
-                    <span
-                      className={`relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
-                        isPublished
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-amber-100 text-amber-900"
-                      }`}
-                    >
-                      {isPublished ? <Eye size={14} /> : <EyeOff size={14} />}
-                      {isPublished ? "منشورة للعامة" : "مسودة"}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0 space-y-4 p-2.5 sm:p-4">
-                    <div className="min-w-0">
-                      <h4 className="truncate text-base font-bold text-ink">
-                        {String(course.title ?? `دورة ${id}`)}
-                      </h4>
-                      <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-ink-muted">
-                        {String(
-                          course.description ?? "لا يوجد وصف مضاف للدورة.",
-                        )}
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-                        <span>
-                          {String(
-                            course.subjectName ??
-                              asRecord(course.subject).name ??
-                              "بدون مادة",
-                          )}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {typeof course.price === "number" &&
-                          course.price === 0
-                            ? "مجانية"
-                            : formatEgp(course.price)}
-                        </span>
-                      </div>
-                    </div>
-
+                  <CourseCard
+                    course={course}
+                    title={String(course.title ?? `دورة ${id}`)}
+                    statusLabel={isPublished ? "منشورة للعامة" : "مسودة"}
+                    statusTone={
+                      isPublished
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-900"
+                    }
+                  >
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
@@ -2957,11 +2939,19 @@ export default function RoleForms({
                         onFeedback={onFeedback}
                       />
                     )}
-                  </div>
-                </article>
+                  </CourseCard>
+                </div>
               )
             })}
           </div>
+        )}
+        {!loading && visibleTeacherCourses.length > 0 && (
+          <CoursePagination
+            page={teacherCoursePage}
+            totalPages={teacherCourseTotalPages}
+            onPageChange={setTeacherCoursePage}
+            label="صفحات دورات المعلم"
+          />
         )}
       </div>
     )
@@ -3047,90 +3037,73 @@ export default function RoleForms({
                 const canLearn = courseId !== undefined && status.canLearn
 
                 return (
-                  <article
+                  <CourseCard
                     key={String(enrollment.id ?? courseId ?? index)}
-                    className={`flex flex-col rounded-2xl border border-stroke bg-white p-5 shadow-nuwa transition hover:-translate-y-0.5 hover:border-nuwa-base/40 hover:shadow-nuwa-md ${
+                    course={{
+                      ...course,
+                      teacher: enrollment.teacher ?? course.teacher,
+                      teacherId: enrollment.teacherId ?? course.teacherId,
+                    }}
+                    title={String(title)}
+                    subject={subject == null ? undefined : String(subject)}
+                    teacherName={
+                      teacherName == null ? undefined : String(teacherName)
+                    }
+                    statusLabel={status.label}
+                    statusTone={status.tone}
+                    className={
                       String(progressCourse) === String(courseId)
                         ? "ring-2 ring-nuwa-base/25"
                         : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-base font-bold leading-6 text-ink">
-                          {String(title)}
-                        </h3>
-                        {subject !== undefined &&
-                          subject !== null &&
-                          String(subject).trim() && (
-                            <p className="mt-1 text-xs font-medium text-ink-muted">
-                              {String(subject)}
-                            </p>
-                          )}
-                      </div>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${status.tone}`}
-                      >
-                        {status.label}
-                      </span>
-                    </div>
-                    {teacherName !== undefined &&
-                      teacherName !== null &&
-                      String(teacherName).trim() && (
-                        <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted">
-                          المعلم:{" "}
-                          <span className="font-semibold text-ink">
-                            {String(teacherName)}
+                    }
+                    footer={
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-ink-muted">
+                            تقدمك في الدورة
                           </span>
-                        </p>
-                      )}
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-ink-muted">
-                          تقدمك في الدورة
-                        </span>
-                        <span className="font-bold tabular-nums text-ink">
-                          <AnimatedNumber value={`${Math.round(percent)}%`} />
-                        </span>
-                      </div>
-                      <div
-                        className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
-                        role="progressbar"
-                        aria-label={`التقدم في دورة ${String(title)}`}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={Math.round(percent)}
-                      >
-                        <AnimatedBar
-                          className="h-full rounded-full bg-nuwa-base"
-                          value={percent}
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-auto pt-5">
-                      {canLearn ? (
-                        <button
-                          type="button"
-                          disabled={progressLoading}
-                          onClick={() =>
-                            void openProgress(String(courseId), course)
-                          }
-                          className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep disabled:cursor-wait disabled:opacity-60"
+                          <span className="font-bold tabular-nums text-ink">
+                            <AnimatedNumber value={`${Math.round(percent)}%`} />
+                          </span>
+                        </div>
+                        <div
+                          className="mt-2 h-2 overflow-hidden rounded-full bg-nuwa-soft"
+                          role="progressbar"
+                          aria-label={`التقدم في دورة ${String(title)}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(percent)}
                         >
-                          {progressLoading &&
-                          String(progressCourse) === String(courseId)
-                            ? "جارٍ فتح الدورة..."
-                            : "متابعة التعلم"}
-                        </button>
-                      ) : (
-                        <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-center text-xs leading-5 text-amber-900">
-                          {status.canLearn
-                            ? "لا يتوفر معرّف الدورة لفتح محتواها."
-                            : "ستتمكن من متابعة المحتوى بعد اعتماد طلبك من المعلم."}
-                        </p>
-                      )}
-                    </div>
-                  </article>
+                          <AnimatedBar
+                            className="h-full rounded-full bg-nuwa-base"
+                            value={percent}
+                          />
+                        </div>
+                      </div>
+                    }
+                  >
+                    {canLearn ? (
+                      <button
+                        type="button"
+                        disabled={progressLoading}
+                        onClick={() =>
+                          void openProgress(String(courseId), course)
+                        }
+                        className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {progressLoading &&
+                        String(progressCourse) === String(courseId)
+                          ? "جارٍ فتح الدورة..."
+                          : "متابعة التعلم"}
+                      </button>
+                    ) : (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-center text-xs leading-5 text-amber-900">
+                        {status.canLearn
+                          ? "لا يتوفر معرّف الدورة لفتح محتواها."
+                          : "ستتمكن من متابعة المحتوى بعد اعتماد طلبك من المعلم."}
+                      </p>
+                    )}
+                  </CourseCard>
                 )
               })}
             </div>
