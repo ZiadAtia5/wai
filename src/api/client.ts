@@ -93,8 +93,6 @@ export async function apiRequest<T>(
 
   const baseUrl = getApiBaseUrl()
 
-  const method = (requestOptions.method || "GET").toUpperCase()
-
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new ApiError("مسار الطلب غير صالح.")
   }
@@ -107,14 +105,17 @@ export async function apiRequest<T>(
     apiUrlObject.hostname === "localhost" ||
     apiUrlObject.hostname === "127.0.0.1"
 
-  // يمنع الاتصال غير المشفّر فقط إذا كان الـ API سيرفر خارجي (ليس localhost) وليس طلب GET
+  if (isApiLocalhost && import.meta.env.PROD) {
+    throw new ApiError("إعداد الخادم المحلي غير مسموح في بيئة الإنتاج.")
+  }
+
+  // لا تسمح بإرسال أي بيانات أو رموز جلسات إلى API خارجي عبر اتصال غير مشفر.
 
   if (
     apiUrlObject.protocol !== "https:" &&
-    !isApiLocalhost &&
-    !["GET", "HEAD", "OPTIONS"].includes(method)
+    !isApiLocalhost
   ) {
-    throw new ApiError("تم إيقاف إرسال البيانات لأن اتصال الخادم غير مشفر.")
+    throw new ApiError("تم إيقاف الاتصال لأن اتصال الخادم غير مشفر.")
   }
 
   const controller = new AbortController()
@@ -161,6 +162,8 @@ export async function apiRequest<T>(
         clearAuthToken()
 
         window.sessionStorage.removeItem("eduhub.auth.role")
+        window.sessionStorage.removeItem("eduhub.auth.name")
+        window.sessionStorage.removeItem("eduhub.auth.image")
 
         window.dispatchEvent(new Event("eduhub:auth-expired"))
       }
