@@ -1,42 +1,52 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Clock3,
+  LoaderCircle,
   MessageCircle,
+  RefreshCw,
   Star,
-} from "lucide-react"
+} from "lucide-react";
 
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion";
 
-import { resolveApiAssetUrl } from "../../../api/client"
+import { getAuthToken, resolveApiImageUrl } from "../../../api/client";
 
-import { getPublicCourses } from "../../../api/catalog"
+import { getPublicCourses } from "../../../api/catalog";
+import { studentsApi } from "../../../api/endpoints";
 
-import CourseEnrollmentContactDialog from "../../../components/dashboard/CourseEnrollmentContactDialog"
+import CourseEnrollmentContactDialog from "../../../components/dashboard/CourseEnrollmentContactDialog";
 
-import CourseMetadataBadges from "../../../components/CourseMetadataBadges"
+import CourseMetadataBadges from "../../../components/CourseMetadataBadges";
 
-import CourseTeacherAvatar from "../../../components/CourseTeacherAvatar"
+import CourseTeacherAvatar from "../../../components/CourseTeacherAvatar";
 
-import ApiQueryState from "../../../components/ApiQueryState"
+import ApiQueryState from "../../../components/ApiQueryState";
 
-import type { NavigateFn } from "../../../types"
+import type { NavigateFn } from "../../../types";
 
-import type { LandingCatalogSummary } from "../types"
+import type { LandingCatalogSummary } from "../types";
 
-import { CourseGridSkeleton } from "./LandingSkeletons"
+import { CourseGridSkeleton } from "./LandingSkeletons";
 
-import { formatEgp } from "../../../utils/currency"
+import { formatEgp } from "../../../utils/currency";
+import {
+  enrollmentCourseId,
+  enrollmentRecords,
+  enrollmentStatus,
+  type CourseEnrollmentStatus,
+} from "../../../utils/courseEnrollments";
 
-const COURSES_PER_PAGE = 3
+const COURSES_PER_PAGE = 3;
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : {}
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 export default function FeaturedCoursesSection({
@@ -50,64 +60,132 @@ export default function FeaturedCoursesSection({
 
   navigate,
 }: {
-  data?: LandingCatalogSummary
+  data?: LandingCatalogSummary;
 
-  loading: boolean
+  loading: boolean;
 
-  error: string | null
+  error: string | null;
 
-  onRetry: () => void
+  onRetry: () => void;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [courses, setCourses] = useState<Record<string, unknown>[]>([])
+  const [courses, setCourses] = useState<Record<string, unknown>[]>([]);
 
-  const [coursesLoading, setCoursesLoading] = useState(false)
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
-  const [coursesError, setCoursesError] = useState<string | null>(null)
+  const [coursesError, setCoursesError] = useState<string | null>(null);
 
-  const [pageReloadKey, setPageReloadKey] = useState(0)
+  const isStudentViewer = Boolean(
+    getAuthToken() &&
+    (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+      .toLowerCase()
+      .includes("student"),
+  );
 
-  const [contactCourse, setContactCourse] =
-    useState<Record<string, unknown> | null>(null)
+  const [courseEnrollmentStatuses, setCourseEnrollmentStatuses] = useState<
+    Map<string, CourseEnrollmentStatus>
+  >(() => new Map());
 
-  const reduce = !!useReducedMotion()
+  const [enrollmentsChecked, setEnrollmentsChecked] = useState(
+    () => !isStudentViewer,
+  );
 
-  const closeContactDialog = useCallback(() => setContactCourse(null), [])
+  const [enrollmentCheckFailed, setEnrollmentCheckFailed] = useState(false);
+
+  const [enrollmentReloadKey, setEnrollmentReloadKey] = useState(0);
+
+  const [pageReloadKey, setPageReloadKey] = useState(0);
+
+  const [contactCourse, setContactCourse] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+
+  const reduce = !!useReducedMotion();
+
+  const closeContactDialog = useCallback(() => setContactCourse(null), []);
+
+  const refreshEnrollmentStatus = useCallback(() => {
+    setEnrollmentReloadKey((key) => key + 1);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isStudentViewer) {
+      setCourseEnrollmentStatuses(new Map());
+      setEnrollmentsChecked(true);
+      setEnrollmentCheckFailed(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setEnrollmentsChecked(false);
+    setEnrollmentCheckFailed(false);
+
+    studentsApi
+      .enrollments({ page: 1, pageSize: 100 })
+      .then((response) => {
+        if (!active) return;
+
+        const statuses = new Map<string, CourseEnrollmentStatus>();
+
+        for (const enrollment of enrollmentRecords(response)) {
+          const courseId = enrollmentCourseId(enrollment);
+          if (courseId) statuses.set(courseId, enrollmentStatus(enrollment));
+        }
+
+        setCourseEnrollmentStatuses(statuses);
+      })
+      .catch(() => {
+        if (active) {
+          setCourseEnrollmentStatuses(new Map());
+          setEnrollmentCheckFailed(true);
+        }
+      })
+      .finally(() => {
+        if (active) setEnrollmentsChecked(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [enrollmentReloadKey, isStudentViewer]);
 
   const totalPages = Math.max(
     1,
 
     Math.ceil((data?.courseCount ?? 0) / COURSES_PER_PAGE),
-  )
+  );
 
   useEffect(() => {
-    if (!data) return
+    if (!data) return;
 
     if (page === 1) {
-      setCourses(data.featured.map(record).slice(0, COURSES_PER_PAGE))
+      setCourses(data.featured.map(record).slice(0, COURSES_PER_PAGE));
 
-      setCoursesError(null)
+      setCoursesError(null);
 
-      setCoursesLoading(false)
+      setCoursesLoading(false);
 
-      return
+      return;
     }
 
-    let active = true
+    let active = true;
 
-    setCourses([])
+    setCourses([]);
 
-    setCoursesLoading(true)
+    setCoursesLoading(true);
 
-    setCoursesError(null)
+    setCoursesError(null);
 
     getPublicCourses(page, COURSES_PER_PAGE)
-
       .then((result) => {
-        if (active) setCourses(result.items.map(record))
+        if (active) setCourses(result.items.map(record));
       })
 
       .catch((cause: unknown) => {
@@ -116,27 +194,27 @@ export default function FeaturedCoursesSection({
             cause instanceof Error
               ? cause.message
               : "تعذر تحميل الدورات المطلوبة.",
-          )
+          );
         }
       })
 
       .finally(() => {
-        if (active) setCoursesLoading(false)
-      })
+        if (active) setCoursesLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [data, page, pageReloadKey])
+      active = false;
+    };
+  }, [data, page, pageReloadKey]);
 
   const pageNumbers = (() => {
     if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1)
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
     }
 
-    const start = Math.max(2, Math.min(page - 1, totalPages - 3))
+    const start = Math.max(2, Math.min(page - 1, totalPages - 3));
 
-    const end = Math.min(totalPages - 1, Math.max(page + 1, 4))
+    const end = Math.min(totalPages - 1, Math.max(page + 1, 4));
 
     return [
       1,
@@ -148,8 +226,8 @@ export default function FeaturedCoursesSection({
       ...(end < totalPages - 1 ? ["end-gap" as const] : []),
 
       totalPages,
-    ]
-  })()
+    ];
+  })();
 
   // one quiet fade-in when an element first scrolls into view, nothing else
 
@@ -170,7 +248,7 @@ export default function FeaturedCoursesSection({
 
             ease: [0.22, 1, 0.36, 1] as const,
           },
-        }
+        };
 
   return (
     <section className="relative isolate overflow-hidden bg-white py-16 sm:py-20">
@@ -233,15 +311,27 @@ export default function FeaturedCoursesSection({
           {data && (
             <div className="mt-9 grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
               {courses.map((course, index) => {
-                const courseId = course.id ?? course.courseId
+                const courseId = course.id ?? course.courseId;
+                const courseIdString =
+                  courseId === undefined || courseId === null
+                    ? ""
+                    : String(courseId);
+                const enrollmentStatus =
+                  courseEnrollmentStatuses.get(courseIdString);
+                const isApproved = enrollmentStatus === "approved";
+                const isPending = enrollmentStatus === "pending";
+                const isCheckingEnrollment =
+                  isStudentViewer && !enrollmentsChecked;
+                const isEnrollmentCheckFailed =
+                  isStudentViewer && enrollmentCheckFailed;
 
                 const cover =
                   typeof course.coverImageUrl === "string"
-                    ? resolveApiAssetUrl(course.coverImageUrl)
-                    : ""
+                    ? resolveApiImageUrl(course.coverImageUrl, 800)
+                    : "";
 
                 const subjectName =
-                  course.subjectName == null ? "" : String(course.subjectName)
+                  course.subjectName == null ? "" : String(course.subjectName);
 
                 return (
                   <motion.article
@@ -257,6 +347,8 @@ export default function FeaturedCoursesSection({
                           alt=""
                           loading="lazy"
                           decoding="async"
+                          width={800}
+                          height={450}
                           className="absolute inset-0 size-full object-cover"
                         />
                       ) : (
@@ -340,36 +432,86 @@ export default function FeaturedCoursesSection({
                             </span>
                           </div>
                         </div>
-                        <div className="grid gap-2">
-                          <button
-                            type="button"
-                            disabled={courseId == null}
-                            onClick={() => setContactCourse(course)}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-nuwa-base px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default"
-                          >
-                            <MessageCircle size={15} aria-hidden="true" />
-                            طلب الالتحاق بالدورة
-                          </button>
+                        {isApproved ? (
                           <button
                             type="button"
                             disabled={courseId == null}
                             onClick={() => {
                               if (courseId != null) {
                                 navigate("public:course-detail", {
-                                  courseId: String(courseId),
-                                })
+                                  courseId: courseIdString,
+                                });
                               }
                             }}
-                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-nuwa-soft px-3 py-2 text-xs font-bold text-nuwa-deep transition-[transform,background-color,color] duration-300 ease-out hover:bg-nuwa-base hover:text-white hover:shadow-md hover:shadow-emerald-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default"
+                            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-nuwa-base px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-nuwa-base/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-60"
                           >
-                            التفاصيل
-                            <ArrowLeft size={13} aria-hidden="true" />
+                            <BookOpen size={16} aria-hidden="true" />
+                            متابعة التقدم
                           </button>
-                        </div>
+                        ) : (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              disabled={
+                                courseId == null || isCheckingEnrollment
+                              }
+                              onClick={() => {
+                                if (isEnrollmentCheckFailed) {
+                                  setEnrollmentReloadKey((key) => key + 1);
+                                } else {
+                                  setContactCourse(course);
+                                }
+                              }}
+                              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default disabled:opacity-70 ${
+                                isEnrollmentCheckFailed
+                                  ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                  : isPending
+                                    ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                    : "border-transparent bg-nuwa-base text-white shadow-sm hover:-translate-y-0.5 hover:bg-nuwa-deep"
+                              }`}
+                            >
+                              {isEnrollmentCheckFailed ? (
+                                <RefreshCw size={15} aria-hidden="true" />
+                              ) : isCheckingEnrollment ? (
+                                <LoaderCircle
+                                  size={15}
+                                  className="animate-spin"
+                                  aria-hidden="true"
+                                />
+                              ) : isPending ? (
+                                <Clock3 size={15} aria-hidden="true" />
+                              ) : (
+                                <MessageCircle size={15} aria-hidden="true" />
+                              )}
+                              {isEnrollmentCheckFailed
+                                ? "إعادة التحقق من الاشتراك"
+                                : isCheckingEnrollment
+                                  ? "جارٍ التحقق من الاشتراك..."
+                                  : isPending
+                                    ? "طلبك قيد المراجعة"
+                                    : "طلب الالتحاق بالدورة"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={courseId == null}
+                              onClick={() => {
+                                if (courseId != null) {
+                                  navigate("public:course-detail", {
+                                    courseId: courseIdString,
+                                  });
+                                }
+                              }}
+                              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-nuwa-soft px-3 py-2.5 text-xs font-bold text-nuwa-deep transition-[transform,background-color,color] duration-300 ease-out hover:bg-nuwa-base hover:text-white hover:shadow-md hover:shadow-emerald-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-default"
+                            >
+                              التفاصيل
+                              <ArrowLeft size={13} aria-hidden="true" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.article>
-                )
+                );
               })}
             </div>
           )}
@@ -459,8 +601,16 @@ export default function FeaturedCoursesSection({
           course={contactCourse}
           onClose={closeContactDialog}
           navigate={navigate}
+          isPending={
+            contactCourse !== null &&
+            courseEnrollmentStatuses.get(
+              String(contactCourse.id ?? contactCourse.courseId),
+            ) === "pending"
+          }
+          onEnrollmentRequested={refreshEnrollmentStatus}
+          onEnrollmentCancelled={refreshEnrollmentStatus}
         />
       </div>
     </section>
-  )
+  );
 }

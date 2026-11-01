@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react";
 
 import {
   ArrowLeft,
@@ -6,16 +6,14 @@ import {
   GraduationCap,
   Search,
   UsersRound,
-} from "lucide-react"
+} from "lucide-react";
 
-import { motion, useReducedMotion } from "framer-motion"
-import { Skeleton } from "../../../components/Skeleton"
+import { motion, useReducedMotion } from "framer-motion";
+import { Skeleton } from "../../../components/Skeleton";
 
-import type { NavigateFn } from "../../../types"
+import type { NavigateFn } from "../../../types";
 
-import studentHeroImage from "../../../assets/student-hero.jpg"
-
-import type { LandingCatalogSummary } from "../types"
+import type { LandingCatalogSummary } from "../types";
 
 export default function LandingHeroSection({
   navigate,
@@ -23,19 +21,19 @@ export default function LandingHeroSection({
   data,
   loading,
 }: {
-  navigate: NavigateFn
+  navigate: NavigateFn;
 
-  data?: LandingCatalogSummary
-  loading: boolean
+  data?: LandingCatalogSummary;
+  loading: boolean;
 }) {
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState("");
 
-  const reduce = !!useReducedMotion()
+  const reduce = !!useReducedMotion();
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    navigate("public:courses", { search: search.trim() })
+    navigate("public:courses", { search: search.trim() });
   }
 
   return (
@@ -92,19 +90,23 @@ export default function LandingHeroSection({
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-ink-muted">
             <span className="inline-flex items-center gap-1.5">
               <BookOpen size={15} className="text-nuwa-base" />
-              {loading
-                ? <Skeleton className="h-4 w-28" />
-                : data
-                ? `${data.courseCount.toLocaleString("ar-EG")} دورة تعليمية`
-                : "دورات متنوعة"}
+              {loading ? (
+                <Skeleton className="h-4 w-28" />
+              ) : data ? (
+                `${data.courseCount.toLocaleString("ar-EG")} دورة تعليمية`
+              ) : (
+                "دورات متنوعة"
+              )}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <UsersRound size={15} className="text-nuwa-base" />
-              {loading
-                ? <Skeleton className="h-4 w-24" />
-                : data
-                ? `${data.teacherCount.toLocaleString("ar-EG")} معلمون`
-                : "معلمون متخصصون"}
+              {loading ? (
+                <Skeleton className="h-4 w-24" />
+              ) : data ? (
+                `${data.teacherCount.toLocaleString("ar-EG")} معلمون`
+              ) : (
+                "معلمون متخصصون"
+              )}
             </span>
           </div>
         </motion.div>
@@ -125,10 +127,13 @@ export default function LandingHeroSection({
           />
           <div className="relative mx-auto aspect-[1.13/1] w-[88%] overflow-hidden rounded-[46%_46%_24px_24px] bg-nuwa-soft shadow-[0_32px_70px_-38px_rgba(11,59,37,.55)]">
             <img
-              src={studentHeroImage}
+              src="/student-hero.webp"
               alt="طالب يراجع دروسه"
               className="size-full object-cover object-center"
               fetchPriority="high"
+              decoding="async"
+              width={1280}
+              height={764}
             />
             <div
               aria-hidden="true"
@@ -161,5 +166,5 @@ export default function LandingHeroSection({
         </motion.div>
       </div>
     </section>
-  )
+  );
 }

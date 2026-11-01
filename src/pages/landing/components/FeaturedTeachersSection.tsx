@@ -1,23 +1,23 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion";
 
-import { resolveApiAssetUrl } from "../../../api/client"
+import { resolveApiImageUrl } from "../../../api/client";
 
-import { getPublicTeachers } from "../../../api/catalog"
+import { getPublicTeachers } from "../../../api/catalog";
 
-import type { NavigateFn } from "../../../types"
+import type { NavigateFn } from "../../../types";
 
-import { TeacherCardSkeleton } from "./LandingSkeletons"
+import { TeacherCardSkeleton } from "./LandingSkeletons";
 
-const TEACHERS_PER_PAGE = 3
+const TEACHERS_PER_PAGE = 3;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : {}
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function teacherName(record: Record<string, unknown>): string {
@@ -25,9 +25,9 @@ function teacherName(record: Record<string, unknown>): string {
     record.fullName ??
     record.name ??
     record.displayName ??
-    [record.firstName, record.lastName].filter(Boolean).join(" ")
+    [record.firstName, record.lastName].filter(Boolean).join(" ");
 
-  return typeof name === "string" && name.trim() ? name.trim() : "معلم وَعي"
+  return typeof name === "string" && name.trim() ? name.trim() : "معلم وَعي";
 }
 
 function TeacherCard({
@@ -35,17 +35,17 @@ function TeacherCard({
 
   navigate,
 }: {
-  record: Record<string, unknown>
+  record: Record<string, unknown>;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }) {
-  const [imageFailed, setImageFailed] = useState(false)
+  const [imageFailed, setImageFailed] = useState(false);
 
-  const id = record.id ?? record.teacherId
+  const id = record.id ?? record.teacherId;
 
-  const name = teacherName(record)
+  const name = teacherName(record);
 
-  const avatar = asRecord(record.avatar)
+  const avatar = asRecord(record.avatar);
 
   const imageCandidate =
     record.avatarUrl ??
@@ -55,41 +55,44 @@ function TeacherCard({
     record.imageUrl ??
     (typeof record.avatar === "string" ? record.avatar : undefined) ??
     avatar.url ??
-    avatar.src
+    avatar.src;
 
-  const imageUrl = typeof imageCandidate === "string" ? imageCandidate : ""
+  const imageUrl = typeof imageCandidate === "string" ? imageCandidate : "";
 
-  const imageSrc = imageUrl && !imageFailed ? resolveApiAssetUrl(imageUrl) : ""
+  const imageSrc =
+    imageUrl && !imageFailed ? resolveApiImageUrl(imageUrl, 800) : "";
 
-  const rawSubjects = record.subjects ?? record.teachingSubjects
+  const rawSubjects = record.subjects ?? record.teachingSubjects;
 
   const subjects = Array.isArray(rawSubjects)
     ? rawSubjects
 
         .map((subject) => {
-          const value = asRecord(subject)
+          const value = asRecord(subject);
 
-          return String(value.name ?? value.subjectName ?? subject ?? "").trim()
+          return String(
+            value.name ?? value.subjectName ?? subject ?? "",
+          ).trim();
         })
 
         .filter(Boolean)
-    : []
+    : [];
 
   const primarySubject =
     record.subjectName ??
     record.subject ??
     record.specialization ??
-    record.specialty
+    record.specialty;
 
-  if (primarySubject) subjects.unshift(String(primarySubject))
+  if (primarySubject) subjects.unshift(String(primarySubject));
 
-  const uniqueSubjects = [...new Set(subjects)]
+  const uniqueSubjects = [...new Set(subjects)];
 
   const description = String(
     record.bio ??
       record.description ??
       "خبرة تعليمية تساعدك على الفهم والتقدم بثقة.",
-  )
+  );
 
   return (
     <button
@@ -106,6 +109,8 @@ function TeacherCard({
             alt={name}
             loading="lazy"
             decoding="async"
+            width={800}
+            height={1000}
             onError={() => setImageFailed(true)}
             className="size-full object-cover"
           />
@@ -160,7 +165,7 @@ function TeacherCard({
         </span>
       </div>
     </button>
-  )
+  );
 }
 
 export default function FeaturedTeachersSection({
@@ -172,57 +177,56 @@ export default function FeaturedTeachersSection({
 
   navigate,
 }: {
-  teachers: unknown[]
+  teachers: unknown[];
 
-  teacherCount: number
+  teacherCount: number;
 
-  loading: boolean
+  loading: boolean;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 }) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [pageTeachers, setPageTeachers] = useState<unknown[] | null>(null)
+  const [pageTeachers, setPageTeachers] = useState<unknown[] | null>(null);
 
-  const [pageLoading, setPageLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(false);
 
-  const [pageError, setPageError] = useState<string | null>(null)
+  const [pageError, setPageError] = useState<string | null>(null);
 
-  const [reloadKey, setReloadKey] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const totalPages = Math.max(1, Math.ceil(teacherCount / TEACHERS_PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(teacherCount / TEACHERS_PER_PAGE));
 
   const visibleTeachers = (pageTeachers ?? teachers).slice(
     0,
 
     TEACHERS_PER_PAGE,
-  )
+  );
 
-  const reduce = !!useReducedMotion()
+  const reduce = !!useReducedMotion();
 
   useEffect(() => {
     if (page === 1) {
-      setPageTeachers(null)
+      setPageTeachers(null);
 
-      setPageError(null)
+      setPageError(null);
 
-      setPageLoading(false)
+      setPageLoading(false);
 
-      return
+      return;
     }
 
-    let active = true
+    let active = true;
 
-    setPageTeachers(null)
+    setPageTeachers(null);
 
-    setPageLoading(true)
+    setPageLoading(true);
 
-    setPageError(null)
+    setPageError(null);
 
     getPublicTeachers(page, TEACHERS_PER_PAGE)
-
       .then((result) => {
-        if (active) setPageTeachers(result.items)
+        if (active) setPageTeachers(result.items);
       })
 
       .catch((cause: unknown) => {
@@ -231,31 +235,31 @@ export default function FeaturedTeachersSection({
             cause instanceof Error
               ? cause.message
               : "تعذر تحميل قائمة المعلمين.",
-          )
+          );
         }
       })
 
       .finally(() => {
-        if (active) setPageLoading(false)
-      })
+        if (active) setPageLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [page, reloadKey])
+      active = false;
+    };
+  }, [page, reloadKey]);
 
   useEffect(() => {
-    if (page > totalPages) setPage(Math.max(1, totalPages))
-  }, [page, totalPages])
+    if (page > totalPages) setPage(Math.max(1, totalPages));
+  }, [page, totalPages]);
 
-  const isLoading = loading || pageLoading
+  const isLoading = loading || pageLoading;
 
   const gridLayout =
     isLoading || visibleTeachers.length > 2
       ? "lg:grid-cols-3"
       : visibleTeachers.length === 2
         ? "lg:mx-auto lg:max-w-4xl lg:grid-cols-2"
-        : "lg:mx-auto lg:max-w-sm lg:grid-cols-1"
+        : "lg:mx-auto lg:max-w-sm lg:grid-cols-1";
 
   const pageNumbers =
     totalPages <= 7
@@ -263,7 +267,7 @@ export default function FeaturedTeachersSection({
       : [
           1,
 
-          ...(page > 3 ? ["start-gap"] as const : []),
+          ...(page > 3 ? (["start-gap"] as const) : []),
 
           ...Array.from(
             { length: Math.min(3, totalPages - 2) },
@@ -272,12 +276,12 @@ export default function FeaturedTeachersSection({
               Math.max(2, Math.min(page - 1, totalPages - 3)) + index,
           ),
 
-          ...(page < totalPages - 2 ? ["end-gap"] as const : []),
+          ...(page < totalPages - 2 ? (["end-gap"] as const) : []),
 
           totalPages,
-        ]
+        ];
 
-  if (!isLoading && visibleTeachers.length === 0 && !pageError) return null
+  if (!isLoading && visibleTeachers.length === 0 && !pageError) return null;
 
   return (
     <section className="border-y border-stroke bg-[#f5f8f5] py-14 sm:py-16">
@@ -328,7 +332,7 @@ export default function FeaturedTeachersSection({
           {isLoading
             ? [0, 1, 2].map((item) => <TeacherCardSkeleton key={item} />)
             : visibleTeachers.map((item, index) => {
-                const record = asRecord(item)
+                const record = asRecord(item);
 
                 return (
                   <TeacherCard
@@ -336,7 +340,7 @@ export default function FeaturedTeachersSection({
                     record={record}
                     navigate={navigate}
                   />
-                )
+                );
               })}
         </div>
         {pageError && (
@@ -413,5 +417,5 @@ export default function FeaturedTeachersSection({
         )}
       </div>
     </section>
-  )
+  );
 }

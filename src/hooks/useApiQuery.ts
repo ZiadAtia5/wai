@@ -1,18 +1,24 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { ApiError } from "../api/client"
+import { ApiError } from "../api/client";
 
 interface QueryState<T> {
-  data: T | null
+  data: T | null;
 
-  error: string | null
+  error: string | null;
 
-  loading: boolean
+  loading: boolean;
 
-  cacheKey?: string
+  cacheKey?: string;
 }
 
-const queryCache = new Map<string, unknown>()
+const queryCache = new Map<string, unknown>();
+let queryCacheGeneration = 0;
+
+export function clearApiQueryCache(): void {
+  queryCache.clear();
+  queryCacheGeneration += 1;
+}
 
 export function useApiQuery<T>(
   load: () => Promise<T>,
@@ -26,7 +32,7 @@ export function useApiQuery<T>(
   const [state, setState] = useState<QueryState<T>>({
     data:
       cacheKey && queryCache.has(cacheKey)
-        ? queryCache.get(cacheKey) as T
+        ? (queryCache.get(cacheKey) as T)
         : null,
 
     error: null,
@@ -34,13 +40,14 @@ export function useApiQuery<T>(
     loading: !cacheKey || !queryCache.has(cacheKey),
 
     cacheKey,
-  })
+  });
 
   useEffect(() => {
-    let active = true
-    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey))
+    let active = true;
+    const cacheGeneration = queryCacheGeneration;
+    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey));
     const cachedData =
-      hasCachedData && cacheKey ? queryCache.get(cacheKey) as T : null
+      hasCachedData && cacheKey ? (queryCache.get(cacheKey) as T) : null;
 
     setState((current) => ({
       data: hasCachedData
@@ -56,22 +63,23 @@ export function useApiQuery<T>(
       loading: !hasCachedData,
 
       cacheKey,
-    }))
+    }));
 
     load()
-
       .then((data) => {
-        if (cacheKey) queryCache.set(cacheKey, data)
-        if (active) setState({ data, error: null, loading: false, cacheKey })
+        if (!active || cacheGeneration !== queryCacheGeneration) return;
+
+        if (cacheKey) queryCache.set(cacheKey, data);
+        setState({ data, error: null, loading: false, cacheKey });
       })
 
       .catch((error: unknown) => {
-        if (!active) return
+        if (!active) return;
 
         const message =
           error instanceof ApiError
             ? error.message
-            : "تعذر تحميل البيانات حاول مرة آخري."
+            : "تعذر تحميل البيانات حاول مرة آخري.";
 
         setState((current) => ({
           data: hasCachedData
@@ -85,22 +93,22 @@ export function useApiQuery<T>(
           loading: false,
 
           cacheKey,
-        }))
-      })
+        }));
+      });
 
     return () => {
-      active = false
-    }
-  }, [cacheKey, load, reloadKey])
+      active = false;
+    };
+  }, [cacheKey, load, reloadKey]);
 
   if (state.cacheKey !== cacheKey) {
-    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey))
+    const hasCachedData = Boolean(cacheKey && queryCache.has(cacheKey));
     return {
-      data: hasCachedData && cacheKey ? queryCache.get(cacheKey) as T : null,
+      data: hasCachedData && cacheKey ? (queryCache.get(cacheKey) as T) : null,
       error: null,
       loading: !hasCachedData,
-    }
+    };
   }
 
-  return state
+  return state;
 }

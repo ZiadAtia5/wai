@@ -1,83 +1,86 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
-import { AnimatePresence, MotionConfig } from "framer-motion"
+import { AnimatePresence, MotionConfig } from "framer-motion";
 
-import { getAuthToken } from "./api/client"
-import AuthPage from "./pages/AuthPage"
+import { getAuthToken } from "./api/client";
+import { clearApiQueryCache } from "./hooks/useApiQuery";
+import { clearPendingEnrollments } from "./utils/pendingEnrollments";
 
-import type { NavigateFn, View } from "./types"
+import type { NavigateFn, View } from "./types";
 
-import PublicNavbar from "./components/layout/PublicNavbar"
+import PublicNavbar from "./components/layout/PublicNavbar";
 
-import PlatformFooter from "./components/layout/PlatformFooter"
-import PageTransition from "./components/motion/PageTransition"
-import { PublicCatalogPageSkeleton } from "./components/loading/SkeletonLayouts"
-import { LandingPageSkeleton } from "./pages/landing/components/LandingSkeletons"
+import PlatformFooter from "./components/layout/PlatformFooter";
+import PageTransition from "./components/motion/PageTransition";
+import { PublicCatalogPageSkeleton } from "./components/loading/SkeletonLayouts";
+import { LandingPageSkeleton } from "./pages/landing/components/LandingSkeletons";
 
-const LandingPage = lazy(() => import("./pages/landing/LandingPage"))
+const LandingPage = lazy(() => import("./pages/landing/LandingPage"));
 
-const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"))
+const AuthPage = lazy(() => import("./pages/AuthPage"));
 
-const CourseDetailsPage = lazy(() => import("./pages/CourseDetailsPage"))
+const PublicCoursesPage = lazy(() => import("./pages/PublicCoursesPage"));
 
-const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"))
+const CourseDetailsPage = lazy(() => import("./pages/CourseDetailsPage"));
 
-const TeacherPlatformPage = lazy(() => import("./pages/TeacherPlatformPage"))
+const PublicTeachersPage = lazy(() => import("./pages/PublicTeachersPage"));
 
-const DashboardPage = lazy(() => import("./pages/DashboardPage"))
+const TeacherPlatformPage = lazy(() => import("./pages/TeacherPlatformPage"));
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 
 function PublicPageFallback({
   kind = "course",
   catalog = false,
   landing = false,
 }: {
-  kind?: "course" | "person"
-  catalog?: boolean
-  landing?: boolean
+  kind?: "course" | "person";
+  catalog?: boolean;
+  landing?: boolean;
 }) {
   if (landing) {
-    return <LandingPageSkeleton />
+    return <LandingPageSkeleton />;
   }
 
   if (catalog) {
-    return <PublicCatalogPageSkeleton kind={kind} />
+    return <PublicCatalogPageSkeleton kind={kind} />;
   }
 
-  return null
+  return null;
 }
 
 function pageDirection(from: View, to: View): -1 | 0 | 1 {
-  if (from === "public:courses" && to === "public:course-detail") return 1
-  if (from === "public:course-detail" && to === "public:courses") return -1
-  return 0
+  if (from === "public:courses" && to === "public:course-detail") return 1;
+  if (from === "public:course-detail" && to === "public:courses") return -1;
+  return 0;
 }
 
 interface TeacherRoute {
-  teacherId: string
+  teacherId: string;
 
-  courseId: string | null
+  courseId: string | null;
 }
 
 function teacherRouteFromPath(pathname: string): TeacherRoute | null {
   const match = pathname.match(
     /(?:^|\/)teacher\/([^/]+)(?:\/course\/([^/]+))?\/?$/i,
-  )
+  );
 
-  if (!match) return null
+  if (!match) return null;
 
   const decodeSegment = (value: string) => {
     try {
-      return decodeURIComponent(value)
+      return decodeURIComponent(value);
     } catch {
-      return value
+      return value;
     }
-  }
+  };
 
   return {
     teacherId: decodeSegment(match[1]),
 
     courseId: match[2] ? decodeSegment(match[2]) : null,
-  }
+  };
 }
 
 function appBasePath(): string {
@@ -85,24 +88,26 @@ function appBasePath(): string {
     import.meta.env.BASE_URL,
 
     window.location.origin,
-  ).pathname.replace(/\/+$/, "")
+  ).pathname.replace(/\/+$/, "");
 }
 
 export default function App() {
   const [teacherRoute, setTeacherRoute] = useState<TeacherRoute | null>(() =>
     teacherRouteFromPath(window.location.pathname),
-  )
+  );
 
-  const teacherId = teacherRoute?.teacherId ?? null
+  const teacherId = teacherRoute?.teacherId ?? null;
 
   const [view, setView] = useState<View>(() => {
     if (teacherRoute) {
-      return teacherRoute.courseId ? "public:course-detail" : "teacher:platform"
+      return teacherRoute.courseId
+        ? "public:course-detail"
+        : "teacher:platform";
     }
 
     const savedView = window.history.state?.waiApp
-      ? window.history.state.view as View | undefined
-      : undefined
+      ? (window.history.state.view as View | undefined)
+      : undefined;
 
     if (
       savedView &&
@@ -124,21 +129,21 @@ export default function App() {
         "dashboard",
       ].includes(savedView)
     ) {
-      return savedView
+      return savedView;
     }
 
     const enrollmentPreview =
       import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get(
         "teacherEnrollmentMock",
-      ) === "1"
+      ) === "1";
 
-    return enrollmentPreview ? "dashboard" : "landing"
-  })
+    return enrollmentPreview ? "dashboard" : "landing";
+  });
 
-  const currentViewRef = useRef(view)
-  currentViewRef.current = view
-  const [transitionDirection, setTransitionDirection] = useState<-1 | 0 | 1>(0)
+  const currentViewRef = useRef(view);
+  currentViewRef.current = view;
+  const [transitionDirection, setTransitionDirection] = useState<-1 | 0 | 1>(0);
 
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
     () =>
@@ -147,19 +152,39 @@ export default function App() {
       typeof window.history.state.selectedCourseId === "string"
         ? window.history.state.selectedCourseId
         : null),
-  )
+  );
 
   useEffect(() => {
-    const handleExpiredSession = () => setView("login")
+    const canonicalUrl = new URL(
+      window.location.pathname,
+      window.location.origin,
+    ).toString();
+    const canonical = document.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    );
+    const openGraphUrl = document.querySelector<HTMLMetaElement>(
+      'meta[property="og:url"]',
+    );
 
-    window.addEventListener("eduhub:auth-expired", handleExpiredSession)
+    if (canonical) canonical.href = canonicalUrl;
+    if (openGraphUrl) openGraphUrl.content = canonicalUrl;
+  }, [selectedCourseId, teacherId, view]);
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      clearApiQueryCache();
+      clearPendingEnrollments();
+      setView("login");
+    };
+
+    window.addEventListener("eduhub:auth-expired", handleExpiredSession);
 
     return () =>
-      window.removeEventListener("eduhub:auth-expired", handleExpiredSession)
-  }, [])
+      window.removeEventListener("eduhub:auth-expired", handleExpiredSession);
+  }, []);
 
   useEffect(() => {
-    const current = window.history.state
+    const current = window.history.state;
 
     if (!current?.waiApp) {
       window.history.replaceState(
@@ -168,82 +193,82 @@ export default function App() {
         "",
 
         window.location.href,
-      )
+      );
     }
 
     const restoreAppView = (event: PopStateEvent) => {
-      const state = event.state
-      const currentRoute = teacherRouteFromPath(window.location.pathname)
+      const state = event.state;
+      const currentRoute = teacherRouteFromPath(window.location.pathname);
       const nextView = currentRoute
         ? currentRoute.courseId
           ? "public:course-detail"
           : "teacher:platform"
         : typeof state?.view === "string"
-          ? state.view as View
-          : null
+          ? (state.view as View)
+          : null;
 
       if (nextView) {
-        setTransitionDirection(pageDirection(currentViewRef.current, nextView))
-        currentViewRef.current = nextView
+        setTransitionDirection(pageDirection(currentViewRef.current, nextView));
+        currentViewRef.current = nextView;
       }
 
-      setTeacherRoute(currentRoute)
+      setTeacherRoute(currentRoute);
 
       if (currentRoute) {
         setView(
           currentRoute.courseId ? "public:course-detail" : "teacher:platform",
-        )
+        );
 
-        setSelectedCourseId(currentRoute.courseId)
+        setSelectedCourseId(currentRoute.courseId);
 
-        return
+        return;
       }
 
-      if (!state?.waiApp || typeof state.view !== "string") return
+      if (!state?.waiApp || typeof state.view !== "string") return;
 
-      setView(state.view as View)
+      setView(state.view as View);
 
       setSelectedCourseId(
         typeof state.selectedCourseId === "string"
           ? state.selectedCourseId
           : null,
-      )
-    }
+      );
+    };
 
-    window.addEventListener("popstate", restoreAppView)
+    window.addEventListener("popstate", restoreAppView);
 
-    return () => window.removeEventListener("popstate", restoreAppView)
-  }, [])
+    return () => window.removeEventListener("popstate", restoreAppView);
+  }, []);
 
   const navigate: NavigateFn = (nextView, params) => {
     const targetView =
-      nextView === "dashboard" && !getAuthToken() ? "login" : nextView
+      nextView === "dashboard" && !getAuthToken() ? "login" : nextView;
 
     const targetCourseId =
-      targetView === "public:course-detail" ? (params?.courseId ?? null) : null
+      targetView === "public:course-detail" ? (params?.courseId ?? null) : null;
 
     const targetTeacherId =
       targetView === "teacher:platform"
         ? (params?.teacherId ?? teacherId)
         : targetView === "public:course-detail"
           ? (params?.teacherId ?? teacherId)
-          : null
+          : null;
 
-    const targetSearchParams = new URLSearchParams(window.location.search)
+    const targetSearchParams = new URLSearchParams(window.location.search);
 
     if (
       (targetView === "public:courses" || targetView === "public:teachers") &&
       params?.search !== undefined
     ) {
-      const search = params.search.trim()
+      const search = params.search.trim();
 
-      if (search) targetSearchParams.set("search", search)
-      else targetSearchParams.delete("search")
+      if (search) targetSearchParams.set("search", search);
+      else targetSearchParams.delete("search");
     }
 
     const targetUrlSuffix = `${
       targetSearchParams.size ? `?${targetSearchParams}` : ""
-    }${window.location.hash}`
+    }${window.location.hash}`;
 
     if (
       targetView === view &&
@@ -251,13 +276,13 @@ export default function App() {
       targetTeacherId === teacherId &&
       targetUrlSuffix === `${window.location.search}${window.location.hash}`
     ) {
-      return
+      return;
     }
 
-    setTransitionDirection(pageDirection(view, targetView))
-    currentViewRef.current = targetView
+    setTransitionDirection(pageDirection(view, targetView));
+    currentViewRef.current = targetView;
 
-    const basePath = appBasePath()
+    const basePath = appBasePath();
 
     const targetPath = targetTeacherId
       ? targetView === "public:course-detail" && targetCourseId
@@ -265,7 +290,7 @@ export default function App() {
         : `${basePath}/teacher/${encodeURIComponent(targetTeacherId)}`
       : teacherRoute
         ? `${basePath}/`
-        : window.location.pathname
+        : window.location.pathname;
 
     window.history.pushState(
       { waiApp: true, view: targetView, selectedCourseId: targetCourseId },
@@ -273,18 +298,18 @@ export default function App() {
       "",
 
       `${targetPath}${targetUrlSuffix}`,
-    )
+    );
 
-    setSelectedCourseId(targetCourseId)
+    setSelectedCourseId(targetCourseId);
 
     setTeacherRoute(
       targetTeacherId
         ? { teacherId: targetTeacherId, courseId: targetCourseId }
         : null,
-    )
+    );
 
-    setView(targetView)
-  }
+    setView(targetView);
+  };
 
   return (
     <div
@@ -388,5 +413,5 @@ export default function App() {
         </div>
       </MotionConfig>
     </div>
-  )
+  );
 }

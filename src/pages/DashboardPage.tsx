@@ -6,7 +6,7 @@
   useRef,
   useState,
   type FormEvent,
-} from "react"
+} from "react";
 
 import {
   ArrowUpLeft,
@@ -28,11 +28,14 @@ import {
   UsersRound,
   Users,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { domMax, LazyMotion, m } from "framer-motion"
+import { domMax, LazyMotion, m } from "framer-motion";
 
-import { ApiError, clearAuthToken } from "../api/client"
+import { ApiError, clearAuthToken } from "../api/client";
+import { clearApiQueryCache } from "../hooks/useApiQuery";
+import { clearPendingEnrollments } from "../utils/pendingEnrollments";
+import { enrollmentStatus } from "../utils/courseEnrollments";
 
 import {
   adminApi,
@@ -42,111 +45,113 @@ import {
   subjectsApi,
   teachersApi,
   type PageQuery,
-} from "../api/endpoints"
+} from "../api/endpoints";
 
-import ApiQueryState from "../components/ApiQueryState"
+import ApiQueryState from "../components/ApiQueryState";
 
-import { useConfirmation } from "../components/ConfirmationProvider"
+import { useConfirmation } from "../components/ConfirmationProvider";
 
-import NuwaLogo from "../components/NuwaLogo"
+import NuwaLogo from "../components/NuwaLogo";
 
-import PlatformFooter from "../components/layout/PlatformFooter"
+import PlatformFooter from "../components/layout/PlatformFooter";
 
-import PersonAvatar from "../components/PersonAvatar"
+import PersonAvatar from "../components/PersonAvatar";
 
-import { Skeleton, SkeletonIcon, SkeletonText } from "../components/Skeleton"
+import { Skeleton, SkeletonIcon, SkeletonText } from "../components/Skeleton";
 
 import {
   RecordGridSkeleton,
   StatGridSkeleton,
-} from "../components/loading/SkeletonLayouts"
+} from "../components/loading/SkeletonLayouts";
 
-import { getAcademicYears, type AcademicYearResponse } from "../api/catalog"
+import { getAcademicYears, type AcademicYearResponse } from "../api/catalog";
 
-import RoleForms from "../components/dashboard/RoleForms"
+import RoleForms from "../components/dashboard/RoleForms";
 
-import CourseCard from "../components/CourseCard"
+import CourseCard from "../components/CourseCard";
 
-import CoursePagination from "../components/CoursePagination"
+import CourseEnrollmentContactDialog from "../components/dashboard/CourseEnrollmentContactDialog";
 
-import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests"
+import CoursePagination from "../components/CoursePagination";
 
-import MetricBarChart from "../components/dashboard/MetricBarChart"
+import TeacherEnrollmentRequests from "../components/dashboard/TeacherEnrollmentRequests";
 
-import NotificationDialog from "../components/dashboard/NotificationDialog"
+import MetricBarChart from "../components/dashboard/MetricBarChart";
 
-import AdminSubscriptions from "../components/dashboard/AdminSubscriptions"
+import NotificationDialog from "../components/dashboard/NotificationDialog";
+
+import AdminSubscriptions from "../components/dashboard/AdminSubscriptions";
 
 import {
   AnimatedBar,
   AnimatedNumber,
-} from "../components/dashboard/DashboardMotion"
+} from "../components/dashboard/DashboardMotion";
 
-import { mockTeacherEnrollmentRequests } from "../mocks/teacherEnrollmentRequests"
+import { mockTeacherEnrollmentRequests } from "../mocks/teacherEnrollmentRequests";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { notifyError, notifySuccess } from "../utils/notifications";
 
-import { useApiQuery } from "../hooks/useApiQuery"
+import { useApiQuery } from "../hooks/useApiQuery";
 
 import StudentDetailsCard, {
   fieldLabels,
   FormattedCardValue,
   formatValue,
-} from "../components/dashboard/StudentDetailsCard"
+} from "../components/dashboard/StudentDetailsCard";
 
-import type { NavigateFn } from "../types"
+import type { NavigateFn } from "../types";
 
 interface Section {
-  key: string
+  key: string;
 
-  label: string
+  label: string;
 
-  icon?: string
+  icon?: string;
 
-  load: () => Promise<unknown>
+  load: () => Promise<unknown>;
 }
 
 async function loadAllPagedCourses(
   load: (query: PageQuery) => Promise<unknown>,
   query: PageQuery,
 ): Promise<unknown> {
-  const pageSize = 100
-  const firstPage = await load({ ...query, page: 1, pageSize })
-  const firstResponse = unwrapApiResponse(firstPage)
+  const pageSize = 100;
+  const firstPage = await load({ ...query, page: 1, pageSize });
+  const firstResponse = unwrapApiResponse(firstPage);
   const paging =
     isRecord(firstResponse) && isRecord(firstResponse.pagination)
       ? firstResponse.pagination
-      : firstResponse
+      : firstResponse;
   const explicitPages = isRecord(paging)
     ? Number(paging.totalPages ?? paging.pageCount)
-    : Number.NaN
+    : Number.NaN;
   const totalCount = isRecord(paging)
     ? Number(paging.totalCount ?? paging.totalItems)
-    : Number.NaN
+    : Number.NaN;
   const responsePageSize =
     isRecord(paging) && Number.isFinite(Number(paging.pageSize))
       ? Number(paging.pageSize)
-      : Number.NaN
-  const actualPageSize = responsePageSize > 0 ? responsePageSize : pageSize
+      : Number.NaN;
+  const actualPageSize = responsePageSize > 0 ? responsePageSize : pageSize;
   const totalPages =
     Number.isInteger(explicitPages) && explicitPages > 0
       ? explicitPages
       : Number.isFinite(totalCount) && totalCount > 0
         ? Math.ceil(totalCount / actualPageSize)
-        : 1
+        : 1;
   const remainingPages = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, index) =>
       load({ ...query, page: index + 2, pageSize }),
     ),
-  )
+  );
 
   return {
     items: [firstPage, ...remainingPages].flatMap(getRecords),
-  }
+  };
 }
 
 async function loadAllAdminTeachers(query: PageQuery): Promise<unknown> {
-  return loadAllPagedCourses(adminApi.teachers, query)
+  return loadAllPagedCourses(adminApi.teachers, query);
 }
 
 function getSections(
@@ -167,7 +172,7 @@ function getSections(
 
         load: async () => {
           try {
-            return await adminApi.me()
+            return await adminApi.me();
           } catch {
             return {
               name:
@@ -176,7 +181,7 @@ function getSections(
 
               profileImageUrl:
                 window.sessionStorage.getItem("eduhub.auth.image") || "",
-            }
+            };
           }
         },
       },
@@ -236,7 +241,7 @@ function getSections(
       },
 
       { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-    ]
+    ];
   }
 
   if (role.includes("teacher")) {
@@ -252,23 +257,23 @@ function getSections(
               profile: { firstName: "Ahmed", lastName: "Hassan" },
 
               stats: { totalCourses: 4, totalStudents: 86, pendingRequests: 3 },
-            }
+            };
           }
 
           const [profileResult, statsResult] = await Promise.allSettled([
             teachersApi.me(),
 
             teachersApi.stats(),
-          ])
+          ]);
 
-          if (profileResult.status === "rejected") throw profileResult.reason
+          if (profileResult.status === "rejected") throw profileResult.reason;
 
           return {
             profile: profileResult.value,
 
             stats:
               statsResult.status === "fulfilled" ? statsResult.value : null,
-          }
+          };
         },
       },
 
@@ -308,28 +313,28 @@ function getSections(
 
         load: async () => {
           if (enrollmentPreview) {
-            return { requests: mockTeacherEnrollmentRequests, courses: [] }
+            return { requests: mockTeacherEnrollmentRequests, courses: [] };
           }
 
           const [requestsResult, coursesResult] = await Promise.allSettled([
             teachersApi.enrollmentRequests(query),
 
             teachersApi.coursesMine({ page: 1, pageSize: 100 }),
-          ])
+          ]);
 
-          if (requestsResult.status === "rejected") throw requestsResult.reason
+          if (requestsResult.status === "rejected") throw requestsResult.reason;
 
           return {
             requests: requestsResult.value,
 
             courses:
               coursesResult.status === "fulfilled" ? coursesResult.value : null,
-          }
+          };
         },
       },
 
       { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-    ]
+    ];
   }
 
   return [
@@ -343,9 +348,9 @@ function getSections(
           studentsApi.me(),
 
           studentsApi.enrollments({ page: 1, pageSize: 4 }),
-        ])
+        ]);
 
-        if (profileResult.status === "rejected") throw profileResult.reason
+        if (profileResult.status === "rejected") throw profileResult.reason;
 
         return {
           profile: unwrapApiResponse(profileResult.value),
@@ -361,7 +366,7 @@ function getSections(
                 ? enrollmentsResult.reason.message
                 : "تعذر تحميل دوراتك حاليًا."
               : null,
-        }
+        };
       },
     },
 
@@ -376,53 +381,53 @@ function getSections(
     },
 
     { key: "notifications", label: "الإشعارات", load: notificationsApi.list },
-  ]
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function unwrapApiResponse(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const response = current
+    const response = current;
 
-    if (!isRecord(response)) break
+    if (!isRecord(response)) break;
 
-    const keys = Object.keys(response)
+    const keys = Object.keys(response);
 
     const isEnvelope =
       "data" in response &&
       (keys.length <= 3 ||
         ["success", "message", "status", "errors", "meta"].some(
           (key) => key in response,
-        ))
+        ));
 
-    if (!isEnvelope) break
+    if (!isEnvelope) break;
 
-    current = response.data
+    current = response.data;
   }
 
-  return current
+  return current;
 }
 
 function profileDisplayName(value: unknown): string | null {
-  value = unwrapApiResponse(value)
+  value = unwrapApiResponse(value);
 
-  if (!isRecord(value)) return null
+  if (!isRecord(value)) return null;
 
-  const candidates: unknown[] = [value]
+  const candidates: unknown[] = [value];
 
-  const visited = new Set<object>()
+  const visited = new Set<object>();
 
   while (candidates.length && visited.size < 8) {
-    const candidate = candidates.shift()
+    const candidate = candidates.shift();
 
-    if (!isRecord(candidate) || visited.has(candidate)) continue
+    if (!isRecord(candidate) || visited.has(candidate)) continue;
 
-    visited.add(candidate)
+    visited.add(candidate);
 
     candidates.push(
       candidate.profile,
@@ -434,15 +439,16 @@ function profileDisplayName(value: unknown): string | null {
       candidate.teacher,
 
       candidate.student,
-    )
+    );
   }
 
   for (const candidate of visited) {
-    if (!isRecord(candidate)) continue
+    if (!isRecord(candidate)) continue;
 
-    const direct = candidate.fullName ?? candidate.displayName ?? candidate.name
+    const direct =
+      candidate.fullName ?? candidate.displayName ?? candidate.name;
 
-    if (typeof direct === "string" && direct.trim()) return direct.trim()
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
 
     const parts = [
       candidate.firstName,
@@ -455,27 +461,27 @@ function profileDisplayName(value: unknown): string | null {
     ].filter(
       (part): part is string =>
         typeof part === "string" && part.trim().length > 0,
-    )
+    );
 
-    if (parts.length) return parts.join(" ")
+    if (parts.length) return parts.join(" ");
   }
 
-  return null
+  return null;
 }
 
 function profileDisplayImage(value: unknown): string | null {
-  if (!isRecord(value)) return null
+  if (!isRecord(value)) return null;
 
-  const candidates: unknown[] = [value]
+  const candidates: unknown[] = [value];
 
-  const visited = new Set<object>()
+  const visited = new Set<object>();
 
   while (candidates.length && visited.size < 8) {
-    const candidate = candidates.shift()
+    const candidate = candidates.shift();
 
-    if (!isRecord(candidate) || visited.has(candidate)) continue
+    if (!isRecord(candidate) || visited.has(candidate)) continue;
 
-    visited.add(candidate)
+    visited.add(candidate);
 
     candidates.push(
       candidate.profile,
@@ -487,13 +493,13 @@ function profileDisplayImage(value: unknown): string | null {
       candidate.teacher,
 
       candidate.student,
-    )
+    );
   }
 
   for (const candidate of visited) {
-    if (!isRecord(candidate)) continue
+    if (!isRecord(candidate)) continue;
 
-    const avatar = isRecord(candidate.avatar) ? candidate.avatar : {}
+    const avatar = isRecord(candidate.avatar) ? candidate.avatar : {};
 
     const image =
       candidate.avatarUrl ??
@@ -506,18 +512,18 @@ function profileDisplayImage(value: unknown): string | null {
       candidate.imageUrl ??
       candidate.image_url ??
       avatar.url ??
-      (typeof candidate.avatar === "string" ? candidate.avatar : undefined)
+      (typeof candidate.avatar === "string" ? candidate.avatar : undefined);
 
-    if (typeof image === "string" && image.trim()) return image.trim()
+    if (typeof image === "string" && image.trim()) return image.trim();
   }
 
-  return null
+  return null;
 }
 
 function getRecords(data: unknown): Record<string, unknown>[] {
-  data = unwrapApiResponse(data)
+  data = unwrapApiResponse(data);
 
-  if (Array.isArray(data)) return data.filter(isRecord)
+  if (Array.isArray(data)) return data.filter(isRecord);
 
   if (isRecord(data)) {
     for (const key of [
@@ -538,14 +544,14 @@ function getRecords(data: unknown): Record<string, unknown>[] {
       "requests",
     ]) {
       if (Array.isArray(data[key]))
-        return (data[key] as unknown[]).filter(isRecord)
+        return (data[key] as unknown[]).filter(isRecord);
     }
   }
 
-  return isRecord(data) ? [data] : []
+  return isRecord(data) ? [data] : [];
 }
 
-type CoursePublicationState = "published" | "unpublished" | "draft"
+type CoursePublicationState = "published" | "unpublished" | "draft";
 
 function getCoursePublicationState(
   course: Record<string, unknown>,
@@ -553,10 +559,10 @@ function getCoursePublicationState(
   // Prefer an explicit publication flag over a generic status field.
 
   for (const key of ["isPublished", "published", "is_published"]) {
-    const value = course[key]
+    const value = course[key];
 
     const normalizedValue =
-      typeof value === "string" ? value.trim().toLowerCase() : value
+      typeof value === "string" ? value.trim().toLowerCase() : value;
 
     if (
       normalizedValue === true ||
@@ -564,7 +570,7 @@ function getCoursePublicationState(
       normalizedValue === "1" ||
       normalizedValue === "true"
     )
-      return "published"
+      return "published";
 
     if (
       normalizedValue === false ||
@@ -572,14 +578,14 @@ function getCoursePublicationState(
       normalizedValue === "0" ||
       normalizedValue === "false"
     )
-      return "unpublished"
+      return "unpublished";
   }
 
   for (const key of ["isDraft", "is_draft"]) {
-    const value = course[key]
+    const value = course[key];
 
     if (value === true || value === 1 || value === "1" || value === "true")
-      return "draft"
+      return "draft";
   }
 
   const status = String(
@@ -590,68 +596,68 @@ function getCoursePublicationState(
       course.status ??
       course.state ??
       "",
-  ).toLowerCase()
+  ).toLowerCase();
 
   // CourseStatus is an integer enum from the API: Draft=0 and Published=1.
 
-  if (status === "1") return "published"
+  if (status === "1") return "published";
 
-  if (status === "0") return "draft"
+  if (status === "0") return "draft";
 
-  if (status === "2") return "unpublished"
+  if (status === "2") return "unpublished";
 
-  if (/draft|مسودة/.test(status)) return "draft"
+  if (/draft|مسودة/.test(status)) return "draft";
 
-  if (/unpublish|not.?publish|غير.?منشور/.test(status)) return "unpublished"
+  if (/unpublish|not.?publish|غير.?منشور/.test(status)) return "unpublished";
 
-  if (/publish|منشور/.test(status)) return "published"
+  if (/publish|منشور/.test(status)) return "published";
 
-  return "unpublished"
+  return "unpublished";
 }
 
 function isUnreadNotification(notification: Record<string, unknown>): boolean {
-  if (typeof notification.isUnread === "boolean") return notification.isUnread
+  if (typeof notification.isUnread === "boolean") return notification.isUnread;
 
-  if (typeof notification.isRead === "boolean") return !notification.isRead
+  if (typeof notification.isRead === "boolean") return !notification.isRead;
 
-  if (typeof notification.is_read === "boolean") return !notification.is_read
+  if (typeof notification.is_read === "boolean") return !notification.is_read;
 
-  if (typeof notification.read === "boolean") return !notification.read
+  if (typeof notification.read === "boolean") return !notification.read;
 
   const status = String(
     notification.readStatus ?? notification.status ?? "",
-  ).toLowerCase()
+  ).toLowerCase();
 
-  if (/unread|new|غير مقروء/.test(status)) return true
+  if (/unread|new|غير مقروء/.test(status)) return true;
 
-  if (/^read$|مقروء/.test(status)) return false
+  if (/^read$|مقروء/.test(status)) return false;
 
-  if (notification.read_at !== undefined) return notification.read_at == null
+  if (notification.read_at !== undefined) return notification.read_at == null;
 
-  if (notification.readAt !== undefined) return notification.readAt == null
+  if (notification.readAt !== undefined) return notification.readAt == null;
 
-  return notification.readAt === null
+  return notification.readAt === null;
 }
 
 function getNotificationRecords(data: unknown): Record<string, unknown>[] {
-  const payload = unwrapApiResponse(data)
+  const payload = unwrapApiResponse(data);
 
-  if (Array.isArray(payload)) return payload.filter(isRecord)
+  if (Array.isArray(payload)) return payload.filter(isRecord);
 
-  if (!isRecord(payload)) return []
+  if (!isRecord(payload)) return [];
 
   for (const key of ["items", "notifications", "records"]) {
     if (Array.isArray(payload[key]))
-      return (payload[key] as unknown[]).filter(isRecord)
+      return (payload[key] as unknown[]).filter(isRecord);
   }
 
   return payload.id !== undefined || payload.notificationId !== undefined
     ? [payload]
-    : []
+    : [];
 }
 
 function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
-  data = unwrapApiResponse(data)
+  data = unwrapApiResponse(data);
 
   if (Array.isArray(data))
     return data.filter(
@@ -662,9 +668,9 @@ function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
 
           enrollment.isRejected,
         ),
-    )
+    );
 
-  if (!isRecord(data)) return []
+  if (!isRecord(data)) return [];
 
   if (Array.isArray(data.items))
     return data.items.filter(
@@ -675,11 +681,11 @@ function getEnrollmentRecords(data: unknown): Record<string, unknown>[] {
 
           enrollment.isRejected,
         ),
-    )
+    );
 
-  if ("enrollments" in data) return getEnrollmentRecords(data.enrollments)
+  if ("enrollments" in data) return getEnrollmentRecords(data.enrollments);
 
-  return []
+  return [];
 }
 
 function isRejectedEnrollment(status: unknown, isRejected?: unknown): boolean {
@@ -687,7 +693,7 @@ function isRejectedEnrollment(status: unknown, isRejected?: unknown): boolean {
     isRejected === true ||
     String(status ?? "").trim() === "2" ||
     /reject|declin|cancel/i.test(String(status ?? ""))
-  )
+  );
 }
 
 function enrollmentProgressPercent(
@@ -695,60 +701,60 @@ function enrollmentProgressPercent(
 ): number | null {
   const nestedProgress = isRecord(enrollment.progress)
     ? enrollment.progress
-    : {}
+    : {};
 
   const rawValue =
     enrollment.progressPercentage ??
     enrollment.progressPercent ??
     enrollment.completionPercentage ??
     nestedProgress.progressPercentage ??
-    nestedProgress.percentage
+    nestedProgress.percentage;
 
   if (rawValue === undefined || rawValue === null || rawValue === "")
-    return null
+    return null;
 
-  const value = Number(rawValue)
+  const value = Number(rawValue);
 
-  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
 }
 
 function enrollmentStatusLabel(status: unknown, isApproved?: unknown): string {
-  const value = String(status ?? "").toLowerCase()
+  const value = String(status ?? "").toLowerCase();
 
-  if (value === "0" || isApproved === false) return "بانتظار الموافقة"
+  if (value === "0" || isApproved === false) return "بانتظار الموافقة";
 
-  if (value === "2") return "غير نشط"
+  if (value === "2") return "غير نشط";
 
-  if (value === "3") return "مكتملة"
+  if (value === "3") return "مكتملة";
 
-  if (value === "1" || isApproved === true) return "مشترك"
+  if (value === "1" || isApproved === true) return "مشترك";
 
-  if (/reject|declin|cancel/.test(value)) return "غير نشط"
+  if (/reject|declin|cancel/.test(value)) return "غير نشط";
 
-  if (/pending|await|review/.test(value)) return "بانتظار الموافقة"
+  if (/pending|await|review/.test(value)) return "بانتظار الموافقة";
 
-  if (/complete|finish/.test(value)) return "مكتملة"
+  if (/complete|finish/.test(value)) return "مكتملة";
 
-  if (/approv|active|accept|enroll/.test(value)) return "مشترك"
+  if (/approv|active|accept|enroll/.test(value)) return "مشترك";
 
-  return status ? String(status) : "الحالة غير محددة"
+  return status ? String(status) : "الحالة غير محددة";
 }
 
 function getAdminMetrics(data: unknown) {
-  if (!isRecord(data)) return []
+  if (!isRecord(data)) return [];
 
   type MetricEntry = {
-    key: string
+    key: string;
 
-    value: number
+    value: number;
 
-    parent: string
-  }
+    parent: string;
+  };
 
-  const entries: MetricEntry[] = []
+  const entries: MetricEntry[] = [];
 
   function collect(record: Record<string, unknown>, parent = "", depth = 0) {
-    if (depth > 3) return
+    if (depth > 3) return;
 
     Object.entries(record).forEach(([key, value]) => {
       if (
@@ -756,19 +762,19 @@ function getAdminMetrics(data: unknown) {
         Number.isFinite(value) &&
         !/(^id$|token|password|price|duration|date|time)/i.test(key)
       ) {
-        entries.push({ key, value, parent })
+        entries.push({ key, value, parent });
       } else if (isRecord(value)) {
-        collect(value, key, depth + 1)
+        collect(value, key, depth + 1);
       }
-    })
+    });
   }
 
-  collect(data)
+  collect(data);
 
   const metrics = entries.map(({ key, value, parent }) => {
-    const statKey = `${parent} ${key}`.toLowerCase()
+    const statKey = `${parent} ${key}`.toLowerCase();
 
-    const isPending = /pending|await|unapproved/.test(statKey)
+    const isPending = /pending|await|unapproved/.test(statKey);
 
     const label = isPending
       ? /enroll|request/.test(statKey)
@@ -784,7 +790,7 @@ function getAdminMetrics(data: unknown) {
               ? "طلبات الالتحاق"
               : /subject/.test(statKey)
                 ? "المواد الدراسية"
-                : `${parent ? `${parent} · ` : ""}${fieldLabels[key] ?? key}`
+                : `${parent ? `${parent} · ` : ""}${fieldLabels[key] ?? key}`;
 
     const Icon = isPending
       ? ClipboardList
@@ -792,12 +798,12 @@ function getAdminMetrics(data: unknown) {
         ? UsersRound
         : /course|subject/.test(statKey)
           ? BookOpenCheck
-          : BookOpen
+          : BookOpen;
 
-    return { key: `${parent}-${key}`, label, value, Icon }
-  })
+    return { key: `${parent}-${key}`, label, value, Icon };
+  });
 
-  return metrics.slice(0, 6)
+  return metrics.slice(0, 6);
 }
 
 function cardFields(record: Record<string, unknown>) {
@@ -806,16 +812,16 @@ function cardFields(record: Record<string, unknown>) {
       !/(^id$|id$|token|image|url|password)/i.test(key) &&
       value !== null &&
       ["string", "number", "boolean"].includes(typeof value),
-  )
+  );
 }
 
 function getStudentName(record: Record<string, unknown>) {
   const parts = [record.firstName, record.secondName, record.thirdName].filter(
     (part): part is string =>
       typeof part === "string" && part.trim().length > 0,
-  )
+  );
 
-  return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"))
+  return String(record.fullName ?? (parts.join(" ") || record.name || "طالب"));
 }
 
 function DashboardOverviewSkeleton({ student = false }: { student?: boolean }) {
@@ -836,24 +842,14 @@ function DashboardOverviewSkeleton({ student = false }: { student?: boolean }) {
           <Skeleton className="h-6 w-48" />
           <Skeleton className="mt-2 h-4 w-64 max-w-full" />
           <div className="mt-5 flex h-36 items-end gap-3 border-b border-stroke px-2">
-            {[
-              "h-1/3",
-
-              "h-2/3",
-
-              "h-1/2",
-
-              "h-2/3",
-
-              "h-1/3",
-
-              "h-1/2",
-            ].map((height, item) => (
-              <Skeleton
-                key={item}
-                className={`${height} min-h-8 flex-1 rounded-t-lg`}
-              />
-            ))}
+            {["h-1/3", "h-2/3", "h-1/2", "h-2/3", "h-1/3", "h-1/2"].map(
+              (height, item) => (
+                <Skeleton
+                  key={item}
+                  className={`${height} min-h-8 flex-1 rounded-t-lg`}
+                />
+              ),
+            )}
           </div>
         </div>
         {student && (
@@ -876,7 +872,7 @@ function DashboardOverviewSkeleton({ student = false }: { student?: boolean }) {
         )}
       </div>
     </section>
-  )
+  );
 }
 
 function AdminStatsSkeleton() {
@@ -918,26 +914,26 @@ function AdminStatsSkeleton() {
         </div>
       </div>
     </section>
-  )
+  );
 }
 
 export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
-  const confirm = useConfirmation()
+  const confirm = useConfirmation();
 
   const useTeacherEnrollmentMock =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("teacherEnrollmentMock") ===
-      "1"
+      "1";
 
   const role = useTeacherEnrollmentMock
     ? "teacher"
-    : (window.sessionStorage.getItem("eduhub.auth.role") ?? "student")
+    : (window.sessionStorage.getItem("eduhub.auth.role") ?? "student");
 
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [searchInput, setSearchInput] = useState("")
+  const [searchInput, setSearchInput] = useState("");
 
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState("");
 
   const [activeKey, setActiveKey] = useState(() =>
     (() => {
@@ -947,24 +943,26 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         { page: 1, pageSize: 12 },
 
         useTeacherEnrollmentMock,
-      )
+      );
 
       const savedSection =
         window.history.state?.waiApp &&
         window.history.state.view === "dashboard"
           ? window.history.state.dashboardSection
-          : null
+          : null;
 
       if (
         typeof savedSection === "string" &&
         availableSections.some(({ key }) => key === savedSection)
       ) {
-        return savedSection
+        return savedSection;
       }
 
-      return useTeacherEnrollmentMock ? "enrollments" : availableSections[0].key
+      return useTeacherEnrollmentMock
+        ? "enrollments"
+        : availableSections[0].key;
     })(),
-  )
+  );
 
   const query: PageQuery = {
     page:
@@ -976,177 +974,189 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     pageSize: activeKey === "courses" ? 3 : 12,
 
     ...(search ? { search } : {}),
-  }
+  };
 
-  const sidebarNavRef = useRef<HTMLElement | null>(null)
+  const sidebarNavRef = useRef<HTMLElement | null>(null);
 
-  const sidebarIndicatorRef = useRef<HTMLSpanElement | null>(null)
+  const sidebarIndicatorRef = useRef<HTMLSpanElement | null>(null);
 
   const [sidebarIndicatorMotion, setSidebarIndicatorMotion] = useState<{
-    y: number[]
+    y: number[];
 
-    scaleY: number[]
-  } | null>(null)
+    scaleY: number[];
+  } | null>(null);
 
   useLayoutEffect(() => {
-    const nav = sidebarNavRef.current
+    const nav = sidebarNavRef.current;
 
     const activeItem = Array.from(
       nav?.querySelectorAll<HTMLButtonElement>("[data-sidebar-item]") ?? [],
-    ).find((item) => item.dataset.sidebarItem === activeKey)
+    ).find((item) => item.dataset.sidebarItem === activeKey);
 
-    if (!nav || !activeItem) return
+    if (!nav || !activeItem) return;
 
-    const targetY = activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2
+    const targetY = activeItem.offsetTop + (activeItem.offsetHeight - 40) / 2;
 
-    const indicator = sidebarIndicatorRef.current
+    const indicator = sidebarIndicatorRef.current;
 
     if (!indicator) {
       setSidebarIndicatorMotion({
         y: [targetY],
 
         scaleY: [1],
-      })
+      });
 
-      return
+      return;
     }
 
-    const navTop = nav.getBoundingClientRect().top
+    const navTop = nav.getBoundingClientRect().top;
 
-    const indicatorRect = indicator.getBoundingClientRect()
+    const indicatorRect = indicator.getBoundingClientRect();
 
-    const currentY = indicatorRect.top - navTop
+    const currentY = indicatorRect.top - navTop;
 
-    const currentHeight = indicatorRect.height
+    const currentHeight = indicatorRect.height;
 
     if (
       Math.abs(targetY - currentY) < 0.5 &&
       Math.abs(currentHeight - 40) < 0.5
     ) {
-      return
+      return;
     }
 
     if (targetY > currentY) {
       setSidebarIndicatorMotion({
         y: [currentY, currentY, targetY],
 
-        scaleY: [
-          currentHeight / 40,
-
-          (targetY + 40 - currentY) / 40,
-
-          1,
-        ],
-      })
+        scaleY: [currentHeight / 40, (targetY + 40 - currentY) / 40, 1],
+      });
     } else {
-      const stretchScale = (currentY + currentHeight - targetY) / 40
+      const stretchScale = (currentY + currentHeight - targetY) / 40;
 
       setSidebarIndicatorMotion({
         y: [currentY, targetY, targetY],
 
         scaleY: [currentHeight / 40, stretchScale, 1],
-      })
+      });
     }
-  }, [activeKey])
+  }, [activeKey]);
 
   useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [activeKey])
+    window.scrollTo(0, 0);
+  }, [activeKey]);
 
-  const [reloadKey, setReloadKey] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const [notificationReloadKey, setNotificationReloadKey] = useState(0)
+  const [notificationReloadKey, setNotificationReloadKey] = useState(0);
 
-  const [selectedNotification, setSelectedNotification] =
-    useState<Record<string, unknown> | null>(null)
+  const [selectedNotification, setSelectedNotification] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [pendingCourseDialog, setPendingCourseDialog] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
-  const [focusStudentCourseId, setFocusStudentCourseId] =
-    useState<string | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [focusStudentCourseId, setFocusStudentCourseId] = useState<
+    string | null
+  >(null);
 
-  const [courseStatusFilter, setCourseStatusFilter] =
-    useState<"all" | CoursePublicationState>("all")
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const [coursePublicationOverrides, setCoursePublicationOverrides] =
-    useState<Record<string, CoursePublicationState>>({})
+  const [courseStatusFilter, setCourseStatusFilter] = useState<
+    "all" | CoursePublicationState
+  >("all");
 
-  const [coursePublicationRecords, setCoursePublicationRecords] =
-    useState<Record<string, Record<string, unknown>>>({})
+  const [coursePublicationOverrides, setCoursePublicationOverrides] = useState<
+    Record<string, CoursePublicationState>
+  >({});
+
+  const [coursePublicationRecords, setCoursePublicationRecords] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
 
   const [approvedStudentIds, setApprovedStudentIds] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [, setActionFeedbackState] = useState("")
+  const [, setActionFeedbackState] = useState("");
 
   const setActionFeedback = useCallback((message: string) => {
-    setActionFeedbackState(message)
+    setActionFeedbackState(message);
 
-    if (!message.trim()) return
+    if (!message.trim()) return;
 
-    if (/تم|نجاح|اعتماد/.test(message)) notifySuccess(message)
-    else notifyError(new Error(message), "تعذر إتمام العملية. حاول مرة أخرى.")
-  }, [])
+    if (/تم|نجاح|اعتماد/.test(message)) notifySuccess(message);
+    else notifyError(new Error(message), "تعذر إتمام العملية. حاول مرة أخرى.");
+  }, []);
 
   const reloadData = useCallback(() => {
-    setReloadKey((key) => key + 1)
-  }, [])
+    setReloadKey((key) => key + 1);
+  }, []);
+
+  const handleCourseEnrollmentCancelled = useCallback(() => {
+    setPendingCourseDialog(null);
+    reloadData();
+  }, [reloadData]);
 
   const clearFocusedStudentCourse = useCallback(() => {
-    setFocusStudentCourseId(null)
-  }, [])
+    setFocusStudentCourseId(null);
+  }, []);
 
   const handleMockEnrollment = useCallback(
     async (_id: string, approve: boolean) => {
       setActionFeedback(
         approve ? "تمت الموافقة على الطلب التجريبي." : "تم رفض الطلب التجريبي.",
-      )
+      );
 
-      return true
+      return true;
     },
 
     [setActionFeedback],
-  )
+  );
 
-  const [subjectName, setSubjectName] = useState("")
+  const [subjectName, setSubjectName] = useState("");
 
-  const [subjectYear, setSubjectYear] = useState("1")
+  const [subjectYear, setSubjectYear] = useState("1");
 
-  const [subjectId, setSubjectId] = useState("")
+  const [subjectId, setSubjectId] = useState("");
 
-  const subjectEditorRef = useRef<HTMLFormElement>(null)
+  const subjectEditorRef = useRef<HTMLFormElement>(null);
 
-  const [subjectIsActive, setSubjectIsActive] = useState(true)
+  const [subjectIsActive, setSubjectIsActive] = useState(true);
 
   useEffect(() => {
-    if (!subjectId) return
+    if (!subjectId) return;
 
     const frame = window.requestAnimationFrame(() => {
       subjectEditorRef.current?.scrollIntoView({
         behavior: "smooth",
 
         block: "start",
-      })
-    })
+      });
+    });
 
-    return () => window.cancelAnimationFrame(frame)
-  }, [subjectId])
+    return () => window.cancelAnimationFrame(frame);
+  }, [subjectId]);
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
+    [],
+  );
 
-  const [academicYearsLoading, setAcademicYearsLoading] = useState(false)
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
 
   const sections = useMemo(
     () => getSections(role, query, useTeacherEnrollmentMock),
 
     [role, activeKey, query.page, search, useTeacherEnrollmentMock],
-  )
+  );
 
   const changeDashboardSection = (section: string) => {
-    if (section === activeKey) return
+    if (section === activeKey) return;
 
     window.history.pushState(
       {
@@ -1162,13 +1172,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       "",
 
       window.location.href,
-    )
+    );
 
-    setActiveKey(section)
-  }
+    setActiveKey(section);
+  };
 
   useEffect(() => {
-    const currentState = window.history.state
+    const currentState = window.history.state;
 
     if (currentState?.waiApp && currentState.view === "dashboard") {
       window.history.replaceState(
@@ -1177,30 +1187,31 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         "",
 
         window.location.href,
-      )
+      );
     }
 
     const restoreDashboardSection = (event: PopStateEvent) => {
-      const state = event.state
+      const state = event.state;
 
-      if (!state?.waiApp || state.view !== "dashboard") return
+      if (!state?.waiApp || state.view !== "dashboard") return;
 
-      const section = state.dashboardSection
+      const section = state.dashboardSection;
 
       if (
         typeof section === "string" &&
         sections.some(({ key }) => key === section)
       ) {
-        setActiveKey(section)
+        setActiveKey(section);
       }
-    }
+    };
 
-    window.addEventListener("popstate", restoreDashboardSection)
+    window.addEventListener("popstate", restoreDashboardSection);
 
-    return () => window.removeEventListener("popstate", restoreDashboardSection)
-  }, [activeKey, sections])
+    return () =>
+      window.removeEventListener("popstate", restoreDashboardSection);
+  }, [activeKey, sections]);
 
-  const section = sections.find(({ key }) => key === activeKey) ?? sections[0]
+  const section = sections.find(({ key }) => key === activeKey) ?? sections[0];
 
   const { data, error, loading } = useApiQuery(
     section.load,
@@ -1210,7 +1221,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     true,
 
     `dashboard:${role}:${activeKey}`,
-  )
+  );
 
   const loadNotifications = useCallback(
     () =>
@@ -1219,129 +1230,129 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         : notificationsApi.list(),
 
     [activeKey],
-  )
+  );
 
   const { data: notificationData } = useApiQuery(
     loadNotifications,
 
     notificationReloadKey,
-  )
+  );
 
   const unreadNotifications = useMemo(() => {
     const payload = unwrapApiResponse(
       activeKey === "notifications" ? data : notificationData,
-    )
+    );
 
     if (isRecord(payload)) {
-      const summary = isRecord(payload.summary) ? payload.summary : payload
+      const summary = isRecord(payload.summary) ? payload.summary : payload;
 
       const count = Number(
         summary.unreadCount ?? summary.unreadNotificationsCount,
-      )
+      );
 
-      if (Number.isFinite(count) && count >= 0) return Math.floor(count)
+      if (Number.isFinite(count) && count >= 0) return Math.floor(count);
     }
 
-    return getNotificationRecords(payload).filter(isUnreadNotification).length
-  }, [activeKey, data, notificationData])
+    return getNotificationRecords(payload).filter(isUnreadNotification).length;
+  }, [activeKey, data, notificationData]);
 
   useEffect(() => {
     const refresh = () => {
-      if (activeKey === "notifications") setReloadKey((key) => key + 1)
-      else setNotificationReloadKey((key) => key + 1)
-    }
+      if (activeKey === "notifications") setReloadKey((key) => key + 1);
+      else setNotificationReloadKey((key) => key + 1);
+    };
 
-    const interval = window.setInterval(refresh, 30_000)
+    const interval = window.setInterval(refresh, 30_000);
 
-    window.addEventListener("focus", refresh)
+    window.addEventListener("focus", refresh);
 
     return () => {
-      window.clearInterval(interval)
+      window.clearInterval(interval);
 
-      window.removeEventListener("focus", refresh)
-    }
-  }, [activeKey])
+      window.removeEventListener("focus", refresh);
+    };
+  }, [activeKey]);
 
   const [accountName, setAccountName] = useState(
     () => window.sessionStorage.getItem("eduhub.auth.name") ?? "",
-  )
+  );
 
   const [accountImage, setAccountImage] = useState(
     () => window.sessionStorage.getItem("eduhub.auth.image") ?? "",
-  )
+  );
 
   useEffect(() => {
-    const response = unwrapApiResponse(data)
+    const response = unwrapApiResponse(data);
 
     const profile = isRecord(response)
       ? (response.profile ?? response)
-      : response
+      : response;
 
-    const name = profileDisplayName(profile)
+    const name = profileDisplayName(profile);
 
-    const image = profileDisplayImage(profile)
+    const image = profileDisplayImage(profile);
 
     if (name) {
-      window.sessionStorage.setItem("eduhub.auth.name", name)
+      window.sessionStorage.setItem("eduhub.auth.name", name);
 
-      setAccountName(name)
+      setAccountName(name);
     }
 
     if (image) {
-      window.sessionStorage.setItem("eduhub.auth.image", image)
+      window.sessionStorage.setItem("eduhub.auth.image", image);
 
-      setAccountImage(image)
+      setAccountImage(image);
     }
-  }, [data])
+  }, [data]);
 
   useEffect(() => {
     const updateImage = (event: Event) => {
-      const image = (event as CustomEvent<string>).detail
+      const image = (event as CustomEvent<string>).detail;
 
-      const nextImage = typeof image === "string" ? image : ""
+      const nextImage = typeof image === "string" ? image : "";
 
-      setAccountImage(nextImage)
+      setAccountImage(nextImage);
 
       if (nextImage)
-        window.sessionStorage.setItem("eduhub.auth.image", nextImage)
-      else window.sessionStorage.removeItem("eduhub.auth.image")
-    }
+        window.sessionStorage.setItem("eduhub.auth.image", nextImage);
+      else window.sessionStorage.removeItem("eduhub.auth.image");
+    };
 
-    window.addEventListener("eduhub:profile-image-updated", updateImage)
+    window.addEventListener("eduhub:profile-image-updated", updateImage);
 
     return () =>
-      window.removeEventListener("eduhub:profile-image-updated", updateImage)
-  }, [])
+      window.removeEventListener("eduhub:profile-image-updated", updateImage);
+  }, []);
 
   useEffect(() => {
-    if (!mobileNavOpen) return
+    if (!mobileNavOpen) return;
 
-    const previousOverflow = document.body.style.overflow
+    const previousOverflow = document.body.style.overflow;
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNavOpen(false)
-    }
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
 
-    document.body.style.overflow = "hidden"
+    document.body.style.overflow = "hidden";
 
-    window.addEventListener("keydown", closeOnEscape)
+    window.addEventListener("keydown", closeOnEscape);
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      document.body.style.overflow = previousOverflow;
 
-      window.removeEventListener("keydown", closeOnEscape)
-    }
-  }, [mobileNavOpen])
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileNavOpen]);
 
-  const responseData = unwrapApiResponse(data)
+  const responseData = unwrapApiResponse(data);
 
-  const rawRecords = getRecords(responseData)
+  const rawRecords = getRecords(responseData);
 
   const publicationStateOf = (course: Record<string, unknown>) => {
-    const id = String(course.courseId ?? course.id ?? "")
+    const id = String(course.courseId ?? course.id ?? "");
 
-    return coursePublicationOverrides[id] ?? getCoursePublicationState(course)
-  }
+    return coursePublicationOverrides[id] ?? getCoursePublicationState(course);
+  };
 
   const courseRecords =
     role.includes("admin") && activeKey === "courses"
@@ -1360,20 +1371,21 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
             .map(([, record]) => record),
         ]
-      : rawRecords
+      : rawRecords;
 
   const records =
     activeKey === "pending"
       ? rawRecords.filter((record) => {
           const studentId = String(
             record.studentId ?? record.userId ?? record.id ?? "",
-          )
+          );
 
-          return !approvedStudentIds.has(studentId)
+          return !approvedStudentIds.has(studentId);
         })
-      : courseRecords
+      : courseRecords;
 
-  const isAdminCourseSection = role.includes("admin") && activeKey === "courses"
+  const isAdminCourseSection =
+    role.includes("admin") && activeKey === "courses";
 
   const displayedRecords = isAdminCourseSection
     ? records.filter(
@@ -1381,7 +1393,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
           courseStatusFilter === "all" ||
           publicationStateOf(record) === courseStatusFilter,
       )
-    : records
+    : records;
 
   const courseStatusCounts = {
     all: records.length,
@@ -1396,7 +1408,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     draft: records.filter((record) => publicationStateOf(record) === "draft")
       .length,
-  }
+  };
 
   const teacherStats =
     role.includes("teacher") &&
@@ -1408,12 +1420,12 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             !/(id|token|password)/i.test(key) &&
             (typeof value === "number" || typeof value === "boolean"),
         )
-      : []
+      : [];
 
   const adminMetrics =
     role.includes("admin") && activeKey === "stats"
       ? getAdminMetrics(responseData)
-      : []
+      : [];
 
   const studentOverview =
     !role.includes("admin") &&
@@ -1421,13 +1433,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     activeKey === "overview" &&
     isRecord(responseData)
       ? responseData
-      : null
+      : null;
 
   const studentOverviewCourses = getEnrollmentRecords(
     studentOverview?.enrollments,
-  ).slice(0, 4)
+  ).slice(0, 4);
 
-  const studentEnrollmentTotal = studentOverviewCourses.length
+  const studentEnrollmentTotal = studentOverviewCourses.length;
 
   const paginationData =
     role.includes("teacher") &&
@@ -1435,7 +1447,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     isRecord(responseData) &&
     isRecord(responseData.requests)
       ? responseData.requests
-      : responseData
+      : responseData;
 
   const pagination = isAdminCourseSection
     ? {
@@ -1444,19 +1456,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       }
     : isRecord(paginationData) && typeof paginationData.totalPages === "number"
       ? { page: paginationData.page, totalPages: paginationData.totalPages }
-      : null
+      : null;
 
   const visibleRecords = isAdminCourseSection
     ? displayedRecords.slice((page - 1) * 3, page * 3)
-    : displayedRecords
+    : displayedRecords;
 
   useEffect(() => {
-    if (!isAdminCourseSection) return
+    if (!isAdminCourseSection) return;
 
-    const lastPage = Math.max(1, Math.ceil(displayedRecords.length / 3))
+    const lastPage = Math.max(1, Math.ceil(displayedRecords.length / 3));
 
-    if (page > lastPage) setPage(lastPage)
-  }, [displayedRecords.length, isAdminCourseSection, page])
+    if (page > lastPage) setPage(lastPage);
+  }, [displayedRecords.length, isAdminCourseSection, page]);
 
   const showGenericRecords =
     !(role.includes("admin") && activeKey === "stats") &&
@@ -1472,14 +1484,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       !role.includes("admin") &&
       !role.includes("teacher") &&
       ["profile", "courses"].includes(activeKey)
-    )
+    );
 
   const supportsSearch =
     (role.includes("admin") &&
       ["courses", "teachers", "subscriptions", "students"].includes(
         activeKey,
       )) ||
-    (role.includes("teacher") && activeKey === "courses")
+    (role.includes("teacher") && activeKey === "courses");
 
   useEffect(() => {
     if (
@@ -1487,30 +1499,29 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       !role.includes("teacher") &&
       activeKey !== "profile"
     )
-      return
+      return;
 
-    let active = true
+    let active = true;
 
-    setAcademicYearsLoading(true)
+    setAcademicYearsLoading(true);
 
     getAcademicYears()
-
       .then((years) => {
-        if (active) setAcademicYears(years)
+        if (active) setAcademicYears(years);
       })
 
       .catch(() => {
-        if (active) setActionFeedback("تعذر تحميل الصفوف الدراسية من الخادم.")
+        if (active) setActionFeedback("تعذر تحميل الصفوف الدراسية من الخادم.");
       })
 
       .finally(() => {
-        if (active) setAcademicYearsLoading(false)
-      })
+        if (active) setAcademicYearsLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [role, activeKey])
+      active = false;
+    };
+  }, [role, activeKey]);
 
   async function handleEnrollment(
     id: string,
@@ -1519,7 +1530,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
     rejectionAlreadyConfirmed = false,
   ): Promise<boolean> {
-    let rejectionConfirmed = rejectionAlreadyConfirmed
+    let rejectionConfirmed = rejectionAlreadyConfirmed;
 
     if (!approve && role.includes("admin") && !rejectionConfirmed) {
       rejectionConfirmed = await confirm({
@@ -1532,124 +1543,124 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         confirmText: "رفض الطلب",
 
         onConfirm: async () => {
-          await enrollmentsApi.adminReject(id)
+          await enrollmentsApi.adminReject(id);
         },
-      })
+      });
 
-      if (!rejectionConfirmed) return false
+      if (!rejectionConfirmed) return false;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionLoading(`${id}-${approve ? "approve" : "reject"}`)
+      setActionLoading(`${id}-${approve ? "approve" : "reject"}`);
 
       if (role.includes("admin")) {
-        if (approve) await enrollmentsApi.adminApprove(id)
-        else if (!rejectionConfirmed) await enrollmentsApi.adminReject(id)
+        if (approve) await enrollmentsApi.adminApprove(id);
+        else if (!rejectionConfirmed) await enrollmentsApi.adminReject(id);
       } else if (role.includes("teacher")) {
         await (approve
           ? teachersApi.approveEnrollment(id)
-          : teachersApi.rejectEnrollment(id))
+          : teachersApi.rejectEnrollment(id));
       } else {
-        setActionFeedback("هذا الإجراء متاح للأدمن والمدرّس فقط.")
+        setActionFeedback("هذا الإجراء متاح للأدمن والمدرّس فقط.");
 
-        return false
+        return false;
       }
 
-      setActionFeedback(approve ? "تمت الموافقة على الطلب." : "تم رفض الطلب.")
+      setActionFeedback(approve ? "تمت الموافقة على الطلب." : "تم رفض الطلب.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
 
-      return true
+      return true;
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
 
       const alreadyHandled =
         (cause instanceof ApiError && cause.status === 409) ||
         /already|approved|accepted|processed|مقبول|تمت الموافقة|سبق/i.test(
           message,
-        )
+        );
 
       if (approve && alreadyHandled) {
-        setActionFeedback("الطلب تمت الموافقة عليه بالفعل.")
+        setActionFeedback("الطلب تمت الموافقة عليه بالفعل.");
 
-        setReloadKey((key) => key + 1)
+        setReloadKey((key) => key + 1);
 
-        return true
+        return true;
       }
 
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الطلب.",
-      )
+      );
 
-      return false
+      return false;
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleMarkRead(id?: string): Promise<boolean> {
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionLoading(id ? `read-${id}` : "read-all")
+      setActionLoading(id ? `read-${id}` : "read-all");
 
-      if (id) await notificationsApi.markRead(id)
-      else await notificationsApi.markAllRead()
+      if (id) await notificationsApi.markRead(id);
+      else await notificationsApi.markAllRead();
 
-      setActionFeedback("تم تحديث حالة الإشعارات.")
+      setActionFeedback("تم تحديث حالة الإشعارات.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
 
-      setNotificationReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1);
 
-      return true
+      return true;
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث الإشعارات.",
-      )
+      );
 
-      return false
+      return false;
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleNotificationDelete(id: string): Promise<boolean> {
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading(`delete-notification-${id}`)
+    setActionLoading(`delete-notification-${id}`);
 
     try {
-      await notificationsApi.remove(id)
+      await notificationsApi.remove(id);
 
-      const remaining = getNotificationRecords(await notificationsApi.list())
+      const remaining = getNotificationRecords(await notificationsApi.list());
 
       const stillExists = remaining.some(
         (notification) =>
           String(notification.id ?? notification.notificationId ?? "") === id,
-      )
+      );
 
       if (stillExists) {
-        throw new Error("الخادم استقبل طلب الحذف لكن الإشعار ما زال موجودًا.")
+        throw new Error("الخادم استقبل طلب الحذف لكن الإشعار ما زال موجودًا.");
       }
 
-      setActionFeedback("تم حذف الإشعار.")
+      setActionFeedback("تم حذف الإشعار.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
 
-      setNotificationReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1);
 
-      return true
+      return true;
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف الإشعار.",
-      )
+      );
 
-      return false
+      return false;
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
@@ -1665,45 +1676,45 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       confirmText: "حذف الكل",
 
       onConfirm: async () => {
-        await notificationsApi.removeAll()
+        await notificationsApi.removeAll();
 
-        const remaining = getNotificationRecords(await notificationsApi.list())
+        const remaining = getNotificationRecords(await notificationsApi.list());
 
         if (remaining.length > 0) {
-          throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.")
+          throw new Error("بعض الإشعارات ما زالت موجودة بعد طلب الحذف.");
         }
       },
-    })
+    });
 
-    if (!confirmed) return
+    if (!confirmed) return;
 
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading("delete-all-notifications")
+    setActionLoading("delete-all-notifications");
 
     try {
-      setActionFeedback("تم حذف جميع الإشعارات.")
+      setActionFeedback("تم حذف جميع الإشعارات.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
 
-      setNotificationReloadKey((key) => key + 1)
+      setNotificationReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف الإشعارات.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handlePendingStudent(id: string, approve: boolean) {
     if (!role.includes("admin")) {
-      setActionFeedback("اعتماد حسابات الطلاب متاح للأدمن فقط.")
+      setActionFeedback("اعتماد حسابات الطلاب متاح للأدمن فقط.");
 
-      return
+      return;
     }
 
-    let rejectionConfirmed = false
+    let rejectionConfirmed = false;
 
     if (!approve) {
       rejectionConfirmed = await confirm({
@@ -1716,58 +1727,58 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         confirmText: "رفض وحذف",
 
         onConfirm: () => adminApi.rejectStudent(id),
-      })
+      });
 
-      if (!rejectionConfirmed) return
+      if (!rejectionConfirmed) return;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading(`${id}-${approve ? "approve" : "reject"}`)
+    setActionLoading(`${id}-${approve ? "approve" : "reject"}`);
 
     try {
-      if (approve) await adminApi.approveStudent(id)
-      else if (!rejectionConfirmed) await adminApi.rejectStudent(id)
+      if (approve) await adminApi.approveStudent(id);
+      else if (!rejectionConfirmed) await adminApi.rejectStudent(id);
 
       if (approve) {
-        setApprovedStudentIds((current) => new Set(current).add(id))
+        setApprovedStudentIds((current) => new Set(current).add(id));
       }
 
-      setActionFeedback(approve ? "تم اعتماد حساب الطالب." : "تم رفض الطلب.")
+      setActionFeedback(approve ? "تم اعتماد حساب الطالب." : "تم رفض الطلب.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
 
       const alreadyApproved =
         approve &&
         ((cause instanceof ApiError && cause.status === 409) ||
           /already|approved|accepted|مقبول|تم اعتماده|تمت الموافقة|سبق/i.test(
             message,
-          ))
+          ));
 
       if (alreadyApproved) {
-        setApprovedStudentIds((current) => new Set(current).add(id))
+        setApprovedStudentIds((current) => new Set(current).add(id));
 
-        setActionFeedback("حساب الطالب معتمد بالفعل.")
+        setActionFeedback("حساب الطالب معتمد بالفعل.");
 
-        setReloadKey((key) => key + 1)
+        setReloadKey((key) => key + 1);
 
-        return
+        return;
       }
 
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث طلب الطالب.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleCoursePublish(id: string, publish: boolean) {
     const currentCourse = courseRecords.find(
       (course) => String(course.id ?? course.courseId ?? "") === id,
-    )
+    );
 
     if (
       currentCourse &&
@@ -1775,17 +1786,17 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     ) {
       setActionFeedback(
         publish ? "الدورة منشورة بالفعل." : "الدورة غير منشورة بالفعل.",
-      )
+      );
 
-      return
+      return;
     }
 
-    let unpublishConfirmed = false
+    let unpublishConfirmed = false;
 
     if (!publish) {
       const courseTitle = String(
         currentCourse?.title ?? currentCourse?.name ?? "هذه الدورة",
-      )
+      );
 
       unpublishConfirmed = await confirm({
         title: "إلغاء نشر الدورة؟",
@@ -1797,67 +1808,67 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
         confirmText: "إلغاء النشر",
 
         onConfirm: async () => {
-          if (role.includes("admin")) await adminApi.unpublishCourse(id)
-          else await teachersApi.unpublishCourse(id)
+          if (role.includes("admin")) await adminApi.unpublishCourse(id);
+          else await teachersApi.unpublishCourse(id);
         },
-      })
+      });
 
-      if (!unpublishConfirmed) return
+      if (!unpublishConfirmed) return;
     }
 
-    setActionFeedback("")
+    setActionFeedback("");
 
-    setActionLoading(`${id}-publish`)
+    setActionLoading(`${id}-publish`);
 
     try {
       if (role.includes("admin")) {
-        if (publish) await adminApi.publishCourse(id)
-        else if (!unpublishConfirmed) await adminApi.unpublishCourse(id)
+        if (publish) await adminApi.publishCourse(id);
+        else if (!unpublishConfirmed) await adminApi.unpublishCourse(id);
       } else if (role.includes("teacher")) {
-        if (publish) await teachersApi.publishCourse(id)
-        else if (!unpublishConfirmed) await teachersApi.unpublishCourse(id)
+        if (publish) await teachersApi.publishCourse(id);
+        else if (!unpublishConfirmed) await teachersApi.unpublishCourse(id);
       } else {
-        setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.")
+        setActionFeedback("نشر الدورات متاح للأدمن والمدرّس فقط.");
 
-        return
+        return;
       }
 
       setCoursePublicationOverrides((current) => ({
         ...current,
 
         [id]: publish ? "published" : "unpublished",
-      }))
+      }));
 
       if (currentCourse) {
         setCoursePublicationRecords((current) => {
-          if (!publish) return { ...current, [id]: currentCourse }
+          if (!publish) return { ...current, [id]: currentCourse };
 
-          const next = { ...current }
+          const next = { ...current };
 
-          delete next[id]
+          delete next[id];
 
-          return next
-        })
+          return next;
+        });
       }
 
-      setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.")
+      setActionFeedback(publish ? "تم نشر الدورة." : "تم إلغاء نشر الدورة.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر تحديث حالة الدورة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
   async function handleSubjectSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
-    const currentSubjectId = String(form.get("subjectId") ?? "")
+    const currentSubjectId = String(form.get("subjectId") ?? "");
 
     const body = {
       name: String(form.get("name") ?? "").trim(),
@@ -1865,35 +1876,36 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       academicYear: Number(form.get("academicYear")),
 
       isActive: form.get("isActive") === "on",
-    }
+    };
 
-    if (!body.name || !Number.isFinite(body.academicYear)) return
+    if (!body.name || !Number.isFinite(body.academicYear)) return;
 
-    setActionLoading("subject-save")
+    setActionLoading("subject-save");
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      if (currentSubjectId) await adminApi.updateSubject(currentSubjectId, body)
-      else await adminApi.createSubject(body)
+      if (currentSubjectId)
+        await adminApi.updateSubject(currentSubjectId, body);
+      else await adminApi.createSubject(body);
 
-      setSubjectName("")
+      setSubjectName("");
 
-      setSubjectId("")
+      setSubjectId("");
 
-      setSubjectIsActive(true)
+      setSubjectIsActive(true);
 
       setActionFeedback(
         currentSubjectId ? "تم تحديث المادة." : "تمت إضافة المادة.",
-      )
+      );
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حفظ المادة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
@@ -1908,24 +1920,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       confirmText: "حذف المادة",
 
       onConfirm: () => adminApi.deleteSubject(id),
-    })
+    });
 
-    if (!confirmed) return
+    if (!confirmed) return;
 
-    setActionLoading(`${id}-delete`)
+    setActionLoading(`${id}-delete`);
 
-    setActionFeedback("")
+    setActionFeedback("");
 
     try {
-      setActionFeedback("تم حذف المادة.")
+      setActionFeedback("تم حذف المادة.");
 
-      setReloadKey((key) => key + 1)
+      setReloadKey((key) => key + 1);
     } catch (cause) {
       setActionFeedback(
         cause instanceof Error ? cause.message : "تعذر حذف المادة.",
-      )
+      );
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
   }
 
@@ -1938,24 +1950,26 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
       variant: "primary",
 
       confirmText: "تسجيل الخروج",
-    })
+    });
 
-    if (!confirmed) return
+    if (!confirmed) return;
 
-    clearAuthToken()
+    clearAuthToken();
+    clearApiQueryCache();
+    clearPendingEnrollments();
 
-    window.sessionStorage.removeItem("eduhub.auth.role")
+    window.sessionStorage.removeItem("eduhub.auth.role");
 
-    window.sessionStorage.removeItem("eduhub.auth.name")
+    window.sessionStorage.removeItem("eduhub.auth.name");
 
-    window.sessionStorage.removeItem("eduhub.auth.image")
+    window.sessionStorage.removeItem("eduhub.auth.image");
 
-    navigate("landing")
+    navigate("landing");
   }
 
-  const roleCardTone = "border-emerald-900/10 bg-surface"
+  const roleCardTone = "border-emerald-900/10 bg-surface";
 
-  const roleCellTone = "bg-nuwa-soft/70"
+  const roleCellTone = "bg-nuwa-soft/70";
 
   const roleBadge = role.includes("admin")
     ? {
@@ -1979,7 +1993,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
           badge: "طالب",
 
           color: "bg-nuwa-soft text-nuwa-base",
-        }
+        };
 
   const sectionLabels: Record<string, string> = {
     stats: "الإحصائيات",
@@ -2007,7 +2021,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
     enrollments: "طلبات الالتحاق",
 
     notifications: "الإشعارات",
-  }
+  };
 
   return (
     <div className="dashboard-shell flex min-h-dvh flex-col bg-canvas dir-rtl">
@@ -2160,7 +2174,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 />
               )}
               {sections.map((item) => {
-                const isActive = activeKey === item.key
+                const isActive = activeKey === item.key;
 
                 const iconMap: Record<string, typeof LayoutDashboard> = {
                   stats: LayoutDashboard,
@@ -2188,24 +2202,24 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   enrollments: ClipboardList,
 
                   notifications: Bell,
-                }
+                };
 
-                const Icon = iconMap[item.key] ?? Settings2
+                const Icon = iconMap[item.key] ?? Settings2;
 
                 return (
                   <button
                     key={item.key}
                     data-sidebar-item={item.key}
                     onClick={() => {
-                      changeDashboardSection(item.key)
+                      changeDashboardSection(item.key);
 
-                      setPage(1)
+                      setPage(1);
 
-                      setSearch("")
+                      setSearch("");
 
-                      setSearchInput("")
+                      setSearchInput("");
 
-                      setMobileNavOpen(false)
+                      setMobileNavOpen(false);
                     }}
                     aria-current={isActive ? "page" : undefined}
                     className={`relative flex h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-start text-sm font-semibold transition-colors duration-200 ${
@@ -2232,7 +2246,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       {sectionLabels[item.key] ?? item.label}
                     </span>
                   </button>
-                )
+                );
               })}
             </nav>
           </LazyMotion>
@@ -2344,11 +2358,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
             {supportsSearch && (
               <form
                 onSubmit={(event) => {
-                  event.preventDefault()
+                  event.preventDefault();
 
-                  setPage(1)
+                  setPage(1);
 
-                  setSearch(searchInput.trim())
+                  setSearch(searchInput.trim());
                 }}
                 className="mt-5 flex flex-wrap gap-2 rounded-xl border border-stroke bg-surface p-3"
               >
@@ -2369,11 +2383,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchInput("")
+                      setSearchInput("");
 
-                      setSearch("")
+                      setSearch("");
 
-                      setPage(1)
+                      setPage(1);
                     }}
                     className="h-10 rounded-lg border border-stroke px-4 text-sm text-ink"
                   >
@@ -2389,43 +2403,43 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 aria-label="تصفية الدورات حسب حالة النشر"
                 className="mt-5 flex flex-wrap gap-2 rounded-2xl border border-stroke bg-surface p-3"
               >
-                {([
-                  ["all", "كل الدورات"],
+                {(
+                  [
+                    ["all", "كل الدورات"],
 
-                  ["published", "منشورة"],
+                    ["published", "منشورة"],
 
-                  ["unpublished", "غير منشورة"],
+                    ["unpublished", "غير منشورة"],
 
-                  ["draft", "مسودات"],
-                ] as const)
-
-                  .map(([status, label]) => (
-                    <button
-                      key={status}
-                      type="button"
-                      aria-pressed={courseStatusFilter === status}
-                      onClick={() => {
-                        setCourseStatusFilter(status)
-                        setPage(1)
-                      }}
-                      className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    ["draft", "مسودات"],
+                  ] as const
+                ).map(([status, label]) => (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={courseStatusFilter === status}
+                    onClick={() => {
+                      setCourseStatusFilter(status);
+                      setPage(1);
+                    }}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                      courseStatusFilter === status
+                        ? "bg-nuwa-base text-white shadow-sm"
+                        : "bg-white text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"
+                    }`}
+                  >
+                    {label}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${
                         courseStatusFilter === status
-                          ? "bg-nuwa-base text-white shadow-sm"
-                          : "bg-white text-ink-muted hover:bg-nuwa-ice hover:text-nuwa-deep"
+                          ? "bg-white/15 text-white"
+                          : "bg-canvas text-ink-muted"
                       }`}
                     >
-                      {label}
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${
-                          courseStatusFilter === status
-                            ? "bg-white/15 text-white"
-                            : "bg-canvas text-ink-muted"
-                        }`}
-                      >
-                        {courseStatusCounts[status]}
-                      </span>
-                    </button>
-                  ))}
+                      {courseStatusCounts[status]}
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -2487,8 +2501,8 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             نظرة عامة على منصة وَعي
                           </h3>
                           <p className="mt-1 text-sm leading-6 text-white/75">
-                            تابع المؤشرات الرئيسية وانتقل مباشرةً إلى أدوات إدارة
-                            المنصة.
+                            تابع المؤشرات الرئيسية وانتقل مباشرةً إلى أدوات
+                            إدارة المنصة.
                           </p>
                         </div>
                         <button
@@ -2648,13 +2662,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               key={key}
                               type="button"
                               onClick={() => {
-                                changeDashboardSection(key)
+                                changeDashboardSection(key);
 
-                                setPage(1)
+                                setPage(1);
 
-                                setSearch("")
+                                setSearch("");
 
-                                setSearchInput("")
+                                setSearchInput("");
                               }}
                               className="group flex items-center gap-3 rounded-xl border border-stroke p-3 text-start transition hover:border-nuwa-base/40 hover:bg-nuwa-ice"
                             >
@@ -2723,7 +2737,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 "",
                             ),
                           ),
-                      ).length
+                      ).length;
 
                       const progressValues = studentOverviewCourses
 
@@ -2741,7 +2755,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
 
                         .map(enrollmentProgressPercent)
 
-                        .filter((value): value is number => value !== null)
+                        .filter((value): value is number => value !== null);
 
                       const averageProgress = progressValues.length
                         ? Math.round(
@@ -2751,7 +2765,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               0,
                             ) / progressValues.length,
                           )
-                        : 0
+                        : 0;
 
                       return (
                         <>
@@ -2806,10 +2820,10 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               (enrollment, index) => {
                                 const course = isRecord(enrollment.course)
                                   ? enrollment.course
-                                  : {}
+                                  : {};
 
                                 const progress =
-                                  enrollmentProgressPercent(enrollment) ?? 0
+                                  enrollmentProgressPercent(enrollment) ?? 0;
 
                                 return {
                                   key: String(
@@ -2827,7 +2841,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   ),
 
                                   value: Math.round(progress),
-                                }
+                                };
                               },
                             )}
                           />
@@ -2843,15 +2857,15 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             <button
                               type="button"
                               onClick={() => {
-                                setFocusStudentCourseId(null)
+                                setFocusStudentCourseId(null);
 
-                                changeDashboardSection("courses")
+                                changeDashboardSection("courses");
 
-                                setPage(1)
+                                setPage(1);
 
-                                setSearch("")
+                                setSearch("");
 
-                                setSearchInput("")
+                                setSearchInput("");
                               }}
                               className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold text-nuwa-base transition hover:bg-nuwa-ice"
                             >
@@ -2864,44 +2878,39 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 (enrollment, index) => {
                                   const course = isRecord(enrollment.course)
                                     ? enrollment.course
-                                    : {}
+                                    : {};
 
                                   const courseId =
                                     enrollment.courseId ??
                                     course.id ??
-                                    course.courseId
+                                    course.courseId;
 
                                   const title =
                                     enrollment.courseTitle ??
                                     enrollment.courseName ??
                                     course.title ??
                                     course.name ??
-                                    `دورة ${index + 1}`
+                                    `دورة ${index + 1}`;
 
                                   const progressPercent =
-                                    enrollmentProgressPercent(enrollment) ?? 0
+                                    enrollmentProgressPercent(enrollment) ?? 0;
 
                                   const teacher = isRecord(enrollment.teacher)
                                     ? enrollment.teacher
                                     : isRecord(course.teacher)
                                       ? course.teacher
-                                      : {}
+                                      : {};
 
                                   const teacherName =
                                     enrollment.teacherName ??
                                     course.teacherName ??
                                     teacher.fullName ??
-                                    teacher.name
+                                    teacher.name;
 
                                   const canOpenCourse =
-                                    enrollment.isApproved !== false &&
-                                    !/pending|await|review|reject|declin|cancel/i.test(
-                                      String(
-                                        enrollment.status ??
-                                          enrollment.enrollmentStatus ??
-                                          "",
-                                      ),
-                                    )
+                                    enrollmentStatus(enrollment) === "approved";
+                                  const isPendingCourse =
+                                    enrollmentStatus(enrollment) === "pending";
 
                                   return (
                                     <CourseCard
@@ -2963,19 +2972,65 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                             onClick={() => {
                                               setFocusStudentCourseId(
                                                 String(courseId),
-                                              )
-                                              changeDashboardSection("courses")
-                                              setPage(1)
-                                              setSearch("")
-                                              setSearchInput("")
+                                              );
+                                              changeDashboardSection("courses");
+                                              setPage(1);
+                                              setSearch("");
+                                              setSearchInput("");
                                             }}
                                             className="w-full rounded-lg bg-nuwa-base px-3 py-2.5 text-sm font-bold text-white transition hover:bg-nuwa-deep"
                                           >
-                                            متابعة هذه الدورة
+                                            متابعة التقدم
                                           </button>
                                         )}
+                                      {courseId !== undefined &&
+                                        courseId !== null &&
+                                        isPendingCourse && (
+                                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setPendingCourseDialog({
+                                                  ...course,
+                                                  id: courseId,
+                                                  teacher:
+                                                    enrollment.teacher ??
+                                                    course.teacher,
+                                                  teacherId:
+                                                    enrollment.teacherId ??
+                                                    course.teacherId,
+                                                  teacherName:
+                                                    teacherName == null
+                                                      ? undefined
+                                                      : String(teacherName),
+                                                })
+                                              }
+                                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-900 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                                            >
+                                              <Clock3
+                                                size={15}
+                                                aria-hidden="true"
+                                              />
+                                              طلبك قيد المراجعة
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                navigate(
+                                                  "public:course-detail",
+                                                  {
+                                                    courseId: String(courseId),
+                                                  },
+                                                )
+                                              }
+                                              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-nuwa-soft px-3 py-2.5 text-xs font-bold text-nuwa-deep transition hover:bg-nuwa-base hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright"
+                                            >
+                                              التفاصيل
+                                            </button>
+                                          </div>
+                                        )}
                                     </CourseCard>
-                                  )
+                                  );
                                 },
                               )}
                             </div>
@@ -3002,7 +3057,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             </div>
                           )}
                         </>
-                      )
+                      );
                     })()}
                   </div>
                 </section>
@@ -3077,11 +3132,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       <button
                         type="button"
                         onClick={() => {
-                          setSubjectId("")
+                          setSubjectId("");
 
-                          setSubjectName("")
+                          setSubjectName("");
 
-                          setSubjectIsActive(true)
+                          setSubjectIsActive(true);
                         }}
                         className="h-10 rounded-lg border border-stroke px-3 text-sm"
                       >
@@ -3167,18 +3222,18 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   record.id)
                                 : activeKey === "courses"
                                   ? (record.courseId ?? record.id)
-                                  : record.id
+                                  : record.id;
 
-                        const id = formatValue("id", recordId)
+                        const id = formatValue("id", recordId);
 
                         const unread =
                           activeKey === "notifications" &&
-                          isUnreadNotification(record)
+                          isUnreadNotification(record);
 
                         const publicationState =
                           activeKey === "courses"
                             ? publicationStateOf(record)
-                            : null
+                            : null;
 
                         const title = formatValue(
                           "title",
@@ -3188,7 +3243,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             record.name ??
                             record.email ??
                             `عنصر #${index + 1}`,
-                        )
+                        );
 
                         if (activeKey === "courses") {
                           const statusTone =
@@ -3196,7 +3251,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               ? "bg-emerald-100 text-emerald-800"
                               : publicationState === "draft"
                                 ? "bg-amber-100 text-amber-900"
-                                : "bg-neutral-100 text-neutral-700"
+                                : "bg-neutral-100 text-neutral-700";
 
                           return (
                             <CourseCard
@@ -3251,7 +3306,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   </div>
                                 )}
                             </CourseCard>
-                          )
+                          );
                         }
 
                         if (activeKey === "notifications") {
@@ -3259,7 +3314,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             ? record.sender
                             : isRecord(record.actor)
                               ? record.actor
-                              : {}
+                              : {};
 
                           const senderName = String(
                             record.senderName ??
@@ -3267,7 +3322,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               sender.fullName ??
                               sender.name ??
                               "إشعار من المنصة",
-                          )
+                          );
 
                           const message =
                             record.message ??
@@ -3275,13 +3330,13 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                             record.description ??
                             record.content ??
                             record.text ??
-                            record.details
+                            record.details;
 
                           const createdAt =
                             record.createdAt ??
                             record.sentAt ??
                             record.createdOn ??
-                            record.date
+                            record.date;
 
                           const details = Object.entries(record).filter(
                             ([key, value]) =>
@@ -3292,7 +3347,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               ["string", "number", "boolean"].includes(
                                 typeof value,
                               ),
-                          )
+                          );
 
                           return (
                             <article
@@ -3305,9 +3360,9 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   event.key === "Enter" ||
                                   event.key === " "
                                 ) {
-                                  event.preventDefault()
+                                  event.preventDefault();
 
-                                  setSelectedNotification(record)
+                                  setSelectedNotification(record);
                                 }
                               }}
                               className={`group relative isolate cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-nuwa-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright ${
@@ -3411,7 +3466,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 </div>
                               </div>
                             </article>
-                          )
+                          );
                         }
 
                         return (
@@ -3505,12 +3560,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                 }`}
                               >
                                 {cardFields(record)
-
                                   .slice(0, 4)
 
                                   .map(([key, value]) => {
                                     const translatedKey =
-                                      fieldLabels[key] || key
+                                      fieldLabels[key] || key;
 
                                     return (
                                       <div
@@ -3527,7 +3581,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                           />
                                         </dd>
                                       </div>
-                                    )
+                                    );
                                   })}
                               </dl>
                               {activeKey === "students" ? (
@@ -3544,7 +3598,6 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                     </summary>
                                     <dl className="grid gap-2 border-t border-neutral-100 p-3 sm:grid-cols-2">
                                       {cardFields(record)
-
                                         .slice(4)
 
                                         .map(([key, value]) => (
@@ -3644,7 +3697,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const year = record.academicYear
+                                      const year = record.academicYear;
 
                                       const yearValue =
                                         typeof year === "object" &&
@@ -3653,11 +3706,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                               .value ??
                                             (year as Record<string, unknown>)
                                               .id)
-                                          : year
+                                          : year;
 
-                                      setSubjectId(id)
+                                      setSubjectId(id);
 
-                                      setSubjectName(String(record.name ?? ""))
+                                      setSubjectName(String(record.name ?? ""));
 
                                       setSubjectYear(
                                         String(
@@ -3665,11 +3718,11 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                                             academicYears[0]?.value ??
                                             "1",
                                         ),
-                                      )
+                                      );
 
                                       setSubjectIsActive(
                                         record.isActive !== false,
-                                      )
+                                      );
                                     }}
                                     className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink"
                                   >
@@ -3718,7 +3771,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                               </div>
                             )}
                           </article>
-                        )
+                        );
                       })}
                     </div>
                   )}
@@ -3743,14 +3796,14 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 selectedNotification.id ??
                   selectedNotification.notificationId ??
                   "",
-              )
+              );
 
               const notificationTitle = String(
                 selectedNotification.title ??
                   selectedNotification.subject ??
                   selectedNotification.eventName ??
                   "إشعار من المنصة",
-              )
+              );
 
               const notificationMessage =
                 selectedNotification.message ??
@@ -3758,19 +3811,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                 selectedNotification.description ??
                 selectedNotification.content ??
                 selectedNotification.text ??
-                selectedNotification.details
+                selectedNotification.details;
 
               const notificationDate =
                 selectedNotification.createdAt ??
                 selectedNotification.sentAt ??
                 selectedNotification.createdOn ??
-                selectedNotification.date
+                selectedNotification.date;
 
               const notificationSender = isRecord(selectedNotification.sender)
                 ? selectedNotification.sender
                 : isRecord(selectedNotification.actor)
                   ? selectedNotification.actor
-                  : {}
+                  : {};
 
               const notificationSenderName = String(
                 selectedNotification.senderName ??
@@ -3778,7 +3831,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   notificationSender.fullName ??
                   notificationSender.name ??
                   "إشعار من المنصة",
-              )
+              );
 
               const notificationDetails = Object.entries(
                 selectedNotification,
@@ -3789,7 +3842,7 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   ) &&
                   value !== null &&
                   ["string", "number", "boolean"].includes(typeof value),
-              )
+              );
 
               return (
                 <NotificationDialog
@@ -3807,20 +3860,20 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                   busy={actionLoading !== null || !notificationId}
                   onClose={() => setSelectedNotification(null)}
                   onMarkRead={() => {
-                    if (!notificationId) return
+                    if (!notificationId) return;
 
                     void handleMarkRead(notificationId).then((success) => {
-                      if (success) setSelectedNotification(null)
-                    })
+                      if (success) setSelectedNotification(null);
+                    });
                   }}
                   onDelete={() => {
-                    if (!notificationId) return
+                    if (!notificationId) return;
 
                     void handleNotificationDelete(notificationId).then(
                       (success) => {
-                        if (success) setSelectedNotification(null)
+                        if (success) setSelectedNotification(null);
                       },
-                    )
+                    );
                   }}
                 >
                   {notificationMessage != null && (
@@ -3855,11 +3908,19 @@ export default function DashboardPage({ navigate }: { navigate: NavigateFn }) {
                       </p>
                     )}
                 </NotificationDialog>
-              )
+              );
             })()}
+          <CourseEnrollmentContactDialog
+            course={pendingCourseDialog}
+            onClose={() => setPendingCourseDialog(null)}
+            navigate={navigate}
+            isPending
+            onEnrollmentRequested={reloadData}
+            onEnrollmentCancelled={handleCourseEnrollmentCancelled}
+          />
           <PlatformFooter navigate={navigate} dashboard />
         </div>
       </div>
     </div>
-  )
+  );
 }

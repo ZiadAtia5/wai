@@ -1,71 +1,80 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   GraduationCap,
   LoaderCircle,
   MessageCircle,
   Phone,
+  RefreshCw,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion";
 
-import { ApiError, resolveApiAssetUrl } from "../api/client"
+import { ApiError, resolveApiImageUrl } from "../api/client";
 
-import { getAuthToken } from "../api/client"
+import { getAuthToken } from "../api/client";
 
-import { studentsApi, teachersApi } from "../api/endpoints"
+import { studentsApi, teachersApi } from "../api/endpoints";
 
 import {
   getAcademicYears,
   type AcademicYearResponse,
   type ApiRecord,
   type PagedResult,
-} from "../api/catalog"
+} from "../api/catalog";
 
-import ApiQueryState from "../components/ApiQueryState"
+import ApiQueryState from "../components/ApiQueryState";
 
-import SearchBar from "../components/SearchBar"
+import SearchBar from "../components/SearchBar";
 
-import PersonAvatar from "../components/PersonAvatar"
+import PersonAvatar from "../components/PersonAvatar";
 
-import CourseMetadataBadges from "../components/CourseMetadataBadges"
+import CourseMetadataBadges from "../components/CourseMetadataBadges";
 
-import CourseTeacherAvatar from "../components/CourseTeacherAvatar"
+import CourseTeacherAvatar from "../components/CourseTeacherAvatar";
 
-import { Skeleton, SkeletonText } from "../components/Skeleton"
+import { Skeleton, SkeletonText } from "../components/Skeleton";
 
-import { CatalogGridSkeleton } from "../components/loading/SkeletonLayouts"
+import { CatalogGridSkeleton } from "../components/loading/SkeletonLayouts";
 
 import {
   staggerContainerVariants,
   staggerItemVariants,
-} from "../components/motion/PageTransition"
+} from "../components/motion/PageTransition";
 
-import { useApiQuery } from "../hooks/useApiQuery"
+import { useApiQuery } from "../hooks/useApiQuery";
 
-import type { NavigateFn } from "../types"
+import {
+  enrollmentCourseId,
+  enrollmentRecords,
+  enrollmentRequestId,
+  enrollmentStatus,
+} from "../utils/courseEnrollments";
 
-import { formatEgp } from "../utils/currency"
+import type { NavigateFn } from "../types";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { formatEgp } from "../utils/currency";
+
+import { notifyError, notifySuccess } from "../utils/notifications";
 
 import {
   forgetPendingEnrollment,
   readPendingEnrollments,
   rememberPendingEnrollment,
-} from "../utils/pendingEnrollments"
+} from "../utils/pendingEnrollments";
 
 interface PublicCatalogPageProps {
-  title: string
+  title: string;
 
-  description: string
+  description: string;
 
-  emptyMessage: string
+  emptyMessage: string;
 
   load: (
     page?: number,
@@ -75,27 +84,27 @@ interface PublicCatalogPageProps {
     search?: string,
 
     academicYear?: string,
-  ) => Promise<PagedResult<ApiRecord>>
+  ) => Promise<PagedResult<ApiRecord>>;
 
-  loadDetail?: (id: string) => Promise<unknown>
+  loadDetail?: (id: string) => Promise<unknown>;
 
-  loadRelated?: (id: string) => Promise<unknown>
+  loadRelated?: (id: string) => Promise<unknown>;
 
-  action?: (id: string) => Promise<unknown>
+  action?: (id: string) => Promise<unknown>;
 
-  actionLabel?: string
+  actionLabel?: string;
 
-  navigate?: NavigateFn
+  navigate?: NavigateFn;
 
-  personCards?: boolean
+  personCards?: boolean;
 
-  courseCatalog?: boolean
+  courseCatalog?: boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : null
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function titleOf(record: Record<string, unknown>): string {
@@ -106,7 +115,7 @@ function titleOf(record: Record<string, unknown>): string {
       record.teacherName ??
       record.email ??
       "عنصر من المنصة",
-  )
+  );
 }
 
 function personNameOf(record: Record<string, unknown>): string {
@@ -114,27 +123,27 @@ function personNameOf(record: Record<string, unknown>): string {
     record.fullName ??
     record.name ??
     record.teacherName ??
-    [record.firstName, record.lastName].filter(Boolean).join(" ")
+    [record.firstName, record.lastName].filter(Boolean).join(" ");
 
   return typeof fullName === "string" && fullName.trim()
     ? fullName.trim()
-    : "معلم"
+    : "معلم";
 }
 
 function personBioOf(record: Record<string, unknown>): string {
-  const bio = record.bio ?? record.description
+  const bio = record.bio ?? record.description;
 
-  return typeof bio === "string" ? bio : ""
+  return typeof bio === "string" ? bio : "";
 }
 
 function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-"
+  if (value === null || value === undefined || value === "") return "-";
 
-  return typeof value === "object" ? JSON.stringify(value) : String(value)
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function teacherNameOf(record: Record<string, unknown>): string | null {
-  const nested = asRecord(record.teacher)
+  const nested = asRecord(record.teacher);
 
   const value =
     record.teacherName ??
@@ -142,9 +151,9 @@ function teacherNameOf(record: Record<string, unknown>): string | null {
     nested?.fullName ??
     nested?.name ??
     asRecord(record.instructor)?.fullName ??
-    asRecord(record.instructor)?.name
+    asRecord(record.instructor)?.name;
 
-  return typeof value === "string" && value.trim() ? value.trim() : null
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function nestedRecord(
@@ -152,13 +161,13 @@ function nestedRecord(
 
   key: string,
 ): Record<string, unknown> {
-  return asRecord(record[key]) ?? {}
+  return asRecord(record[key]) ?? {};
 }
 
 function teacherPhoneOf(record: Record<string, unknown>): string {
-  const queue = [record]
+  const queue = [record];
 
-  const visited = new Set<Record<string, unknown>>()
+  const visited = new Set<Record<string, unknown>>();
 
   const nestedKeys = [
     "teacher",
@@ -174,16 +183,20 @@ function teacherPhoneOf(record: Record<string, unknown>): string {
     "user",
 
     "owner",
-  ]
+  ];
 
   while (queue.length && visited.size < 12) {
-    const candidate = queue.shift()
+    const candidate = queue.shift();
 
-    if (!candidate || visited.has(candidate)) continue
+    if (!candidate || visited.has(candidate)) continue;
 
-    visited.add(candidate)
+    visited.add(candidate);
 
     for (const key of [
+      "mobileNumber",
+
+      "mobile",
+
       "teacherPhoneNumber",
       "instructorPhoneNumber",
       "whatsappPhoneNumber",
@@ -197,69 +210,71 @@ function teacherPhoneOf(record: Record<string, unknown>): string {
       "phoneNumber",
 
       "phone",
-
-      "mobileNumber",
-
-      "mobile",
     ]) {
-      const value = candidate[key]
+      const value = candidate[key];
 
       if (
         (typeof value === "string" || typeof value === "number") &&
         String(value).trim()
       ) {
-        return String(value).trim()
+        return String(value).trim();
       }
     }
 
     for (const key of nestedKeys) {
-      const nested = asRecord(candidate[key])
+      const nested = asRecord(candidate[key]);
 
-      if (nested) queue.push(nested)
+      if (nested) queue.push(nested);
     }
   }
 
-  return ""
+  return "";
 }
 
 function teacherIdOf(record: Record<string, unknown>): string {
   const teacher =
     Object.keys(nestedRecord(record, "teacher")).length > 0
       ? nestedRecord(record, "teacher")
-      : nestedRecord(record, "instructor")
+      : Object.keys(nestedRecord(record, "instructor")).length > 0
+        ? nestedRecord(record, "instructor")
+        : nestedRecord(record, "teacher_profile");
 
   const id =
     record.teacherId ??
+    record.teacher_id ??
     record.instructorId ??
+    record.instructor_id ??
     teacher.id ??
     teacher.teacherId ??
-    teacher.userId
+    teacher.teacher_id ??
+    teacher.userId ??
+    teacher.user_id;
 
-  return id === undefined || id === null ? "" : String(id).trim()
+  return id === undefined || id === null ? "" : String(id).trim();
 }
 
 function whatsappPhone(phone: string): string {
-  let digits = phone.replace(/\D/g, "")
+  let digits = phone.replace(/\D/g, "");
 
-  if (digits.startsWith("00")) digits = digits.slice(2)
+  if (digits.startsWith("00")) digits = digits.slice(2);
 
-  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`
+  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`;
 
-  return digits
+  return digits;
 }
 
 function unwrapApiResponse(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const response = asRecord(current)
+    const response = asRecord(current);
 
-    if (!response || !("data" in response)) break
+    if (!response || !("data" in response)) break;
 
-    current = response.data
+    current = response.data;
   }
 
-  return current
+  return current;
 }
 
 function scalarFields(record: Record<string, unknown>): [string, unknown][] {
@@ -269,7 +284,7 @@ function scalarFields(record: Record<string, unknown>): [string, unknown][] {
       key !== "description" &&
       value !== null &&
       ["string", "number", "boolean"].includes(typeof value),
-  )
+  );
 }
 
 function normalizeArabic(value: string): string {
@@ -287,65 +302,65 @@ function normalizeArabic(value: string): string {
 
     .toLocaleLowerCase("ar")
 
-    .trim()
+    .trim();
 }
 
 function subjectValues(record: Record<string, unknown>): string[] {
-  const subjects = record.subjects ?? record.teachingSubjects
+  const subjects = record.subjects ?? record.teachingSubjects;
 
   const values = Array.isArray(subjects)
     ? subjects.map((subject) => {
-        const nested = asRecord(subject)
+        const nested = asRecord(subject);
 
-        return String(nested?.name ?? nested?.subjectName ?? subject ?? "")
+        return String(nested?.name ?? nested?.subjectName ?? subject ?? "");
       })
-    : []
+    : [];
 
   const primary =
     record.subjectName ??
     record.subject ??
     record.specialization ??
-    record.specialty
+    record.specialty;
 
-  if (primary) values.unshift(String(primary))
+  if (primary) values.unshift(String(primary));
 
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function highlightMatch(text: string, query: string) {
-  const normalizedQuery = normalizeArabic(query)
+  const normalizedQuery = normalizeArabic(query);
 
-  if (!normalizedQuery) return text
+  if (!normalizedQuery) return text;
 
-  let normalizedText = ""
+  let normalizedText = "";
 
-  const sourcePositions: number[] = []
+  const sourcePositions: number[] = [];
 
-  const sourceEnds: number[] = []
+  const sourceEnds: number[] = [];
 
-  let sourceOffset = 0
+  let sourceOffset = 0;
 
   Array.from(text).forEach((character) => {
-    const normalizedCharacter = normalizeArabic(character)
+    const normalizedCharacter = normalizeArabic(character);
 
     for (const part of normalizedCharacter) {
-      normalizedText += part
+      normalizedText += part;
 
-      sourcePositions.push(sourceOffset)
+      sourcePositions.push(sourceOffset);
 
-      sourceEnds.push(sourceOffset + character.length)
+      sourceEnds.push(sourceOffset + character.length);
     }
 
-    sourceOffset += character.length
-  })
+    sourceOffset += character.length;
+  });
 
-  const matchIndex = normalizedText.indexOf(normalizedQuery)
+  const matchIndex = normalizedText.indexOf(normalizedQuery);
 
-  if (matchIndex < 0) return text
+  if (matchIndex < 0) return text;
 
-  const start = sourcePositions[matchIndex]
+  const start = sourcePositions[matchIndex];
 
-  const end = sourceEnds[matchIndex + normalizedQuery.length - 1]
+  const end = sourceEnds[matchIndex + normalizedQuery.length - 1];
 
   return (
     <>
@@ -355,7 +370,7 @@ function highlightMatch(text: string, query: string) {
       </mark>
       {text.slice(end)}
     </>
-  )
+  );
 }
 
 export default function PublicCatalogPage({
@@ -381,214 +396,223 @@ export default function PublicCatalogPage({
 
   courseCatalog = false,
 }: PublicCatalogPageProps) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
 
-  const [reloadKey, setReloadKey] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
 
-  const [related, setRelated] = useState<unknown>(null)
+  const [related, setRelated] = useState<unknown>(null);
 
-  const [, setActionMessage] = useState("")
+  const [, setActionMessage] = useState("");
 
-  const [actionLoading, setActionLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const [contactCourse, setContactCourse] =
-    useState<Record<string, unknown> | null>(null)
+  const [contactCourse, setContactCourse] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
-  const [contactPhone, setContactPhone] = useState("")
+  const [contactPhone, setContactPhone] = useState("");
 
-  const [contactLoading, setContactLoading] = useState(false)
+  const [contactLoading, setContactLoading] = useState(false);
 
-  const [contactError, setContactError] = useState("")
+  const [contactError, setContactError] = useState("");
 
-  const [contactRequestSent, setContactRequestSent] = useState(false)
+  const [contactRequestSent, setContactRequestSent] = useState(false);
 
-  const [contactRequestLoading, setContactRequestLoading] = useState(false)
+  const [contactRequestLoading, setContactRequestLoading] = useState(false);
 
-  const [contactRequestMessage, setContactRequestMessage] = useState("")
+  const [contactRequestMessage, setContactRequestMessage] = useState("");
 
-  const contactRequestId = useRef(0)
+  const contactRequestId = useRef(0);
 
   function closeEnrollmentContact() {
-    contactRequestId.current += 1
-    setContactCourse(null)
-    setContactLoading(false)
+    contactRequestId.current += 1;
+    setContactCourse(null);
+    setContactLoading(false);
   }
 
   useEffect(() => {
-    if (!contactCourse) return
+    if (!contactCourse) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeEnrollmentContact()
-    }
+      if (event.key === "Escape") closeEnrollmentContact();
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown);
 
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [contactCourse])
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [contactCourse]);
 
   const [searchInput, setSearchInput] = useState(
     () =>
       new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
-  )
+  );
 
   const [search, setSearch] = useState(
     () =>
       new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
-  )
+  );
 
-  const [subjectFilter, setSubjectFilter] = useState("")
+  const [subjectFilter, setSubjectFilter] = useState("");
 
-  const [academicYear, setAcademicYear] = useState("")
+  const [academicYear, setAcademicYear] = useState("");
 
-  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYearResponse[]>(
+    [],
+  );
 
-  const [academicYearsLoading, setAcademicYearsLoading] = useState(false)
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
 
-  const [relatedLoading, setRelatedLoading] = useState(false)
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [pendingEnrollmentIds, setPendingEnrollmentIds] = useState<Map<string, string>>(
-    () => readPendingEnrollments(),
-  )
+  const [approvedCourseIds, setApprovedCourseIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
-  const [enrollmentChecked, setEnrollmentChecked] = useState(false)
+  const [pendingEnrollmentIds, setPendingEnrollmentIds] = useState<
+    Map<string, string>
+  >(() => readPendingEnrollments());
+
+  const [enrollmentChecked, setEnrollmentChecked] = useState(false);
+
+  const [enrollmentCheckFailed, setEnrollmentCheckFailed] = useState(false);
+
+  const [enrollmentReloadKey, setEnrollmentReloadKey] = useState(0);
+
+  const isStudentViewer = Boolean(
+    action &&
+    getAuthToken() &&
+    (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
+      .toLowerCase()
+      .includes("student"),
+  );
 
   useEffect(() => {
-    const role = window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    const role = window.sessionStorage.getItem("eduhub.auth.role") ?? "";
 
     if (!action || !role.includes("student") || !getAuthToken()) {
-      setEnrollmentChecked(true)
+      setEnrollmentChecked(true);
 
-      return
+      return;
     }
 
-    let active = true
+    let active = true;
+    setEnrollmentCheckFailed(false);
 
     studentsApi
 
       .enrollments({ page: 1, pageSize: 100 })
 
       .then((response) => {
-        if (!active) return
+        if (!active) return;
 
-        const root = asRecord(response)
-
-        const nested = asRecord(root?.data)
-
-        const items = Array.isArray(response)
-          ? response
-          : Array.isArray(root?.items)
-            ? root.items
-            : Array.isArray(root?.enrollments)
-              ? root.enrollments
-              : Array.isArray(root?.data)
-                ? root.data
-                : Array.isArray(nested?.items)
-                  ? nested.items
-                  : Array.isArray(nested?.enrollments)
-                    ? nested.enrollments
-                    : []
-
+        const items = enrollmentRecords(response);
         const ids = items.flatMap((item) => {
-          const record = asRecord(item)
+          const courseId = enrollmentCourseId(item);
+          return courseId ? [courseId] : [];
+        });
+        const activeItems = items.filter(
+          (item) => enrollmentStatus(item) !== "rejected",
+        );
+        const approvedIds = new Set(
+          items.flatMap((item) => {
+            const courseId = enrollmentCourseId(item);
+            return courseId && enrollmentStatus(item) === "approved"
+              ? [courseId]
+              : [];
+          }),
+        );
 
-          const course = asRecord(record?.course)
-
-          const id = record?.courseId ?? course?.id
-
-          return id === undefined || id === null ? [] : [String(id)]
-        })
-
-        setEnrolledCourseIds(new Set(ids))
+        setEnrolledCourseIds(
+          new Set(
+            activeItems.flatMap((item) => {
+              const courseId = enrollmentCourseId(item);
+              return courseId ? [courseId] : [];
+            }),
+          ),
+        );
+        setApprovedCourseIds(approvedIds);
 
         const serverPending = new Map(
-            items.flatMap((item) => {
-              const record = asRecord(item)
-              const course = asRecord(record?.course)
-              const courseId = record?.courseId ?? course?.id ?? course?.courseId
-              const requestId = record?.id ?? record?.enrollmentId
-              const status = String(
-                record?.status ?? record?.enrollmentStatus ?? record?.state ?? "",
-              ).toLowerCase()
-              const pending =
-                record?.isApproved === false ||
-                (!record?.isApproved &&
-                  !["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status) &&
-                  !["2", "rejected", "declined", "cancelled", "canceled"].includes(status))
+          items.flatMap((item) => {
+            const courseId = enrollmentCourseId(item);
+            const requestId = enrollmentRequestId(item);
 
-              return pending && courseId != null && requestId != null
-                ? [[String(courseId), String(requestId)] as [string, string]]
-                : []
-            }),
-          )
-        const storedPending = readPendingEnrollments()
-        const returnedCourseIds = new Set(ids)
+            return enrollmentStatus(item) === "pending" &&
+              courseId !== null &&
+              requestId !== null
+              ? [[courseId, requestId]]
+              : [];
+          }),
+        );
+        const storedPending = readPendingEnrollments();
+        const returnedCourseIds = new Set(ids);
         for (const storedCourseId of storedPending.keys()) {
           if (
             returnedCourseIds.has(storedCourseId) &&
             !serverPending.has(storedCourseId)
           ) {
-            forgetPendingEnrollment(storedCourseId)
-            storedPending.delete(storedCourseId)
+            forgetPendingEnrollment(storedCourseId);
+            storedPending.delete(storedCourseId);
           }
         }
-        setPendingEnrollmentIds((stored) =>
-          new Map([...storedPending, ...stored, ...serverPending]),
-        )
+        setPendingEnrollmentIds(new Map([...storedPending, ...serverPending]));
       })
 
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setEnrollmentCheckFailed(true);
+      })
 
       .finally(() => {
-        if (active) setEnrollmentChecked(true)
-      })
+        if (active) setEnrollmentChecked(true);
+      });
 
     return () => {
-      active = false
-    }
-  }, [action])
+      active = false;
+    };
+  }, [action, enrollmentReloadKey]);
 
   useEffect(() => {
-    if (personCards) return
+    if (personCards) return;
 
-    let active = true
+    let active = true;
 
-    setAcademicYearsLoading(true)
+    setAcademicYearsLoading(true);
 
     getAcademicYears()
-
       .then((years) => {
-        if (active) setAcademicYears(years)
+        if (active) setAcademicYears(years);
       })
 
       .catch(() => undefined)
 
       .finally(() => {
-        if (active) setAcademicYearsLoading(false)
-      })
+        if (active) setAcademicYearsLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [personCards])
+      active = false;
+    };
+  }, [personCards]);
 
   const pageLoader = useCallback(
     () => load(page, personCards ? 3 : 12, search, academicYear),
 
     [load, page, personCards, search, academicYear],
-  )
+  );
 
   const catalogCacheKey =
     personCards || courseCatalog
       ? `${
           personCards ? "public-teachers" : "public-courses"
         }:${page}:${search}:${academicYear}`
-      : undefined
+      : undefined;
 
   const { data, error, loading } = useApiQuery(
     pageLoader,
@@ -598,47 +622,47 @@ export default function PublicCatalogPage({
     true,
 
     catalogCacheKey,
-  )
+  );
 
   const filterOptions = useMemo(() => {
     if (personCards) {
       const values = (data?.items ?? []).flatMap((item) => {
-        const record = asRecord(item)
+        const record = asRecord(item);
 
-        return record ? subjectValues(record) : []
-      })
+        return record ? subjectValues(record) : [];
+      });
 
-      return [...new Set(values)].map((value) => ({ value, label: value }))
+      return [...new Set(values)].map((value) => ({ value, label: value }));
     }
 
     return academicYears.map((year) => ({
       value: String(year.value),
 
       label: year.arabicName,
-    }))
-  }, [academicYears, data, personCards])
+    }));
+  }, [academicYears, data, personCards]);
 
   const visibleItems = useMemo(() => {
-    const query = normalizeArabic(search)
+    const query = normalizeArabic(search);
 
     const filteredItems = (data?.items ?? []).filter((item) => {
-      const record = asRecord(item)
+      const record = asRecord(item);
 
-      if (!record) return false
+      if (!record) return false;
 
       if (
         personCards &&
         subjectFilter &&
         !subjectValues(record).some((subject) => subject === subjectFilter)
       ) {
-        return false
+        return false;
       }
 
-      const year = String(record.academicYear ?? record.grade ?? "")
+      const year = String(record.academicYear ?? record.grade ?? "");
 
       const selectedYearLabel = filterOptions.find(
         (option) => option.value === academicYear,
-      )?.label
+      )?.label;
 
       if (
         !personCards &&
@@ -646,10 +670,10 @@ export default function PublicCatalogPage({
         year !== academicYear &&
         year !== selectedYearLabel
       ) {
-        return false
+        return false;
       }
 
-      if (!query) return true
+      if (!query) return true;
 
       const searchable = [
         titleOf(record),
@@ -663,29 +687,29 @@ export default function PublicCatalogPage({
         String(record.email ?? ""),
 
         ...subjectValues(record),
-      ]
+      ];
 
-      return searchable.some((value) => normalizeArabic(value).includes(query))
-    })
+      return searchable.some((value) => normalizeArabic(value).includes(query));
+    });
 
-    if (!courseCatalog || enrolledCourseIds.size === 0) return filteredItems
+    if (!courseCatalog || enrolledCourseIds.size === 0) return filteredItems;
 
     return filteredItems.sort((first, second) => {
-      const firstRecord = asRecord(first)
-      const secondRecord = asRecord(second)
-      const firstId = firstRecord?.id ?? firstRecord?.courseId
-      const secondId = secondRecord?.id ?? secondRecord?.courseId
+      const firstRecord = asRecord(first);
+      const secondRecord = asRecord(second);
+      const firstId = firstRecord?.id ?? firstRecord?.courseId;
+      const secondId = secondRecord?.id ?? secondRecord?.courseId;
       const firstEnrolled =
         firstId !== undefined &&
         firstId !== null &&
-        enrolledCourseIds.has(String(firstId))
+        enrolledCourseIds.has(String(firstId));
       const secondEnrolled =
         secondId !== undefined &&
         secondId !== null &&
-        enrolledCourseIds.has(String(secondId))
+        enrolledCourseIds.has(String(secondId));
 
-      return Number(secondEnrolled) - Number(firstEnrolled)
-    })
+      return Number(secondEnrolled) - Number(firstEnrolled);
+    });
   }, [
     academicYear,
     courseCatalog,
@@ -695,160 +719,160 @@ export default function PublicCatalogPage({
     personCards,
     search,
     subjectFilter,
-  ])
+  ]);
 
   async function selectRecord(item: ApiRecord) {
-    const record = asRecord(item)
+    const record = asRecord(item);
 
-    if (!record) return
+    if (!record) return;
 
-    setDetail(record)
+    setDetail(record);
 
-    setRelated(null)
+    setRelated(null);
 
-    setActionMessage("")
+    setActionMessage("");
 
     if (record.id === undefined || record.id === null) {
-      setRelatedLoading(false)
+      setRelatedLoading(false);
 
-      return
+      return;
     }
 
-    setRelatedLoading(Boolean(loadRelated))
+    setRelatedLoading(Boolean(loadRelated));
 
     try {
-      const id = String(record.id)
+      const id = String(record.id);
 
       if (loadDetail) {
-        const result = asRecord(await loadDetail(id))
+        const result = asRecord(await loadDetail(id));
 
-        if (result) setDetail(result)
+        if (result) setDetail(result);
       }
 
-      if (loadRelated) setRelated(await loadRelated(id))
+      if (loadRelated) setRelated(await loadRelated(id));
     } catch (cause) {
-      notifyError(cause, "تعذر تحميل التفاصيل.")
+      notifyError(cause, "تعذر تحميل التفاصيل.");
 
       setActionMessage(
         cause instanceof ApiError ? cause.message : "تعذر تحميل التفاصيل.",
-      )
+      );
     } finally {
-      setRelatedLoading(false)
+      setRelatedLoading(false);
     }
   }
 
   async function openEnrollmentContact(
     course: Record<string, unknown>,
   ): Promise<void> {
-    const requestId = ++contactRequestId.current
-    setContactCourse(course)
-    const courseId = course.id ?? course.courseId
+    const requestId = ++contactRequestId.current;
+    setContactCourse(course);
+    const courseId = course.id ?? course.courseId;
     setContactRequestSent(
       courseId !== undefined &&
         courseId !== null &&
         enrollmentChecked &&
         enrolledCourseIds.has(String(courseId)),
-    )
-    setContactRequestMessage("")
+    );
+    setContactRequestMessage("");
 
-    setContactError("")
+    setContactError("");
 
-    const listedPhone = teacherPhoneOf(course)
+    const listedPhone = teacherPhoneOf(course);
 
-    setContactPhone(listedPhone)
+    setContactPhone(listedPhone);
 
     if (listedPhone) {
-      setContactLoading(false)
+      setContactLoading(false);
 
-      return
+      return;
     }
 
-    setContactLoading(true)
+    setContactLoading(true);
 
-    let resolvedCourse = course
+    let resolvedCourse = course;
 
-    let detailError: unknown = null
+    let detailError: unknown = null;
 
-    let lookupError = ""
+    let lookupError = "";
 
     try {
-      const courseId = course.id ?? course.courseId
+      const courseId = course.id ?? course.courseId;
 
       if (loadDetail && courseId !== undefined && courseId !== null) {
-        const detailResponse = await loadDetail(String(courseId))
-        if (requestId !== contactRequestId.current) return
+        const detailResponse = await loadDetail(String(courseId));
+        if (requestId !== contactRequestId.current) return;
 
-        const detailRecord = asRecord(unwrapApiResponse(detailResponse))
+        const detailRecord = asRecord(unwrapApiResponse(detailResponse));
 
         if (detailRecord) {
           const nestedCourse =
             asRecord(detailRecord.course) ??
             asRecord(detailRecord.courseDetails) ??
-            detailRecord
+            detailRecord;
 
-          resolvedCourse = { ...course, ...nestedCourse }
+          resolvedCourse = { ...course, ...nestedCourse };
 
-          setContactCourse(resolvedCourse)
+          setContactCourse(resolvedCourse);
         }
       }
     } catch (cause) {
-      detailError = cause
+      detailError = cause;
     }
 
-    let phone = teacherPhoneOf(resolvedCourse)
+    let phone = teacherPhoneOf(resolvedCourse);
 
     if (!phone) {
-      const teacherId = teacherIdOf(resolvedCourse)
+      const teacherId = teacherIdOf(resolvedCourse);
 
       if (teacherId) {
         try {
-          const teacherResponse = await teachersApi.byId(teacherId)
-          if (requestId !== contactRequestId.current) return
+          const teacherResponse = await teachersApi.byId(teacherId);
+          if (requestId !== contactRequestId.current) return;
 
-          const teacherRecord = asRecord(unwrapApiResponse(teacherResponse))
+          const teacherRecord = asRecord(unwrapApiResponse(teacherResponse));
 
           if (teacherRecord) {
-            phone = teacherPhoneOf(teacherRecord)
+            phone = teacherPhoneOf(teacherRecord);
 
             resolvedCourse = {
               ...resolvedCourse,
 
               teacher: teacherRecord,
-            }
+            };
 
-            setContactCourse(resolvedCourse)
+            setContactCourse(resolvedCourse);
           }
         } catch (cause) {
-          if (requestId !== contactRequestId.current) return
+          if (requestId !== contactRequestId.current) return;
           lookupError =
             cause instanceof Error
               ? cause.message
-              : "تعذر تحميل رقم تواصل المعلم."
+              : "تعذر تحميل رقم تواصل المعلم.";
         }
       }
     }
 
-    if (requestId !== contactRequestId.current) return
+    if (requestId !== contactRequestId.current) return;
 
-    setContactPhone(phone)
+    setContactPhone(phone);
 
     if (!phone) {
       if (lookupError) {
-        setContactError(lookupError)
+        setContactError(lookupError);
       } else if (detailError && !teacherIdOf(resolvedCourse)) {
         setContactError(
           detailError instanceof Error
             ? detailError.message
             : "تعذر تحميل بيانات التواصل الخاصة بالدورة.",
-        )
+        );
       }
     }
 
-    setContactLoading(false)
+    setContactLoading(false);
   }
 
   async function requestContactEnrollment(): Promise<void> {
-    const courseId = contactCourse?.id ?? contactCourse?.courseId
+    const courseId = contactCourse?.id ?? contactCourse?.courseId;
 
     if (
       courseId === undefined ||
@@ -856,63 +880,63 @@ export default function PublicCatalogPage({
       !action ||
       contactRequestLoading
     ) {
-      return
+      return;
     }
 
     if (contactRequestSent) {
       setContactRequestMessage(
         "تم إرسال طلبك بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع.",
-      )
-      return
+      );
+      return;
     }
 
     if (!getAuthToken()) {
       setContactRequestMessage(
         "سجّل الدخول بحساب الطالب أولًا لإرسال طلب الالتحاق.",
-      )
-      navigate?.("login")
-      return
+      );
+      navigate?.("login");
+      return;
     }
 
     const role = (
       window.sessionStorage.getItem("eduhub.auth.role") ?? ""
-    ).toLowerCase()
+    ).toLowerCase();
 
     if (!role.includes("student")) {
-      const message = "طلب الالتحاق متاح لحساب الطالب فقط."
-      setContactRequestMessage(message)
-      notifyError(new Error(message))
-      return
+      const message = "طلب الالتحاق متاح لحساب الطالب فقط.";
+      setContactRequestMessage(message);
+      notifyError(new Error(message));
+      return;
     }
 
-    setContactRequestLoading(true)
-    setContactRequestMessage("")
+    setContactRequestLoading(true);
+    setContactRequestMessage("");
 
     try {
-      const response = await action(String(courseId))
-      setContactRequestSent(true)
-      setEnrolledCourseIds((current) => new Set(current).add(String(courseId)))
-      const enrollment = asRecord(unwrapApiResponse(response))
-      const requestId = enrollment?.id ?? enrollment?.enrollmentId
+      const response = await action(String(courseId));
+      setContactRequestSent(true);
+      setEnrolledCourseIds((current) => new Set(current).add(String(courseId)));
+      const enrollment = asRecord(unwrapApiResponse(response));
+      const requestId = enrollment?.id ?? enrollment?.enrollmentId;
       rememberPendingEnrollment(
         String(courseId),
         requestId == null ? "" : String(requestId),
-      )
+      );
       if (requestId != null) {
         setPendingEnrollmentIds((current) =>
           new Map(current).set(String(courseId), String(requestId)),
-        )
+        );
       } else {
         setPendingEnrollmentIds((current) =>
           new Map(current).set(String(courseId), ""),
-        )
+        );
         try {
           const enrollmentResponse = await studentsApi.enrollments({
             page: 1,
             pageSize: 100,
-          })
-          const root = asRecord(enrollmentResponse)
-          const nested = asRecord(root?.data)
+          });
+          const root = asRecord(enrollmentResponse);
+          const nested = asRecord(root?.data);
           const entries = Array.isArray(enrollmentResponse)
             ? enrollmentResponse
             : Array.isArray(root?.items)
@@ -923,19 +947,24 @@ export default function PublicCatalogPage({
                   ? nested.items
                   : Array.isArray(nested?.enrollments)
                     ? nested.enrollments
-                    : []
+                    : [];
           const matching = entries.map(asRecord).find((entry) => {
-            const nestedCourse = asRecord(entry?.course)
-            return String(
-              entry?.courseId ?? nestedCourse?.id ?? nestedCourse?.courseId ?? "",
-            ) === String(courseId)
-          })
-          const fetchedId = matching?.id ?? matching?.enrollmentId
+            const nestedCourse = asRecord(entry?.course);
+            return (
+              String(
+                entry?.courseId ??
+                  nestedCourse?.id ??
+                  nestedCourse?.courseId ??
+                  "",
+              ) === String(courseId)
+            );
+          });
+          const fetchedId = matching?.id ?? matching?.enrollmentId;
           if (fetchedId != null) {
-            rememberPendingEnrollment(String(courseId), String(fetchedId))
+            rememberPendingEnrollment(String(courseId), String(fetchedId));
             setPendingEnrollmentIds((current) =>
               new Map(current).set(String(courseId), String(fetchedId)),
-            )
+            );
           }
         } catch {
           // The request was sent successfully; the next enrollment refresh can recover its ID.
@@ -943,42 +972,45 @@ export default function PublicCatalogPage({
       }
       setContactRequestMessage(
         "تم إرسال طلبك للمعلم. تواصل معه عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
-      )
-      notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
+      );
+      notifySuccess("تم إرسال طلب الالتحاق بنجاح.");
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
       const duplicate =
         (cause instanceof ApiError && cause.status === 409) ||
-        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message)
+        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message);
 
       if (duplicate) {
-        setContactRequestSent(true)
+        setContactRequestSent(true);
         setEnrolledCourseIds((current) =>
           new Set(current).add(String(courseId)),
-        )
+        );
         setContactRequestMessage(
           "لديك طلب التحاق مسجل بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
-        )
-        return
+        );
+        return;
       }
 
-      setContactRequestMessage(message || "تعذر إرسال طلب الالتحاق.")
-      notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+      setContactRequestMessage(message || "تعذر إرسال طلب الالتحاق.");
+      notifyError(cause, "تعذر إرسال طلب الالتحاق.");
     } finally {
-      setContactRequestLoading(false)
+      setContactRequestLoading(false);
     }
   }
 
   async function cancelEnrollmentRequest(courseId: string): Promise<void> {
-    if (actionLoading) return
+    if (actionLoading) return;
 
-    setActionLoading(true)
+    setActionLoading(true);
     try {
-      let requestId = pendingEnrollmentIds.get(courseId) ?? ""
+      let requestId = pendingEnrollmentIds.get(courseId) ?? "";
       if (!requestId) {
-        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
-        const root = asRecord(response)
-        const nested = asRecord(root?.data)
+        const response = await studentsApi.enrollments({
+          page: 1,
+          pageSize: 100,
+        });
+        const root = asRecord(response);
+        const nested = asRecord(root?.data);
         const entries = Array.isArray(response)
           ? response
           : Array.isArray(root?.items)
@@ -989,65 +1021,72 @@ export default function PublicCatalogPage({
                 ? nested.items
                 : Array.isArray(nested?.enrollments)
                   ? nested.enrollments
-                  : []
+                  : [];
         const enrollment = entries.map(asRecord).find((entry) => {
-          const nestedCourse = asRecord(entry?.course)
-          return String(
-            entry?.courseId ?? nestedCourse?.id ?? nestedCourse?.courseId ?? "",
-          ) === courseId
-        })
-        requestId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "")
+          const nestedCourse = asRecord(entry?.course);
+          return (
+            String(
+              entry?.courseId ??
+                nestedCourse?.id ??
+                nestedCourse?.courseId ??
+                "",
+            ) === courseId
+          );
+        });
+        requestId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "");
       }
       if (!requestId) {
-        throw new Error("تعذر العثور على طلب الالتحاق لإلغائه. يمكنك التواصل مع المدرس عبر واتساب.")
+        throw new Error(
+          "تعذر العثور على طلب الالتحاق لإلغائه. يمكنك التواصل مع المدرس عبر واتساب.",
+        );
       }
-      await studentsApi.cancelEnrollment(requestId)
-      forgetPendingEnrollment(courseId)
+      await studentsApi.cancelEnrollment(requestId);
+      forgetPendingEnrollment(courseId);
       setPendingEnrollmentIds((current) => {
-        const next = new Map(current)
-        next.delete(courseId)
-        return next
-      })
+        const next = new Map(current);
+        next.delete(courseId);
+        return next;
+      });
       setEnrolledCourseIds((current) => {
-        const next = new Set(current)
-        next.delete(courseId)
-        return next
-      })
-      setContactRequestSent(false)
-      setContactRequestMessage("")
-      notifySuccess("تم سحب طلب الالتحاق بنجاح.")
+        const next = new Set(current);
+        next.delete(courseId);
+        return next;
+      });
+      setContactRequestSent(false);
+      setContactRequestMessage("");
+      notifySuccess("تم سحب طلب الالتحاق بنجاح.");
     } catch (cause) {
-      notifyError(cause, "تعذر سحب طلب الالتحاق.")
+      notifyError(cause, "تعذر سحب طلب الالتحاق.");
     } finally {
-      setActionLoading(false)
+      setActionLoading(false);
     }
   }
 
   async function runAction() {
     if (courseCatalog) {
-      if (detail) void openEnrollmentContact(detail)
+      if (detail) void openEnrollmentContact(detail);
 
-      return
+      return;
     }
 
-    if (!action || detail?.id === undefined || detail.id === null) return
+    if (!action || detail?.id === undefined || detail.id === null) return;
 
-    const courseId = String(detail.id)
+    const courseId = String(detail.id);
 
     if (enrolledCourseIds.has(courseId)) {
-      setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
+      setActionMessage("أنت مسجل بالفعل في هذه الدورة.");
 
-      return
+      return;
     }
 
     if (!getAuthToken()) {
-      notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."))
+      notifyError(new Error("يجب تسجيل الدخول أولاً لإرسال طلب الالتحاق."));
 
-      setActionMessage("سجّل الدخول أولاً لإرسال طلب الالتحاق.")
+      setActionMessage("سجّل الدخول أولاً لإرسال طلب الالتحاق.");
 
-      navigate?.("login")
+      navigate?.("login");
 
-      return
+      return;
     }
 
     if (
@@ -1058,103 +1097,110 @@ export default function PublicCatalogPage({
 
         .includes("student")
     ) {
-      const message = "طلب الالتحاق بالدورات متاح لحساب الطالب فقط."
+      const message = "طلب الالتحاق بالدورات متاح لحساب الطالب فقط.";
 
-      notifyError(new Error(message))
+      notifyError(new Error(message));
 
-      setActionMessage(message)
+      setActionMessage(message);
 
-      return
+      return;
     }
 
-    if (actionLoading) return
+    if (actionLoading) return;
 
-    setActionLoading(true)
+    setActionLoading(true);
 
     try {
-      await action(courseId)
+      await action(courseId);
 
-      setEnrolledCourseIds((current) => new Set(current).add(courseId))
+      setEnrolledCourseIds((current) => new Set(current).add(courseId));
 
-      notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
+      notifySuccess("تم إرسال طلب الالتحاق بنجاح.");
 
-      setActionMessage("تم إرسال طلب الالتحاق بنجاح.")
+      setActionMessage("تم إرسال طلب الالتحاق بنجاح.");
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : ""
+      const message = cause instanceof Error ? cause.message : "";
 
       const duplicate =
         (cause instanceof ApiError && cause.status === 409) ||
-        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message)
+        /already|duplicate|enrolled|enrollment|مسجل|التحاق|مكرر/i.test(message);
 
       if (duplicate) {
-        setEnrolledCourseIds((current) => new Set(current).add(courseId))
+        setEnrolledCourseIds((current) => new Set(current).add(courseId));
 
-        setActionMessage("أنت مسجل بالفعل في هذه الدورة.")
+        setActionMessage("أنت مسجل بالفعل في هذه الدورة.");
 
-        notifySuccess("أنت مسجل بالفعل في هذه الدورة.")
+        notifySuccess("أنت مسجل بالفعل في هذه الدورة.");
 
-        return
+        return;
       }
 
-      notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+      notifyError(cause, "تعذر إرسال طلب الالتحاق.");
 
       setActionMessage(
         cause instanceof Error ? cause.message : "تعذر تنفيذ الطلب.",
-      )
+      );
     } finally {
-      setActionLoading(false)
+      setActionLoading(false);
     }
   }
 
   const relatedItems = Array.isArray(related)
     ? related
     : asRecord(related) && Array.isArray(asRecord(related)?.items)
-      ? asRecord(related)?.items as unknown[]
-      : []
+      ? (asRecord(related)?.items as unknown[])
+      : [];
 
-  const detailFields = detail ? scalarFields(detail) : []
+  const detailFields = detail ? scalarFields(detail) : [];
 
-  const catalogHeader = courseCatalog || personCards
+  const catalogHeader = courseCatalog || personCards;
 
-  const disableEntryAnimations = catalogHeader
+  const disableEntryAnimations = catalogHeader;
 
   const resultCount = subjectFilter
     ? visibleItems.length
-    : (data?.totalCount ?? visibleItems.length)
+    : (data?.totalCount ?? visibleItems.length);
 
-  const contactWhatsappPhone = whatsappPhone(contactPhone)
+  const contactWhatsappPhone = whatsappPhone(contactPhone);
+
+  const pendingContactCourse = Boolean(
+    contactCourse &&
+    pendingEnrollmentIds.has(
+      String(contactCourse.id ?? contactCourse.courseId ?? ""),
+    ),
+  );
 
   const submitSearch = () => {
-    const nextSearch = searchInput.trim()
+    const nextSearch = searchInput.trim();
 
-    setPage(1)
+    setPage(1);
 
-    setSearch(nextSearch)
+    setSearch(nextSearch);
 
-    setDetail(null)
+    setDetail(null);
 
     navigate?.(personCards ? "public:teachers" : "public:courses", {
       search: nextSearch,
-    })
-  }
+    });
+  };
 
   const clearCatalogSearch = () => {
-    setSearchInput("")
+    setSearchInput("");
 
-    setSearch("")
+    setSearch("");
 
-    setAcademicYear("")
+    setAcademicYear("");
 
-    setSubjectFilter("")
+    setSubjectFilter("");
 
-    setPage(1)
+    setPage(1);
 
-    setDetail(null)
+    setDetail(null);
 
     navigate?.(personCards ? "public:teachers" : "public:courses", {
       search: "",
-    })
-  }
+    });
+  };
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
@@ -1269,20 +1315,20 @@ export default function PublicCatalogPage({
                 <SearchBar
                   value={searchInput}
                   onChange={(value) => {
-                    setSearchInput(value)
+                    setSearchInput(value);
 
                     if (!value.trim()) {
-                      setSearch("")
+                      setSearch("");
 
-                      setPage(1)
+                      setPage(1);
 
-                      setDetail(null)
+                      setDetail(null);
 
                       navigate?.(
                         personCards ? "public:teachers" : "public:courses",
 
                         { search: "" },
-                      )
+                      );
                     }
                   }}
                   onSubmit={submitSearch}
@@ -1323,9 +1369,9 @@ export default function PublicCatalogPage({
                       disableEntryAnimations ? undefined : { scale: 0.97 }
                     }
                     onClick={() => {
-                      setAcademicYear("")
+                      setAcademicYear("");
 
-                      setSubjectFilter("")
+                      setSubjectFilter("");
                     }}
                     className={`relative isolate min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors ${
                       !academicYear && !subjectFilter
@@ -1357,7 +1403,7 @@ export default function PublicCatalogPage({
                   {filterOptions.map((option) => {
                     const selected = personCards
                       ? subjectFilter === option.value
-                      : academicYear === option.value
+                      : academicYear === option.value;
 
                     return (
                       <motion.button
@@ -1368,14 +1414,14 @@ export default function PublicCatalogPage({
                           disableEntryAnimations ? undefined : { scale: 0.97 }
                         }
                         onClick={() => {
-                          if (personCards) setSubjectFilter(option.value)
+                          if (personCards) setSubjectFilter(option.value);
                           else {
-                            setAcademicYear(option.value)
+                            setAcademicYear(option.value);
 
-                            setPage(1)
+                            setPage(1);
                           }
 
-                          setDetail(null)
+                          setDetail(null);
                         }}
                         className={`relative isolate min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors ${
                           selected
@@ -1404,7 +1450,7 @@ export default function PublicCatalogPage({
                         )}
                         <span className="relative z-10">{option.label}</span>
                       </motion.button>
-                    )
+                    );
                   })}
                 </div>
                 {(searchInput || academicYear || subjectFilter) && (
@@ -1414,7 +1460,7 @@ export default function PublicCatalogPage({
                       disableEntryAnimations ? undefined : { scale: 0.97 }
                     }
                     onClick={() => {
-                      clearCatalogSearch()
+                      clearCatalogSearch();
                     }}
                     className="min-h-10 shrink-0 rounded-full px-3 text-xs font-semibold text-nuwa-base transition hover:bg-nuwa-soft"
                   >
@@ -1441,15 +1487,21 @@ export default function PublicCatalogPage({
                     "",
                 ) && (
                   <img
-                    src={resolveApiAssetUrl(
+                    src={resolveApiImageUrl(
                       String(
                         detail.coverImageUrl ??
                           detail.thumbnailUrl ??
                           detail.imageUrl,
                       ),
+                      1200,
                     )}
                     alt=""
                     className="absolute inset-0 size-full object-cover opacity-30"
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                    width={1200}
+                    height={560}
                   />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/80 to-transparent" />
@@ -1464,9 +1516,9 @@ export default function PublicCatalogPage({
                 <button
                   type="button"
                   onClick={() => {
-                    setDetail(null)
+                    setDetail(null);
 
-                    setRelated(null)
+                    setRelated(null);
                   }}
                   className="absolute left-5 top-5 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-white/25 bg-black/15 px-4 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
                 >
@@ -1526,9 +1578,9 @@ export default function PublicCatalogPage({
               {!courseCatalog && !personCards && (
                 <button
                   onClick={() => {
-                    setDetail(null)
+                    setDetail(null);
 
-                    setRelated(null)
+                    setRelated(null);
                   }}
                   className="h-9 border border-stroke px-3 text-sm"
                 >
@@ -1649,26 +1701,26 @@ export default function PublicCatalogPage({
                 ) : (
                   <div className="grid gap-2 lg:grid-cols-2">
                     {relatedItems.map((item, index) => {
-                      const record = asRecord(item)
+                      const record = asRecord(item);
 
-                      if (!record) return null
+                      if (!record) return null;
 
-                      const courseId = record.id
+                      const courseId = record.id;
 
                       const courseTitle = String(
                         record.title ?? record.name ?? "دورة تعليمية",
-                      )
+                      );
 
                       const coverImage = String(
                         record.coverImageUrl ??
                           record.thumbnailUrl ??
                           record.imageUrl ??
                           "",
-                      )
+                      );
 
                       const coverImageUrl = coverImage
-                        ? resolveApiAssetUrl(coverImage)
-                        : ""
+                        ? resolveApiImageUrl(coverImage, 640)
+                        : "";
 
                       if (personCards) {
                         return (
@@ -1682,7 +1734,7 @@ export default function PublicCatalogPage({
                               if (courseId !== undefined && courseId !== null) {
                                 navigate?.("public:course-detail", {
                                   courseId: String(courseId),
-                                })
+                                });
                               }
                             }}
                             className="group overflow-hidden rounded-2xl border border-stroke bg-white text-start shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-nuwa-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-sm"
@@ -1692,6 +1744,10 @@ export default function PublicCatalogPage({
                                 <img
                                   src={coverImageUrl}
                                   alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  width={640}
+                                  height={360}
                                   className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105"
                                 />
                               ) : (
@@ -1731,7 +1787,7 @@ export default function PublicCatalogPage({
                               </div>
                             </div>
                           </button>
-                        )
+                        );
                       }
 
                       return (
@@ -1744,7 +1800,6 @@ export default function PublicCatalogPage({
                           </h4>
                           <p className="mt-1 text-xs text-ink-muted">
                             {scalarFields(record)
-
                               .slice(0, 3)
 
                               .map(
@@ -1755,7 +1810,7 @@ export default function PublicCatalogPage({
                               .join(" · ")}
                           </p>
                         </article>
-                      )
+                      );
                     })}
                   </div>
                 )}
@@ -1830,13 +1885,13 @@ export default function PublicCatalogPage({
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {visibleItems.map((item, index) => {
-                      const record = asRecord(item)
+                      const record = asRecord(item);
 
-                      if (!record) return null
+                      if (!record) return null;
 
                       const cardTitle = personCards
                         ? personNameOf(record)
-                        : titleOf(record)
+                        : titleOf(record);
 
                       const cardDescription = String(
                         personCards
@@ -1846,41 +1901,55 @@ export default function PublicCatalogPage({
                               record.subjectName ??
                               record.academicYear ??
                               ""),
-                      )
+                      );
 
                       const teacherSubjects = personCards
                         ? subjectValues(record)
-                        : []
+                        : [];
 
                       const cover = String(
                         record.coverImageUrl ??
                           record.thumbnailUrl ??
                           record.imageUrl ??
                           "",
-                      )
+                      );
 
                       const subjectName =
                         record.subjectName != null
                           ? String(record.subjectName)
-                          : null
+                          : null;
 
                       const year =
                         record.academicYear != null
                           ? String(record.academicYear)
-                          : null
+                          : null;
 
-                      const price = record.price
+                      const price = record.price;
 
-                      const isFree = price === 0 || price === "0"
+                      const isFree = price === 0 || price === "0";
 
-                      const courseIdentifier = record.id ?? record.courseId
+                      const courseIdentifier = record.id ?? record.courseId;
+                      const courseIdentifierString =
+                        courseIdentifier == null
+                          ? ""
+                          : String(courseIdentifier);
+                      const isApprovedCourse = approvedCourseIds.has(
+                        courseIdentifierString,
+                      );
+                      const isPendingCourse = pendingEnrollmentIds.has(
+                        courseIdentifierString,
+                      );
+                      const isCheckingEnrollment =
+                        isStudentViewer && !enrollmentChecked;
+                      const isEnrollmentCheckFailed =
+                        isStudentViewer && enrollmentCheckFailed;
 
                       const teacherImage = String(
                         record.avatarUrl ??
                           record.profileImageUrl ??
                           record.imageUrl ??
                           "",
-                      )
+                      );
 
                       return (
                         <motion.article
@@ -1921,7 +1990,7 @@ export default function PublicCatalogPage({
                             type="button"
                             aria-label={
                               courseCatalog
-                                ? `عرض تفاصيل الدورة: ${cardTitle}`
+                                ? `${isApprovedCourse ? "متابعة التقدم" : "عرض تفاصيل الدورة"}: ${cardTitle}`
                                 : personCards
                                   ? `عرض ملف المعلم: ${cardTitle}`
                                   : `عرض التفاصيل: ${cardTitle}`
@@ -1934,13 +2003,13 @@ export default function PublicCatalogPage({
                               ) {
                                 navigate("public:course-detail", {
                                   courseId: String(courseIdentifier),
-                                })
+                                });
 
-                                return
+                                return;
                               }
 
                               if (personCards) {
-                                const id = record.id ?? record.teacherId
+                                const id = record.id ?? record.teacherId;
 
                                 if (
                                   id !== undefined &&
@@ -1949,13 +2018,13 @@ export default function PublicCatalogPage({
                                 ) {
                                   navigate("teacher:platform", {
                                     teacherId: String(id),
-                                  })
+                                  });
 
-                                  return
+                                  return;
                                 }
                               }
 
-                              void selectRecord(item)
+                              void selectRecord(item);
                             }}
                             className="absolute inset-0 z-20 rounded-3xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
                           />
@@ -1967,9 +2036,12 @@ export default function PublicCatalogPage({
                                 {/* الصورة أو الشكل الاحتياطي */}
                                 {cover ? (
                                   <img
-                                    src={resolveApiAssetUrl(cover)}
+                                    src={resolveApiImageUrl(cover, 640)}
                                     alt=""
                                     loading="lazy"
+                                    decoding="async"
+                                    width={640}
+                                    height={360}
                                     className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                                   />
                                 ) : (
@@ -2043,7 +2115,9 @@ export default function PublicCatalogPage({
                                   <div className="flex min-w-0 items-center gap-2.5">
                                     <CourseTeacherAvatar
                                       course={record}
-                                      name={teacherNameOf(record) ?? "معلم وَعي"}
+                                      name={
+                                        teacherNameOf(record) ?? "معلم وَعي"
+                                      }
                                     />
                                     <div className="flex min-w-0 flex-col">
                                       <span className="text-[10px] font-medium text-ink-muted/70">
@@ -2074,9 +2148,12 @@ export default function PublicCatalogPage({
                               <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700">
                                 {teacherImage ? (
                                   <img
-                                    src={resolveApiAssetUrl(teacherImage)}
+                                    src={resolveApiImageUrl(teacherImage, 800)}
                                     alt={personNameOf(record)}
                                     loading="lazy"
+                                    decoding="async"
+                                    width={800}
+                                    height={1000}
                                     className="size-full object-cover transition duration-700 group-hover:scale-105"
                                   />
                                 ) : (
@@ -2153,40 +2230,84 @@ export default function PublicCatalogPage({
                           )}
                           {courseCatalog && (
                             <div className="relative z-30 bg-surface px-4 pb-4 pt-1">
-                              <button
-                                type="button"
-                                disabled={
-                                  courseIdentifier == null ||
-                                  (enrolledCourseIds.has(String(courseIdentifier)) &&
-                                    enrollmentChecked &&
-                                    !pendingEnrollmentIds.has(String(courseIdentifier)))
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  const id = String(courseIdentifier)
-                                  if (pendingEnrollmentIds.has(id)) {
-                                    void cancelEnrollmentRequest(id)
-                                  } else {
-                                    void openEnrollmentContact(record)
+                              {isPendingCourse ? (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void openEnrollmentContact(record);
+                                    }}
+                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-900 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                                  >
+                                    <Clock3 size={16} aria-hidden="true" />
+                                    طلبك قيد المراجعة
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      navigate?.("public:course-detail", {
+                                        courseId: courseIdentifierString,
+                                      });
+                                    }}
+                                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-nuwa-soft px-3 py-2.5 text-xs font-bold text-nuwa-deep transition hover:bg-nuwa-base hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright"
+                                  >
+                                    التفاصيل
+                                    <ArrowLeft size={13} aria-hidden="true" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    courseIdentifier == null ||
+                                    actionLoading ||
+                                    isCheckingEnrollment
                                   }
-                                }}
-                                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-nuwa-base px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-nuwa-base/15 transition hover:-translate-y-0.5 hover:bg-nuwa-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink-muted"
-                              >
-                                {pendingEnrollmentIds.has(String(courseIdentifier)) ? (
-                                  <X size={17} />
-                                ) : (
-                                  <MessageCircle size={17} />
-                                )}
-                                {pendingEnrollmentIds.has(String(courseIdentifier))
-                                  ? "سحب طلب الالتحاق"
-                                  : enrolledCourseIds.has(String(courseIdentifier)) && enrollmentChecked
-                                    ? "مسجل بالفعل"
-                                    : "طلب الالتحاق بالدورة"}
-                              </button>
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (isEnrollmentCheckFailed) {
+                                      setEnrollmentReloadKey((key) => key + 1);
+                                    } else if (isApprovedCourse) {
+                                      navigate?.("public:course-detail", {
+                                        courseId: courseIdentifierString,
+                                      });
+                                    } else {
+                                      void openEnrollmentContact(record);
+                                    }
+                                  }}
+                                  className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nuwa-bright focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink-muted ${
+                                    isEnrollmentCheckFailed
+                                      ? "bg-amber-700 hover:bg-amber-800"
+                                      : "bg-nuwa-base shadow-nuwa-base/15 hover:bg-nuwa-deep"
+                                  }`}
+                                >
+                                  {isEnrollmentCheckFailed ? (
+                                    <RefreshCw size={17} />
+                                  ) : isApprovedCourse ? (
+                                    <BookOpen size={17} />
+                                  ) : isCheckingEnrollment ? (
+                                    <LoaderCircle
+                                      size={17}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <MessageCircle size={17} />
+                                  )}
+                                  {isEnrollmentCheckFailed
+                                    ? "إعادة التحقق من الاشتراك"
+                                    : isApprovedCourse
+                                      ? "متابعة التقدم"
+                                      : isCheckingEnrollment
+                                        ? "جارٍ التحقق من الاشتراك..."
+                                        : "طلب الالتحاق بالدورة"}
+                                </button>
+                              )}
                             </div>
                           )}
                         </motion.article>
-                      )
+                      );
                     })}
                   </AnimatePresence>
                 </motion.div>
@@ -2207,8 +2328,8 @@ export default function PublicCatalogPage({
                       }
                       disabled={page <= 1 || loading}
                       onClick={() => {
-                        setPage((value) => Math.max(1, value - 1))
-                        setDetail(null)
+                        setPage((value) => Math.max(1, value - 1));
+                        setDetail(null);
                       }}
                       className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -2230,8 +2351,8 @@ export default function PublicCatalogPage({
                           }
                           disabled={loading}
                           onClick={() => {
-                            setPage(pageNumber)
-                            setDetail(null)
+                            setPage(pageNumber);
+                            setDetail(null);
                           }}
                           className={`grid size-11 place-items-center rounded-xl border text-sm font-bold tabular-nums transition disabled:cursor-wait ${
                             page === pageNumber
@@ -2250,8 +2371,10 @@ export default function PublicCatalogPage({
                       }
                       disabled={page >= data.totalPages || loading}
                       onClick={() => {
-                        setPage((value) => Math.min(data.totalPages, value + 1))
-                        setDetail(null)
+                        setPage((value) =>
+                          Math.min(data.totalPages, value + 1),
+                        );
+                        setDetail(null);
                       }}
                       className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#cddbd0] bg-white text-[#234736] transition hover:border-nuwa-base hover:bg-nuwa-ice disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -2270,9 +2393,9 @@ export default function PublicCatalogPage({
                     <button
                       disabled={page <= 1}
                       onClick={() => {
-                        setPage((value) => value - 1)
+                        setPage((value) => value - 1);
 
-                        setDetail(null)
+                        setDetail(null);
                       }}
                       className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
                     >
@@ -2284,9 +2407,9 @@ export default function PublicCatalogPage({
                     <button
                       disabled={page >= data.totalPages}
                       onClick={() => {
-                        setPage((value) => value + 1)
+                        setPage((value) => value + 1);
 
-                        setDetail(null)
+                        setDetail(null);
                       }}
                       className="h-10 border border-stroke px-4 text-sm disabled:opacity-40"
                     >
@@ -2305,7 +2428,7 @@ export default function PublicCatalogPage({
             role="presentation"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
-                closeEnrollmentContact()
+                closeEnrollmentContact();
               }
             }}
             initial={{ opacity: 0 }}
@@ -2340,7 +2463,9 @@ export default function PublicCatalogPage({
                   <MessageCircle size={21} className="sm:size-6" />
                 </span>
                 <p className="relative mt-4 text-xs font-semibold text-white/75">
-                  طلب الالتحاق بالدورة
+                  {pendingContactCourse
+                    ? "طلبك قيد المراجعة"
+                    : "طلب الالتحاق بالدورة"}
                 </p>
                 <h2
                   id="course-contact-title"
@@ -2349,7 +2474,9 @@ export default function PublicCatalogPage({
                   {titleOf(contactCourse)}
                 </h2>
                 <p className="relative mt-2 text-xs leading-5 text-white/75 sm:text-sm sm:leading-6">
-                  أرسل طلبك للمعلم أولًا، ثم تواصل معه عبر واتساب لإتمام الدفع.
+                  {pendingContactCourse
+                    ? "طلبك وصل للمعلم وهو قيد المراجعة. تواصل معه عبر واتساب لتسريع العملية."
+                    : "أرسل طلبك للمعلم أولًا، ثم تواصل معه عبر واتساب لإتمام الدفع."}
                 </p>
               </div>
 
@@ -2375,8 +2502,9 @@ export default function PublicCatalogPage({
                       ١
                     </span>
                     <span className="leading-6 text-ink">
-                      اضغط <strong>طلب الالتحاق بالدورة</strong> لإرسال طلبك إلى
-                      المعلم.
+                      {pendingContactCourse
+                        ? "وصل طلبك للمعلم وهو قيد المراجعة. تواصل معه عبر واتساب لتسريع العملية."
+                        : "اضغط طلب الالتحاق لإرسال طلبك إلى المعلم."}
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
@@ -2384,8 +2512,9 @@ export default function PublicCatalogPage({
                       ٢
                     </span>
                     <span className="leading-6 text-ink">
-                      تواصل مع المعلم عبر واتساب لإتمام الدفع؛ وبعد تأكيد الدفع
-                      يعتمد اشتراكك في الدورة.
+                      {pendingContactCourse
+                        ? "إذا كنت تريد التراجع، يمكنك إلغاء طلب الالتحاق من الزر أدناه."
+                        : "تواصل مع المعلم عبر واتساب لإتمام الدفع؛ وبعد تأكيد الدفع يعتمد اشتراكك في الدورة."}
                     </span>
                   </li>
                 </ol>
@@ -2441,9 +2570,12 @@ export default function PublicCatalogPage({
                   <button
                     type="button"
                     onClick={() => {
-                      const id = String(contactCourse.id ?? contactCourse.courseId)
-                      if (pendingEnrollmentIds.has(id)) void cancelEnrollmentRequest(id)
-                      else void requestContactEnrollment()
+                      const id = String(
+                        contactCourse.id ?? contactCourse.courseId,
+                      );
+                      if (pendingEnrollmentIds.has(id))
+                        void cancelEnrollmentRequest(id);
+                      else void requestContactEnrollment();
                     }}
                     disabled={
                       contactRequestLoading ||
@@ -2468,9 +2600,9 @@ export default function PublicCatalogPage({
                             String(contactCourse.id ?? contactCourse.courseId),
                           )
                         ? "سحب طلب الالتحاق"
-                      : contactRequestSent
-                        ? "تم إرسال طلب الالتحاق"
-                        : "طلب الالتحاق بالدورة"}
+                        : contactRequestSent
+                          ? "تم إرسال طلب الالتحاق"
+                          : "طلب الالتحاق بالدورة"}
                   </button>
                   {contactPhone && contactWhatsappPhone ? (
                     <a
@@ -2517,5 +2649,5 @@ export default function PublicCatalogPage({
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }

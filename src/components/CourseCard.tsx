@@ -1,43 +1,43 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { BookOpen, GraduationCap } from "lucide-react"
+import { BookOpen, GraduationCap } from "lucide-react";
 
-import { resolveApiAssetUrl } from "../api/client"
+import { resolveApiImageUrl } from "../api/client";
 
-import CourseMetadataBadges from "./CourseMetadataBadges"
+import CourseMetadataBadges from "./CourseMetadataBadges";
 
-import CourseTeacherAvatar from "./CourseTeacherAvatar"
+import CourseTeacherAvatar from "./CourseTeacherAvatar";
 
-import { formatEgp } from "../utils/currency"
+import { formatEgp } from "../utils/currency";
 
-type CourseRecord = Record<string, unknown>
+type CourseRecord = Record<string, unknown>;
 
 interface CourseCardProps {
-  course: CourseRecord
+  course: CourseRecord;
 
-  title?: string
+  title?: string;
 
-  description?: string
+  description?: string;
 
-  subject?: string
+  subject?: string;
 
-  teacherName?: string
+  teacherName?: string;
 
-  statusLabel?: string
+  statusLabel?: string;
 
-  statusTone?: string
+  statusTone?: string;
 
-  footer?: ReactNode
+  footer?: ReactNode;
 
-  children?: ReactNode
+  children?: ReactNode;
 
-  className?: string
+  className?: string;
 }
 
 function nestedRecord(value: unknown): CourseRecord {
   return typeof value === "object" && value !== null
-    ? value as CourseRecord
-    : {}
+    ? (value as CourseRecord)
+    : {};
 }
 
 export default function CourseCard({
@@ -61,11 +61,11 @@ export default function CourseCard({
 
   className = "",
 }: CourseCardProps) {
-  const resolvedTitle = String(title ?? course.title ?? course.name ?? "دورة")
+  const resolvedTitle = String(title ?? course.title ?? course.name ?? "دورة");
 
   const resolvedSubject = String(
     subject ?? course.subjectName ?? nestedRecord(course.subject).name ?? "",
-  )
+  );
 
   const resolvedTeacherName = String(
     teacherName ??
@@ -73,15 +73,15 @@ export default function CourseCard({
       nestedRecord(course.teacher).fullName ??
       nestedRecord(course.teacher).name ??
       "",
-  )
+  );
 
   const coverImage =
-    course.coverImageUrl ?? course.imageUrl ?? course.thumbnailUrl
+    course.coverImageUrl ?? course.imageUrl ?? course.thumbnailUrl;
 
   const coverUrl =
-    typeof coverImage === "string" ? resolveApiAssetUrl(coverImage) : ""
+    typeof coverImage === "string" ? resolveApiImageUrl(coverImage, 640) : "";
 
-  const price = course.price
+  const price = course.price;
 
   return (
     <article
@@ -93,8 +93,11 @@ export default function CourseCard({
             src={coverUrl}
             alt=""
             loading="lazy"
+            decoding="async"
+            width={640}
+            height={360}
             onError={(event) => {
-              event.currentTarget.style.display = "none"
+              event.currentTarget.style.display = "none";
             }}
             className="absolute inset-0 size-full object-cover"
           />
@@ -156,5 +159,5 @@ export default function CourseCard({
         )}
       </div>
     </article>
-  )
+  );
 }

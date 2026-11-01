@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import { ApiError, setAuthToken } from "../api/client";
+import { clearApiQueryCache } from "../hooks/useApiQuery";
+import { clearPendingEnrollments } from "../utils/pendingEnrollments";
 
 import { authApi, type ApiObject } from "../api/endpoints";
 
@@ -269,6 +271,8 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
           ? (userSource as Record<string, unknown>)
           : record;
 
+      clearApiQueryCache();
+      clearPendingEnrollments();
       setAuthToken(token);
 
       window.sessionStorage.setItem(
@@ -332,14 +336,16 @@ export default function AuthPage({ mode, navigate }: AuthPageProps) {
         error instanceof ApiError ? error.message.toLowerCase() : "";
       const accountNeedsActivation =
         isLogin &&
-        (error instanceof ApiError && error.status === 403 ||
+        ((error instanceof ApiError && error.status === 403) ||
           /pending|not active|inactive|not approved|unapproved|activation|awaiting approval|غير مفعل|غير مفعّل|بانتظار التفعيل|قيد الموافقة|لم يتم تفعيل|لم يعتمد/.test(
             loginErrorMessage,
           ));
 
       if (accountNeedsActivation) {
         notifyError(
-          new Error("حسابك قيد المراجعة ولم يتم تفعيله بعد. يُرجى المحاولة بعد اعتماد الحساب من الإدارة."),
+          new Error(
+            "حسابك قيد المراجعة ولم يتم تفعيله بعد. يُرجى المحاولة بعد اعتماد الحساب من الإدارة.",
+          ),
         );
         return;
       }
