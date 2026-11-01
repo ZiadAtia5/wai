@@ -3,7 +3,13 @@
   "description": "منصة وَعي التعليمية للدورات ومتابعة التقدم وإدارة المحتوى التعليمي.",
   "language": "ar",
   "robots": {
-    "index": false
+    "index": true
+  },
+  "icons": {
+    "icon": "/newlogo.png"
+  },
+  "openGraph": {
+    "image": "https://wai-lyart.vercel.app/student-hero.webp"
   },
   "accessibility": {
     "addBypassLinks": false,

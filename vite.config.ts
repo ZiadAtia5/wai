@@ -1,4 +1,9 @@
-import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type HtmlTagDescriptor,
+  type Plugin,
+} from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -6,6 +11,9 @@ import siteConfiguration from "./.figma/make/site.json" with { type: "json" };
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "VITE_");
+  const apiBaseUrl = process.env.VITE_API_BASE_URL ?? env.VITE_API_BASE_URL;
+
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === "development";
 
@@ -26,6 +34,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      apiPreconnect(apiBaseUrl),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
@@ -53,6 +62,45 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+
+function apiPreconnect(apiBaseUrl: string | undefined): Plugin {
+  let apiOrigin: string | null = null;
+
+  try {
+    const apiUrl = new URL(apiBaseUrl ?? "");
+    if (apiUrl.protocol === "https:" || apiUrl.protocol === "http:") {
+      apiOrigin = apiUrl.origin;
+    }
+  } catch {
+    apiOrigin = null;
+  }
+
+  return {
+    name: "api-preconnect",
+    transformIndexHtml: {
+      order: "pre",
+      handler() {
+        if (!apiOrigin) return [];
+
+        return [
+          {
+            tag: "link",
+            attrs: { rel: "preconnect", href: apiOrigin, crossorigin: "" },
+            injectTo: "head",
+          },
+          {
+            tag: "link",
+            attrs: {
+              rel: "dns-prefetch",
+              href: `//${new URL(apiOrigin).host}`,
+            },
+            injectTo: "head",
+          },
+        ];
+      },
+    },
+  };
+}
 
 type FigmaSiteConfiguration = {
   title?: string;

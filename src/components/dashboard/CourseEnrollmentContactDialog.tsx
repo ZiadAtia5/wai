@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react";
 
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion";
 
-import { createPortal } from "react-dom"
+import { createPortal } from "react-dom";
 
 import {
   CheckCircle2,
@@ -11,54 +11,56 @@ import {
   Phone,
   Send,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { ApiError, getAuthToken } from "../../api/client"
+import { ApiError, getAuthToken } from "../../api/client";
 
-import { coursesApi, studentsApi, teachersApi } from "../../api/endpoints"
+import { coursesApi, studentsApi, teachersApi } from "../../api/endpoints";
 
-import CourseTeacherAvatar from "../CourseTeacherAvatar"
+import { enrollmentStatus } from "../../utils/courseEnrollments";
 
-import type { NavigateFn } from "../../types"
+import CourseTeacherAvatar from "../CourseTeacherAvatar";
 
-import { notifyError, notifySuccess } from "../../utils/notifications"
+import type { NavigateFn } from "../../types";
+
+import { notifyError, notifySuccess } from "../../utils/notifications";
 
 import {
   forgetPendingEnrollment,
   readPendingEnrollments,
   rememberPendingEnrollment,
-} from "../../utils/pendingEnrollments"
+} from "../../utils/pendingEnrollments";
 
-type CourseRecord = Record<string, unknown>
+type CourseRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): CourseRecord | null {
   return typeof value === "object" && value !== null
-    ? value as CourseRecord
-    : null
+    ? (value as CourseRecord)
+    : null;
 }
 
 function unwrap(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const response = asRecord(current)
+    const response = asRecord(current);
 
-    if (!response || !("data" in response)) break
+    if (!response || !("data" in response)) break;
 
-    current = response.data
+    current = response.data;
   }
 
-  return current
+  return current;
 }
 
 function nestedRecord(value: unknown): CourseRecord {
-  return asRecord(value) ?? {}
+  return asRecord(value) ?? {};
 }
 
 function readPhone(value: unknown): string {
-  const queue = [nestedRecord(value)]
+  const queue = [nestedRecord(value)];
 
-  const visited = new Set<CourseRecord>()
+  const visited = new Set<CourseRecord>();
 
   const relatedKeys = [
     "teacher",
@@ -74,9 +76,13 @@ function readPhone(value: unknown): string {
     "user",
 
     "owner",
-  ]
+  ];
 
   const phoneKeys = [
+    "mobileNumber",
+
+    "mobile",
+
     "teacherPhoneNumber",
 
     "instructorPhoneNumber",
@@ -92,87 +98,89 @@ function readPhone(value: unknown): string {
     "phoneNumber",
 
     "phone",
-
-    "mobileNumber",
-
-    "mobile",
-  ]
+  ];
 
   while (queue.length && visited.size < 12) {
-    const candidate = queue.shift()
+    const candidate = queue.shift();
 
-    if (!candidate || visited.has(candidate)) continue
+    if (!candidate || visited.has(candidate)) continue;
 
-    visited.add(candidate)
+    visited.add(candidate);
 
     for (const key of phoneKeys) {
-      const phone = candidate[key]
+      const phone = candidate[key];
 
       if (
         (typeof phone === "string" || typeof phone === "number") &&
         String(phone).trim()
       ) {
-        return String(phone).trim()
+        return String(phone).trim();
       }
     }
 
     for (const key of relatedKeys) {
-      const related = asRecord(candidate[key])
+      const related = asRecord(candidate[key]);
 
-      if (related) queue.push(related)
+      if (related) queue.push(related);
     }
   }
 
-  return ""
+  return "";
 }
 
 function titleOf(course: CourseRecord): string {
-  const title = course.title ?? course.name ?? course.courseName
+  const title = course.title ?? course.name ?? course.courseName;
 
   return typeof title === "string" && title.trim()
     ? title.trim()
-    : "الدورة التعليمية"
+    : "الدورة التعليمية";
 }
 
 function teacherNameOf(course: CourseRecord): string {
   const teacher =
     asRecord(course.teacher) ??
     asRecord(course.instructor) ??
-    asRecord(course.teacherProfile)
+    asRecord(course.teacherProfile);
 
   const name =
     course.teacherName ??
     course.instructorName ??
     teacher?.fullName ??
-    teacher?.name
+    teacher?.name;
 
-  return typeof name === "string" && name.trim() ? name.trim() : "معلم الدورة"
+  return typeof name === "string" && name.trim() ? name.trim() : "معلم الدورة";
 }
 
 function teacherIdOf(course: CourseRecord): string {
   const teacher =
     asRecord(course.teacher) ??
     asRecord(course.instructor) ??
-    asRecord(course.teacherProfile)
+    asRecord(course.teacherProfile) ??
+    asRecord(course.teacher_profile) ??
+    asRecord(course.instructor_profile);
 
   const id =
     course.teacherId ??
+    course.teacher_id ??
     course.instructorId ??
+    course.instructor_id ??
     teacher?.id ??
     teacher?.teacherId ??
-    teacher?.userId
+    teacher?.teacher_id ??
+    teacher?.userId ??
+    teacher?.user_id;
 
-  return id === undefined || id === null ? "" : String(id)
+  return id === undefined || id === null ? "" : String(id);
 }
 
 function whatsappPhone(phone: string): string {
-  let digits = phone.replace(/\D/g, "")
+  let digits = phone.replace(/\D/g, "");
 
-  if (digits.startsWith("00")) digits = digits.slice(2)
+  if (digits.startsWith("00")) digits = digits.slice(2);
 
-  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`
+  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`;
 
-  return digits
+  return digits;
 }
 
 export default function CourseEnrollmentContactDialog({
@@ -181,165 +189,181 @@ export default function CourseEnrollmentContactDialog({
   onClose,
   navigate,
   isEnrolled = false,
+  isPending = false,
   onEnrollmentRequested,
   onEnrollmentCancelled,
 }: {
-  course: CourseRecord | null
+  course: CourseRecord | null;
 
-  onClose: () => void
-  navigate?: NavigateFn
-  isEnrolled?: boolean
-  onEnrollmentRequested?: (courseId: string) => void
-  onEnrollmentCancelled?: (courseId: string) => void
+  onClose: () => void;
+  navigate?: NavigateFn;
+  isEnrolled?: boolean;
+  isPending?: boolean;
+  onEnrollmentRequested?: (courseId: string) => void;
+  onEnrollmentCancelled?: (courseId: string) => void;
 }) {
-  const [phone, setPhone] = useState("")
+  const [phone, setPhone] = useState("");
 
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false);
 
-  const [error, setError] = useState("")
+  const [error, setError] = useState("");
 
-  const [requesting, setRequesting] = useState(false)
+  const [requesting, setRequesting] = useState(false);
 
-  const [requestSent, setRequestSent] = useState(false)
+  const [requestSent, setRequestSent] = useState(false);
 
-  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
-  const [checkingRequest, setCheckingRequest] = useState(false)
+  const [checkingRequest, setCheckingRequest] = useState(false);
 
-  const [requestMessage, setRequestMessage] = useState("")
+  const [requestMessage, setRequestMessage] = useState("");
 
-  const requestId = useRef(0)
+  const requestId = useRef(0);
 
   useEffect(() => {
-    if (!course) return
+    if (!course) return;
 
-    const currentRequestId = ++requestId.current
+    const currentRequestId = ++requestId.current;
 
-    let active = true
+    let active = true;
 
     const updateIfActive = (callback: () => void) => {
-      if (active && requestId.current === currentRequestId) callback()
-    }
+      if (active && requestId.current === currentRequestId) callback();
+    };
 
-    setPhone(readPhone(course))
+    setPhone(readPhone(course));
 
-    setError("")
-    setLoading(false)
-    const id = course.id ?? course.courseId
+    setError("");
+    setLoading(false);
+    const id = course.id ?? course.courseId;
     const storedPending =
-      id == null ? undefined : readPendingEnrollments().get(String(id))
-    setPendingRequestId(storedPending === undefined ? null : storedPending)
-    setRequestSent(isEnrolled || storedPending !== undefined)
-    setCheckingRequest(false)
+      id == null ? undefined : readPendingEnrollments().get(String(id));
+    const hasPendingRequest = isPending || storedPending !== undefined;
+    setPendingRequestId(hasPendingRequest ? (storedPending ?? "") : null);
+    setRequestSent(isEnrolled || hasPendingRequest);
+    setCheckingRequest(false);
     setRequestMessage(
-      storedPending !== undefined
-        ? "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب."
+      hasPendingRequest
+        ? "وصل طلبك للمعلم وهو قيد المراجعة. يمكنك التواصل معه لتسريع العملية أو إلغاء الطلب."
         : "",
-    )
+    );
 
     const loadContact = async () => {
-      let resolvedCourse = course
-
-      let detailError: unknown = null
+      let resolvedCourse = course;
+      let detailError: unknown = null;
 
       if (!readPhone(resolvedCourse)) {
-        const id = course.id ?? course.courseId
-
+        const id = course.id ?? course.courseId;
         if (id !== undefined && id !== null) {
-          setLoading(true)
+          setLoading(true);
 
           try {
-            const response = unwrap(await coursesApi.publicDetail(String(id)))
+            const response = unwrap(await coursesApi.publicDetail(String(id)));
 
             updateIfActive(() => {
-              const details = asRecord(response)
+              const details = asRecord(response);
 
-              if (!details) return
+              if (!details) return;
 
               const nested =
                 asRecord(details.course) ??
                 asRecord(details.courseDetails) ??
-                details
+                details;
 
-              resolvedCourse = { ...course, ...nested }
-            })
+              resolvedCourse = { ...course, ...nested };
+            });
           } catch (cause) {
-            detailError = cause
+            detailError = cause;
           }
         }
       }
 
-      let resolvedPhone = readPhone(resolvedCourse)
+      let resolvedPhone = readPhone(resolvedCourse);
 
-      const teacherId = teacherIdOf(resolvedCourse)
+      const teacherId = teacherIdOf(resolvedCourse);
 
       if (!resolvedPhone && teacherId) {
-        setLoading(true)
+        setLoading(true);
 
-        try {
-          const response = unwrap(await teachersApi.publicById(teacherId))
+        const profileLoaders = getAuthToken()
+          ? [
+              () => teachersApi.byId(teacherId),
+              () => teachersApi.publicById(teacherId),
+            ]
+          : [() => teachersApi.publicById(teacherId)];
+        let lookupError: unknown = null;
 
-          updateIfActive(() => {
-            const teacher = asRecord(response)
+        for (const loadProfile of profileLoaders) {
+          try {
+            const response = unwrap(await loadProfile());
+            const teacher = asRecord(response);
 
-            if (teacher) {
-              resolvedPhone = readPhone(teacher)
+            if (!teacher) continue;
 
-              resolvedCourse = { ...resolvedCourse, teacher }
-            }
-          })
-        } catch (cause) {
+            resolvedPhone = readPhone(teacher);
+            updateIfActive(() => {
+              resolvedCourse = { ...resolvedCourse, teacher };
+            });
+
+            if (resolvedPhone) break;
+          } catch (cause) {
+            lookupError = cause;
+          }
+        }
+
+        if (!resolvedPhone && lookupError) {
           updateIfActive(() => {
             setError(
-              cause instanceof Error
-                ? cause.message
+              lookupError instanceof Error
+                ? lookupError.message
                 : "تعذر تحميل رقم تواصل المعلم.",
-            )
-          })
+            );
+          });
         }
       }
 
       updateIfActive(() => {
-        setPhone(resolvedPhone)
+        setPhone(resolvedPhone);
 
         if (!resolvedPhone && detailError && !teacherId && !error) {
           setError(
             detailError instanceof Error
               ? detailError.message
               : "تعذر تحميل بيانات التواصل الخاصة بالدورة.",
-          )
+          );
         }
 
-        setLoading(false)
-      })
-    }
+        setLoading(false);
+      });
+    };
 
-    void loadContact()
+    void loadContact();
 
     return () => {
-      active = false
+      active = false;
 
-      requestId.current += 1
-    }
-  }, [course])
+      requestId.current += 1;
+    };
+  }, [course, isEnrolled, isPending]);
 
   useEffect(() => {
-    if (!course) return
+    if (!course) return;
 
-    const id = course.id ?? course.courseId
-    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
-      .toLowerCase()
-    if (id == null || !getAuthToken() || !role.includes("student")) return
+    const id = course.id ?? course.courseId;
+    const role = (
+      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    ).toLowerCase();
+    if (id == null || !getAuthToken() || !role.includes("student")) return;
 
-    let active = true
-    setCheckingRequest(true)
+    let active = true;
+    setCheckingRequest(true);
     studentsApi
       .enrollments({ page: 1, pageSize: 100 })
       .then((response) => {
-        if (!active) return
-        const value = unwrap(response)
-        const root = asRecord(value)
-        const nested = asRecord(root?.data)
+        if (!active) return;
+        const value = unwrap(response);
+        const root = asRecord(value);
+        const nested = asRecord(root?.data);
         const rows = Array.isArray(value)
           ? value
           : Array.isArray(root?.items)
@@ -350,78 +374,75 @@ export default function CourseEnrollmentContactDialog({
                 ? nested.items
                 : Array.isArray(nested?.enrollments)
                   ? nested.enrollments
-                  : []
+                  : [];
         const existing = rows.map(asRecord).find((row) => {
-          const relatedCourse = asRecord(row?.course)
-          return String(
-            row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
-          ) === String(id)
-        })
-        if (!existing) return
+          const relatedCourse = asRecord(row?.course);
+          return (
+            String(
+              row?.courseId ??
+                relatedCourse?.id ??
+                relatedCourse?.courseId ??
+                "",
+            ) === String(id)
+          );
+        });
+        if (!existing) return;
 
-        const status = String(
-          existing.status ?? existing.enrollmentStatus ?? "",
-        ).toLowerCase()
-        const rejected =
-          ["2", "rejected", "declined", "cancelled", "canceled"].includes(status)
-        if (rejected) {
-          forgetPendingEnrollment(String(id))
-          setPendingRequestId(null)
-          setRequestSent(false)
-          onEnrollmentCancelled?.(String(id))
-          return
+        const status = enrollmentStatus(existing);
+        if (status === "rejected") {
+          forgetPendingEnrollment(String(id));
+          setPendingRequestId(null);
+          setRequestSent(false);
+          onEnrollmentCancelled?.(String(id));
+          return;
         }
 
-        const approved =
-          existing.isApproved === true ||
-          ["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status)
-        const enrollmentId = existing.id ?? existing.enrollmentId
+        const approved = status === "approved";
+        const enrollmentId = existing.id ?? existing.enrollmentId;
         if (approved) {
-          forgetPendingEnrollment(String(id))
-          setPendingRequestId(null)
+          forgetPendingEnrollment(String(id));
+          setPendingRequestId(null);
         } else {
           rememberPendingEnrollment(
             String(id),
             enrollmentId == null ? "" : String(enrollmentId),
-          )
-          setPendingRequestId(
-            enrollmentId == null ? "" : String(enrollmentId),
-          )
+          );
+          setPendingRequestId(enrollmentId == null ? "" : String(enrollmentId));
         }
-        onEnrollmentRequested?.(String(id))
-        setRequestSent(true)
+        onEnrollmentRequested?.(String(id));
+        setRequestSent(true);
         setRequestMessage(
           approved
             ? "أنت مسجل بالفعل في هذه الدورة."
-            : "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
-        )
+            : "وصل طلبك للمعلم وهو قيد المراجعة. يمكنك التواصل معه لتسريع العملية أو إلغاء الطلب.",
+        );
       })
       .catch(() => undefined)
       .finally(() => {
-        if (active) setCheckingRequest(false)
-      })
+        if (active) setCheckingRequest(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [course])
+      active = false;
+    };
+  }, [course, onEnrollmentCancelled, onEnrollmentRequested]);
 
   useEffect(() => {
-    if (!course) return
+    if (!course) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
+      if (event.key === "Escape") onClose();
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown);
 
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [course, onClose])
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [course, onClose]);
 
-  const normalizedPhone = whatsappPhone(phone)
-  const courseId = course?.id ?? course?.courseId
-  const pending = pendingRequestId !== null
-  const enrollmentComplete = isEnrolled || requestSent
+  const normalizedPhone = whatsappPhone(phone);
+  const courseId = course?.id ?? course?.courseId;
+  const pending = pendingRequestId !== null;
+  const enrollmentComplete = isEnrolled || requestSent;
 
   async function requestEnrollment() {
     if (
@@ -431,52 +452,52 @@ export default function CourseEnrollmentContactDialog({
       requesting ||
       checkingRequest
     ) {
-      return
+      return;
     }
 
     if (enrollmentComplete) {
       setRequestMessage(
         "تم إرسال طلبك بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع.",
-      )
-      return
+      );
+      return;
     }
 
     if (!getAuthToken()) {
-      setRequestMessage("سجّل الدخول بحساب الطالب أولًا لإرسال طلب الالتحاق.")
-      navigate?.("login")
-      return
+      setRequestMessage("سجّل الدخول بحساب الطالب أولًا لإرسال طلب الالتحاق.");
+      navigate?.("login");
+      return;
     }
 
     const role = (
       window.sessionStorage.getItem("eduhub.auth.role") ?? ""
-    ).toLowerCase()
+    ).toLowerCase();
 
     if (!role.includes("student")) {
-      const message = "طلب الالتحاق متاح لحساب الطالب فقط."
-      setRequestMessage(message)
-      notifyError(new Error(message))
-      return
+      const message = "طلب الالتحاق متاح لحساب الطالب فقط.";
+      setRequestMessage(message);
+      notifyError(new Error(message));
+      return;
     }
 
-    const storedRequest = readPendingEnrollments().get(String(courseId))
+    const storedRequest = readPendingEnrollments().get(String(courseId));
     if (storedRequest !== undefined) {
-      setPendingRequestId(storedRequest)
-      setRequestSent(true)
+      setPendingRequestId(storedRequest);
+      setRequestSent(true);
       setRequestMessage(
         "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
-      )
-      return
+      );
+      return;
     }
 
-    setRequesting(true)
-    setRequestMessage("")
+    setRequesting(true);
+    setRequestMessage("");
 
     try {
       const currentEnrollments = unwrap(
         await studentsApi.enrollments({ page: 1, pageSize: 100 }),
-      )
-      const root = asRecord(currentEnrollments)
-      const nested = asRecord(root?.data)
+      );
+      const root = asRecord(currentEnrollments);
+      const nested = asRecord(root?.data);
       const rows = Array.isArray(currentEnrollments)
         ? currentEnrollments
         : Array.isArray(root?.items)
@@ -487,58 +508,51 @@ export default function CourseEnrollmentContactDialog({
               ? nested.items
               : Array.isArray(nested?.enrollments)
                 ? nested.enrollments
-                : []
+                : [];
       const existing = rows.map(asRecord).find((row) => {
-        const relatedCourse = asRecord(row?.course)
-        return String(
-          row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
-        ) === String(courseId)
-      })
+        const relatedCourse = asRecord(row?.course);
+        return (
+          String(
+            row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
+          ) === String(courseId)
+        );
+      });
       if (existing) {
-        const status = String(
-          existing.status ?? existing.enrollmentStatus ?? "",
-        ).toLowerCase()
-        const rejected =
-          ["2", "rejected", "declined", "cancelled", "canceled"].includes(status)
-        if (!rejected) {
-          const approved =
-            existing.isApproved === true ||
-            ["1", "3", "approved", "accepted", "active", "enrolled", "completed", "complete"].includes(status)
+        const status = enrollmentStatus(existing);
+        if (status !== "rejected") {
+          const approved = status === "approved";
           if (!approved) {
-            const id = existing.id ?? existing.enrollmentId
+            const id = existing.id ?? existing.enrollmentId;
             rememberPendingEnrollment(
               String(courseId),
               id == null ? "" : String(id),
-            )
-            setPendingRequestId(id == null ? "" : String(id))
+            );
+            setPendingRequestId(id == null ? "" : String(id));
           } else {
-            forgetPendingEnrollment(String(courseId))
-            setPendingRequestId(null)
+            forgetPendingEnrollment(String(courseId));
+            setPendingRequestId(null);
           }
-          setRequestSent(true)
+          setRequestSent(true);
           setRequestMessage(
             approved
               ? "أنت مسجل بالفعل في هذه الدورة."
               : "تم إرسال طلبك بالفعل. يمكنك إلغاؤه أو التواصل مع المدرس عبر واتساب.",
-          )
-          return
+          );
+          return;
         }
       }
 
-      const response = await coursesApi.enroll(String(courseId))
-      const enrollment = asRecord(unwrap(response))
-      const id = enrollment?.id ?? enrollment?.enrollmentId
-      rememberPendingEnrollment(
-        String(courseId),
-        id == null ? "" : String(id),
-      )
-      setPendingRequestId(id == null ? "" : String(id))
-      setRequestSent(true)
+      const response = await coursesApi.enroll(String(courseId));
+      const enrollment = asRecord(unwrap(response));
+      const id = enrollment?.id ?? enrollment?.enrollmentId;
+      rememberPendingEnrollment(String(courseId), id == null ? "" : String(id));
+      setPendingRequestId(id == null ? "" : String(id));
+      setRequestSent(true);
       setRequestMessage(
         "تم إرسال طلبك للمعلم. تواصل معه عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
-      )
-      onEnrollmentRequested?.(String(courseId))
-      notifySuccess("تم إرسال طلب الالتحاق بنجاح.")
+      );
+      onEnrollmentRequested?.(String(courseId));
+      notifySuccess("تم إرسال طلب الالتحاق بنجاح.");
     } catch (cause) {
       if (
         (cause instanceof ApiError && cause.status === 409) ||
@@ -547,37 +561,40 @@ export default function CourseEnrollmentContactDialog({
             cause.message,
           ))
       ) {
-        rememberPendingEnrollment(String(courseId), "")
-        setPendingRequestId("")
-        setRequestSent(true)
+        rememberPendingEnrollment(String(courseId), "");
+        setPendingRequestId("");
+        setRequestSent(true);
         setRequestMessage(
           "لديك طلب التحاق مسجل بالفعل. تواصل مع المعلم عبر واتساب لإتمام الدفع، وسيعتمد اشتراكك بعد تأكيد الدفع.",
-        )
-        onEnrollmentRequested?.(String(courseId))
-        return
+        );
+        onEnrollmentRequested?.(String(courseId));
+        return;
       }
 
       const message =
-        cause instanceof Error ? cause.message : "تعذر إرسال طلب الالتحاق."
-      setRequestMessage(message)
-      notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+        cause instanceof Error ? cause.message : "تعذر إرسال طلب الالتحاق.";
+      setRequestMessage(message);
+      notifyError(cause, "تعذر إرسال طلب الالتحاق.");
     } finally {
-      setRequesting(false)
+      setRequesting(false);
     }
   }
 
   async function cancelEnrollment() {
-    if (courseId == null || requesting) return
+    if (courseId == null || requesting) return;
 
-    setRequesting(true)
-    setRequestMessage("")
+    setRequesting(true);
+    setRequestMessage("");
     try {
-      let id = pendingRequestId || ""
+      let id = pendingRequestId || "";
       if (!id) {
-        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
-        const enrollment = unwrap(response)
-        const root = asRecord(enrollment)
-        const nested = asRecord(root?.data)
+        const response = await studentsApi.enrollments({
+          page: 1,
+          pageSize: 100,
+        });
+        const enrollment = unwrap(response);
+        const root = asRecord(enrollment);
+        const nested = asRecord(root?.data);
         const rows = Array.isArray(enrollment)
           ? enrollment
           : Array.isArray(root?.items)
@@ -588,31 +605,36 @@ export default function CourseEnrollmentContactDialog({
                 ? nested.items
                 : Array.isArray(nested?.enrollments)
                   ? nested.enrollments
-                  : []
+                  : [];
         const match = rows.map(asRecord).find((row) => {
-          const relatedCourse = asRecord(row?.course)
-          return String(
-            row?.courseId ?? relatedCourse?.id ?? relatedCourse?.courseId ?? "",
-          ) === String(courseId)
-        })
-        id = String(match?.id ?? match?.enrollmentId ?? "")
+          const relatedCourse = asRecord(row?.course);
+          return (
+            String(
+              row?.courseId ??
+                relatedCourse?.id ??
+                relatedCourse?.courseId ??
+                "",
+            ) === String(courseId)
+          );
+        });
+        id = String(match?.id ?? match?.enrollmentId ?? "");
       }
-      if (!id) throw new Error("تعذر العثور على طلب الالتحاق لإلغائه.")
+      if (!id) throw new Error("تعذر العثور على طلب الالتحاق لإلغائه.");
 
-      await studentsApi.cancelEnrollment(id)
-      forgetPendingEnrollment(String(courseId))
-      setPendingRequestId(null)
-      setRequestSent(false)
-      setRequestMessage("")
-      onEnrollmentCancelled?.(String(courseId))
-      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.")
+      await studentsApi.cancelEnrollment(id);
+      forgetPendingEnrollment(String(courseId));
+      setPendingRequestId(null);
+      setRequestSent(false);
+      setRequestMessage("");
+      onEnrollmentCancelled?.(String(courseId));
+      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.");
     } catch (cause) {
       setRequestMessage(
         cause instanceof Error ? cause.message : "تعذر إلغاء طلب الالتحاق.",
-      )
-      notifyError(cause, "تعذر إلغاء طلب الالتحاق.")
+      );
+      notifyError(cause, "تعذر إلغاء طلب الالتحاق.");
     } finally {
-      setRequesting(false)
+      setRequesting(false);
     }
   }
 
@@ -623,7 +645,7 @@ export default function CourseEnrollmentContactDialog({
           className="fixed inset-0 z-[200] grid place-items-center overflow-hidden bg-emerald-950/55 p-2 backdrop-blur-sm sm:p-4"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) onClose()
+            if (event.target === event.currentTarget) onClose();
           }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -693,8 +715,17 @@ export default function CourseEnrollmentContactDialog({
                     ١
                   </span>
                   <span className="leading-6 text-ink">
-                    اضغط <strong>طلب الالتحاق بالدورة</strong> لإرسال طلبك إلى
-                    المعلم.
+                    {pending ? (
+                      <>
+                        وصل طلبك للمعلم وهو قيد المراجعة. تواصل معه عبر واتساب
+                        لتسريع العملية.
+                      </>
+                    ) : (
+                      <>
+                        اضغط <strong>طلب الالتحاق بالدورة</strong> لإرسال طلبك
+                        إلى المعلم.
+                      </>
+                    )}
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
@@ -702,8 +733,9 @@ export default function CourseEnrollmentContactDialog({
                     ٢
                   </span>
                   <span className="leading-6 text-ink">
-                    تواصل مع المعلم عبر واتساب لإتمام الدفع؛ وبعد تأكيد الدفع
-                    يعتمد اشتراكك في الدورة.
+                    {pending
+                      ? "إذا كنت تريد التراجع، يمكنك إلغاء طلب الالتحاق من هنا."
+                      : "تواصل مع المعلم عبر واتساب لإتمام الدفع؛ وبعد تأكيد الدفع يعتمد اشتراكك في الدورة."}
                   </span>
                 </li>
               </ol>
@@ -796,11 +828,11 @@ export default function CourseEnrollmentContactDialog({
                       : "جارٍ إرسال الطلب..."
                     : checkingRequest
                       ? "جارٍ التحقق من الطلب..."
-                    : pending
-                      ? "إلغاء الطلب"
-                    : enrollmentComplete
-                      ? "تم إرسال طلب الالتحاق"
-                      : "طلب الالتحاق بالدورة"}
+                      : pending
+                        ? "إلغاء الطلب"
+                        : enrollmentComplete
+                          ? "تم إرسال طلب الالتحاق"
+                          : "طلب الالتحاق بالدورة"}
                 </button>
                 {phone && normalizedPhone ? (
                   <a
@@ -835,5 +867,5 @@ export default function CourseEnrollmentContactDialog({
       )}
     </AnimatePresence>,
     document.body,
-  )
+  );
 }

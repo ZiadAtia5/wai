@@ -23,10 +23,12 @@ export default function NuwaLogo({
 }: NuwaLogoProps) {
   return (
     <img
-      src="https://res.cloudinary.com/ddmbpv5xq/image/upload/v1792793652/newlogo_u59jhb.png"
+      src="https://res.cloudinary.com/ddmbpv5xq/image/upload/f_auto,q_auto,w_256,c_limit/v1792793652/newlogo_u59jhb.png"
       alt="شعار وَعي"
       className={`inline-block shrink-0 object-contain ${className}`}
       style={{ ...logoSizes[size], objectFit: "contain" }}
+      width={logoSizes[size].width}
+      height={logoSizes[size].height}
     />
   );
 }

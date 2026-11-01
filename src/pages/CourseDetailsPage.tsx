@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
 import {
   ArrowRight,
@@ -14,64 +14,84 @@ import {
   ShieldCheck,
   UserRound,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { ApiError, getAuthToken, resolveApiAssetUrl } from "../api/client"
+import {
+  ApiError,
+  getAuthToken,
+  resolveApiAssetUrl,
+  resolveApiImageUrl,
+} from "../api/client";
 
-import { coursesApi, quizzesApi, studentsApi, teachersApi } from "../api/endpoints"
+import {
+  coursesApi,
+  quizzesApi,
+  studentsApi,
+  teachersApi,
+} from "../api/endpoints";
 
 import LessonVideoPlayer, {
   youtubeVideoId,
-} from "../components/dashboard/LessonVideoPlayer"
+} from "../components/dashboard/LessonVideoPlayer";
 
 import {
   Skeleton,
   SkeletonButton,
   SkeletonIcon,
   SkeletonText,
-} from "../components/Skeleton"
+} from "../components/Skeleton";
 
-import { notifyError, notifySuccess } from "../utils/notifications"
+import { notifyError, notifySuccess } from "../utils/notifications";
 
-import type { NavigateFn } from "../types"
+import type { NavigateFn } from "../types";
 
-import { formatEgp } from "../utils/currency"
+import { formatEgp } from "../utils/currency";
 
 import {
   forgetPendingEnrollment,
   readPendingEnrollments,
   rememberPendingEnrollment,
-} from "../utils/pendingEnrollments"
+} from "../utils/pendingEnrollments";
 
-type RecordValue = Record<string, unknown>
+type RecordValue = Record<string, unknown>;
 
-type AccessState = "checking" | "guest" | "not-student" | "not-enrolled" | "pending" | "approved" | "rejected" | "verification-failed"
+type AccessState =
+  | "checking"
+  | "guest"
+  | "not-student"
+  | "not-enrolled"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "verification-failed";
 
 function record(value: unknown): RecordValue {
-  return typeof value === "object" && value !== null ? value as RecordValue : {}
+  return typeof value === "object" && value !== null
+    ? (value as RecordValue)
+    : {};
 }
 
 function unwrap(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let index = 0; index < 5; index += 1) {
-    const item = record(current)
+    const item = record(current);
 
-    if (!("data" in item) || Object.keys(item).length > 4) break
+    if (!("data" in item) || Object.keys(item).length > 4) break;
 
-    current = item.data
+    current = item.data;
   }
 
-  return current
+  return current;
 }
 
 function list(value: unknown): RecordValue[] {
-  const result = unwrap(value)
+  const result = unwrap(value);
 
   if (Array.isArray(result))
-    return result.map(record).filter((item) => Object.keys(item).length > 0)
+    return result.map(record).filter((item) => Object.keys(item).length > 0);
 
-  const item = record(result)
+  const item = record(result);
 
   for (const key of [
     "items",
@@ -94,25 +114,25 @@ function list(value: unknown): RecordValue[] {
 
     "enrollments",
   ]) {
-    if (Array.isArray(item[key])) return (item[key] as unknown[]).map(record)
+    if (Array.isArray(item[key])) return (item[key] as unknown[]).map(record);
   }
 
-  return []
+  return [];
 }
 
 function progressRows(value: unknown): RecordValue[] {
-  const result = record(unwrap(value))
+  const result = record(unwrap(value));
 
-  const nested = record(result.courseProgress ?? result.progress)
+  const nested = record(result.courseProgress ?? result.progress);
 
   const direct = list(
     result.lessons ??
       result.lessonProgress ??
       nested.lessons ??
       nested.lessonProgress,
-  )
+  );
 
-  if (direct.length) return direct
+  if (direct.length) return direct;
 
   return list(result.modules ?? nested.modules).flatMap((module) =>
     list(module.lessons ?? module.courseLessons).map((lesson) => ({
@@ -120,7 +140,7 @@ function progressRows(value: unknown): RecordValue[] {
 
       moduleTitle: module.title ?? module.name,
     })),
-  )
+  );
 }
 
 function isTrue(value: unknown): boolean {
@@ -128,13 +148,13 @@ function isTrue(value: unknown): boolean {
     value === true ||
     value === 1 ||
     (typeof value === "string" && /^(true|1|yes|completed|done)$/i.test(value))
-  )
+  );
 }
 
 function lessonId(lesson: RecordValue): string {
-  const id = lesson.id ?? lesson.lessonId
+  const id = lesson.id ?? lesson.lessonId;
 
-  return id === undefined || id === null ? "" : String(id)
+  return id === undefined || id === null ? "" : String(id);
 }
 
 function lessonCompleted(
@@ -142,9 +162,9 @@ function lessonCompleted(
 
   progressByLesson: Map<string, RecordValue>,
 ): boolean {
-  const progress = progressByLesson.get(lessonId(lesson)) ?? {}
+  const progress = progressByLesson.get(lessonId(lesson)) ?? {};
 
-  const nested = record(progress.progress ?? progress.lessonProgress)
+  const nested = record(progress.progress ?? progress.lessonProgress);
 
   return isTrue(
     progress.isCompleted ??
@@ -153,29 +173,29 @@ function lessonCompleted(
       nested.completed ??
       lesson.isCompleted ??
       lesson.completed,
-  )
+  );
 }
 
 function quizPassed(attempt: RecordValue): boolean {
-  return attempt.passed === true || attempt.isPassed === true
+  return attempt.passed === true || attempt.isPassed === true;
 }
 
 function attemptRecords(value: unknown): RecordValue[] {
-  const root = record(value)
+  const root = record(value);
 
-  const records = [root, record(root.data), record(unwrap(value))]
+  const records = [root, record(root.data), record(unwrap(value))];
 
   for (const result of records) {
     for (const key of ["items", "attempts", "results"]) {
-      const candidate = result[key]
+      const candidate = result[key];
 
-      if (Array.isArray(candidate)) return candidate.map(record)
+      if (Array.isArray(candidate)) return candidate.map(record);
     }
   }
 
-  if (Array.isArray(value)) return value.map(record)
+  if (Array.isArray(value)) return value.map(record);
 
-  return list(value)
+  return list(value);
 }
 
 function attemptBelongsToStudent(
@@ -185,9 +205,9 @@ function attemptBelongsToStudent(
 ): boolean {
   const student = record(
     attempt.student ?? attempt.studentProfile ?? attempt.user,
-  )
+  );
 
-  const profileUser = record(profile.user)
+  const profileUser = record(profile.user);
 
   const attemptIds = [
     attempt.studentId,
@@ -203,7 +223,7 @@ function attemptBelongsToStudent(
 
     .filter((id) => id !== undefined && id !== null)
 
-    .map(String)
+    .map(String);
 
   const profileIds = [
     profile.studentId,
@@ -221,57 +241,49 @@ function attemptBelongsToStudent(
 
     .filter((id) => id !== undefined && id !== null)
 
-    .map(String)
+    .map(String);
 
-  if (attemptIds.some((id) => profileIds.includes(id))) return true
+  if (attemptIds.some((id) => profileIds.includes(id))) return true;
 
   const attemptEmail = String(
     attempt.studentEmail ?? attempt.email ?? student.email ?? "",
   )
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
   const profileEmail = String(profile.email ?? profileUser.email ?? "")
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
-  return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail)
+  return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail);
 }
 
 function passedQuizFromDetails(quiz: RecordValue): boolean | null {
   for (const key of ["hasPassed", "isPassed"]) {
-    const value = quiz[key]
+    const value = quiz[key];
 
-    if (typeof value === "boolean") return value
+    if (typeof value === "boolean") return value;
   }
 
-  for (const key of [
-    "myAttempt",
+  for (const key of ["myAttempt", "currentUserAttempt", "currentAttempt"]) {
+    const attempt = record(quiz[key]);
 
-    "currentUserAttempt",
-
-    "currentAttempt",
-  ]) {
-    const attempt = record(quiz[key])
-
-    if (Object.keys(attempt).length) return quizPassed(attempt)
+    if (Object.keys(attempt).length) return quizPassed(attempt);
   }
 
   for (const key of ["myAttempts", "currentUserAttempts"]) {
-    const attempts = quiz[key]
+    const attempts = quiz[key];
 
     if (
       Array.isArray(attempts) &&
       attempts.some((attempt) => quizPassed(record(attempt)))
     )
-      return true
+      return true;
   }
 
-  return null
+  return null;
 }
 
 async function studentPassedLessonQuiz(
@@ -279,35 +291,35 @@ async function studentPassedLessonQuiz(
 
   profile: RecordValue,
 ): Promise<boolean> {
-  const id = lessonId(lesson)
+  const id = lessonId(lesson);
 
-  if (!id) throw new Error("تعذر التعرف على الدرس المرتبط بالاختبار.")
+  if (!id) throw new Error("تعذر التعرف على الدرس المرتبط بالاختبار.");
 
-  const response = record(unwrap(await quizzesApi.forLesson(id)))
+  const response = record(unwrap(await quizzesApi.forLesson(id)));
 
-  const quiz = record(response.quiz ?? response)
+  const quiz = record(response.quiz ?? response);
 
-  const knownResult = passedQuizFromDetails(quiz)
+  const knownResult = passedQuizFromDetails(quiz);
 
-  if (knownResult !== null) return knownResult
+  if (knownResult !== null) return knownResult;
 
-  const quizId = quiz.id ?? quiz.quizId
+  const quizId = quiz.id ?? quiz.quizId;
 
   if (quizId === undefined || quizId === null)
-    throw new Error("لم يُعِد الخادم بيانات الاختبار المتوقعة.")
+    throw new Error("لم يُعِد الخادم بيانات الاختبار المتوقعة.");
 
-  const attemptResponse = await quizzesApi.attempts(String(quizId))
+  const attemptResponse = await quizzesApi.attempts(String(quizId));
 
-  const attempts = attemptRecords(attemptResponse)
+  const attempts = attemptRecords(attemptResponse);
 
   return attempts.some(
     (attempt) =>
       attemptBelongsToStudent(attempt, profile) && quizPassed(attempt),
-  )
+  );
 }
 
 function courseRecord(value: unknown): RecordValue {
-  const result = record(unwrap(value))
+  const result = record(unwrap(value));
 
   for (const key of [
     "course",
@@ -318,66 +330,66 @@ function courseRecord(value: unknown): RecordValue {
     "result",
   ]) {
     if (result[key] && typeof result[key] === "object")
-      return courseRecord(result[key])
+      return courseRecord(result[key]);
   }
 
-  return result
+  return result;
 }
 
 function mergeCourseLessonResources(
   primaryValue: unknown,
   supplementalValue: unknown,
 ): RecordValue {
-  const primary = courseRecord(primaryValue)
-  const supplemental = courseRecord(supplementalValue)
+  const primary = courseRecord(primaryValue);
+  const supplemental = courseRecord(supplementalValue);
   const supplementalModules = list(
     supplemental.modules ?? supplemental.courseModules,
-  )
-  const supplementalLessons = new Map<string, RecordValue>()
-  const primaryLessonById = new Map<string, RecordValue>()
+  );
+  const supplementalLessons = new Map<string, RecordValue>();
+  const primaryLessonById = new Map<string, RecordValue>();
 
   for (const lesson of list(primary.lessons)) {
-    const id = lessonId(lesson)
-    if (id) primaryLessonById.set(id, lesson)
+    const id = lessonId(lesson);
+    if (id) primaryLessonById.set(id, lesson);
   }
 
   for (const module of supplementalModules) {
     for (const lesson of list(module.lessons ?? module.courseLessons)) {
-      const id = lessonId(lesson)
-      if (id) supplementalLessons.set(id, lesson)
+      const id = lessonId(lesson);
+      if (id) supplementalLessons.set(id, lesson);
     }
   }
 
   for (const lesson of list(supplemental.lessons)) {
-    const id = lessonId(lesson)
-    if (id) supplementalLessons.set(id, lesson)
+    const id = lessonId(lesson);
+    if (id) supplementalLessons.set(id, lesson);
   }
 
-  const primaryModules = list(primary.modules ?? primary.courseModules)
+  const primaryModules = list(primary.modules ?? primary.courseModules);
   const modulesSource = primaryModules.length
     ? primaryModules
-    : supplementalModules
+    : supplementalModules;
   const modules = modulesSource.map((module, index) => {
-    const moduleId = String(module.id ?? module.moduleId ?? "")
+    const moduleId = String(module.id ?? module.moduleId ?? "");
     const supplementalModule = supplementalModules.find(
       (item) => moduleId && String(item.id ?? item.moduleId ?? "") === moduleId,
-    )
-    const moduleLessons = list(module.lessons ?? module.courseLessons)
+    );
+    const moduleLessons = list(module.lessons ?? module.courseLessons);
     const lessonsSource = moduleLessons.length
       ? moduleLessons
-      : list(supplementalModule?.lessons ?? supplementalModule?.courseLessons)
+      : list(supplementalModule?.lessons ?? supplementalModule?.courseLessons);
 
     return {
       ...(supplementalModule ?? {}),
       ...module,
       lessons: lessonsSource.map((lesson) => {
-        const id = lessonId(lesson)
-        const alternateLesson = id ? supplementalLessons.get(id) : undefined
-        const primaryLesson = id ? primaryLessonById.get(id) : undefined
+        const id = lessonId(lesson);
+        const alternateLesson = id ? supplementalLessons.get(id) : undefined;
+        const primaryLesson = id ? primaryLessonById.get(id) : undefined;
         const resources =
           lessonResourcesFrom(primaryLesson ?? lesson).length > 0
             ? lessonResourcesFrom(primaryLesson ?? lesson)
-            : lessonResourcesFrom(alternateLesson ?? {})
+            : lessonResourcesFrom(alternateLesson ?? {});
 
         return resources.length > 0
           ? {
@@ -386,25 +398,24 @@ function mergeCourseLessonResources(
               ...(primaryLesson ?? {}),
               resources,
             }
-          : { ...(alternateLesson ?? {}), ...lesson, ...(primaryLesson ?? {}) }
+          : { ...(alternateLesson ?? {}), ...lesson, ...(primaryLesson ?? {}) };
       }),
       order: module.order ?? index + 1,
-    }
-  })
+    };
+  });
 
-  return { ...supplemental, ...primary, modules }
+  return { ...supplemental, ...primary, modules };
 }
 
 function approvedEnrollment(value: RecordValue): boolean {
-  if (value.isApproved === false) return false
+  if (value.isApproved === false) return false;
 
-  if (value.isApproved === true) return true
+  if (value.isApproved === true) return true;
 
   const status = String(value.status ?? value.enrollmentStatus ?? "")
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
   return [
     "1",
@@ -422,24 +433,23 @@ function approvedEnrollment(value: RecordValue): boolean {
     "completed",
 
     "complete",
-  ].includes(status)
+  ].includes(status);
 }
 
 function enrollmentState(value: RecordValue | undefined): AccessState {
-  if (!value) return "not-enrolled"
+  if (!value) return "not-enrolled";
 
-  if (approvedEnrollment(value)) return "approved"
+  if (approvedEnrollment(value)) return "approved";
 
   const status = String(value.status ?? value.enrollmentStatus ?? "")
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
   if (["2", "rejected", "declined", "cancelled", "canceled"].includes(status))
-    return "rejected"
+    return "rejected";
 
-  return "pending"
+  return "pending";
 }
 
 function videoFromLesson(lesson: RecordValue): RecordValue | null {
@@ -447,26 +457,26 @@ function videoFromLesson(lesson: RecordValue): RecordValue | null {
     lesson.video ??
     lesson.videoInfo ??
     lesson.videoResponse ??
-    lesson.lessonVideo
+    lesson.lessonVideo;
 
   if (typeof source === "string" && source.trim())
-    return { videoUrl: source.trim() }
+    return { videoUrl: source.trim() };
 
-  const video = record(source)
+  const video = record(source);
 
   if (
     (typeof video.videoUrl === "string" && video.videoUrl.trim()) ||
     (typeof video.providerVideoId === "string" && video.providerVideoId.trim())
   )
-    return video
+    return video;
 
-  return null
+  return null;
 }
 
 function lessonResourceUrl(resource: RecordValue): string {
   const file = record(
     resource.file ?? resource.attachment ?? resource.resourceFile,
-  )
+  );
   const candidates = [
     resource.externalUrl,
     resource.externalLink,
@@ -486,17 +496,17 @@ function lessonResourceUrl(resource: RecordValue): string {
     file.fileUrl,
     file.url,
     file.path,
-  ]
+  ];
   const value = candidates.find(
     (candidate): candidate is string =>
       typeof candidate === "string" && candidate.trim().length > 0,
-  )
+  );
 
-  return value?.trim() ?? ""
+  return value?.trim() ?? "";
 }
 
 function lessonResourcesFrom(lesson: RecordValue): RecordValue[] {
-  const content = record(lesson.content)
+  const content = record(lesson.content);
   const candidates = [
     lesson.resources,
     lesson.lessonResources,
@@ -508,14 +518,14 @@ function lessonResourcesFrom(lesson: RecordValue): RecordValue[] {
     content.attachments,
     content.materials,
     content.files,
-  ]
+  ];
 
   for (const candidate of candidates) {
-    const items = list(candidate)
-    if (items.length) return items
+    const items = list(candidate);
+    if (items.length) return items;
   }
 
-  return []
+  return [];
 }
 
 function scrollToLessonContent(targetId: string) {
@@ -524,9 +534,9 @@ function scrollToLessonContent(targetId: string) {
       document.getElementById(targetId)?.scrollIntoView({
         behavior: "smooth",
         block: "center",
-      })
-    })
-  })
+      });
+    });
+  });
 }
 
 function CourseDetailsSkeleton() {
@@ -578,26 +588,26 @@ function CourseDetailsSkeleton() {
         </aside>
       </div>
     </div>
-  )
+  );
 }
 
 function statusMessage(access: AccessState): string {
   if (access === "verification-failed")
-    return "تعذر التحقق من حالة الالتحاق. أعد المحاولة قبل مشاهدة الفيديو."
+    return "تعذر التحقق من حالة الالتحاق. أعد المحاولة قبل مشاهدة الفيديو.";
 
   if (access === "approved")
-    return "تم قبولك في الدورة، يمكنك مشاهدة الدروس المتاحة."
+    return "تم قبولك في الدورة، يمكنك مشاهدة الدروس المتاحة.";
 
   if (access === "pending")
-    return "طلب التحاقك قيد المراجعة. ستظهر الفيديوهات بعد موافقة المدرّس."
+    return "طلب التحاقك قيد المراجعة. ستظهر الفيديوهات بعد موافقة المدرّس.";
 
   if (access === "rejected")
-    return "طلب الالتحاق بهذه الدورة غير مقبول حاليًا. تواصل مع المدرّس للاستفسار."
+    return "طلب الالتحاق بهذه الدورة غير مقبول حاليًا. تواصل مع المدرّس للاستفسار.";
 
   if (access === "not-student")
-    return "محتوى الفيديو متاح للطلاب المقبولين في الدورة فقط."
+    return "محتوى الفيديو متاح للطلاب المقبولين في الدورة فقط.";
 
-  return "سجّل الدخول بحساب الطالب واطلب الالتحاق لمشاهدة محتوى الدورة بعد الموافقة."
+  return "سجّل الدخول بحساب الطالب واطلب الالتحاق لمشاهدة محتوى الدورة بعد الموافقة.";
 }
 
 export default function CourseDetailsPage({
@@ -609,88 +619,90 @@ export default function CourseDetailsPage({
 
   onBack,
 }: {
-  courseId: string
+  courseId: string;
 
-  teacherId?: string | null
+  teacherId?: string | null;
 
-  navigate: NavigateFn
+  navigate: NavigateFn;
 
-  onBack?: () => void
+  onBack?: () => void;
 }) {
-  const [course, setCourse] = useState<RecordValue | null>(null)
+  const [course, setCourse] = useState<RecordValue | null>(null);
 
-  const [access, setAccess] = useState<AccessState>("checking")
+  const [access, setAccess] = useState<AccessState>("checking");
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true);
 
-  const [error, setError] = useState("")
+  const [error, setError] = useState("");
 
-  const [requesting, setRequesting] = useState(false)
+  const [requesting, setRequesting] = useState(false);
 
   const [enrollmentId, setEnrollmentId] = useState<string | null>(
     () => readPendingEnrollments().get(courseId) || null,
-  )
+  );
 
-  const [contactOpen, setContactOpen] = useState(false)
+  const [contactOpen, setContactOpen] = useState(false);
 
-  const [teacherProfilePhone, setTeacherProfilePhone] = useState("")
+  const [teacherProfilePhone, setTeacherProfilePhone] = useState("");
 
   const [lessonProgress, setLessonProgress] = useState(
     () => new Map<string, RecordValue>(),
-  )
+  );
 
-  const [progressVerified, setProgressVerified] = useState(false)
+  const [progressVerified, setProgressVerified] = useState(false);
 
-  const [quizPassByLesson, setQuizPassByLesson] =
-    useState<Record<string, boolean>>({})
+  const [quizPassByLesson, setQuizPassByLesson] = useState<
+    Record<string, boolean>
+  >({});
 
-  const [progressError, setProgressError] = useState("")
+  const [progressError, setProgressError] = useState("");
 
-  const [savingLessonId, setSavingLessonId] = useState("")
+  const [savingLessonId, setSavingLessonId] = useState("");
 
-  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null)
+  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
 
   const [openVideoLessonId, setOpenVideoLessonId] = useState<string | null>(
     null,
-  )
+  );
 
-  const [openResourcesLessonId, setOpenResourcesLessonId] =
-    useState<string | null>(null)
+  const [openResourcesLessonId, setOpenResourcesLessonId] = useState<
+    string | null
+  >(null);
 
   async function loadPage(active = () => true) {
-    setLoading(true)
+    setLoading(true);
 
-    setEnrollmentId(null)
+    setEnrollmentId(null);
 
-    setError("")
+    setError("");
 
-    setProgressError("")
+    setProgressError("");
 
-    setLessonProgress(new Map())
+    setLessonProgress(new Map());
 
-    setProgressVerified(false)
+    setProgressVerified(false);
 
-    setQuizPassByLesson({})
+    setQuizPassByLesson({});
 
-    setExpandedLessonId(null)
+    setExpandedLessonId(null);
 
-    setOpenVideoLessonId(null)
+    setOpenVideoLessonId(null);
 
-    setOpenResourcesLessonId(null)
+    setOpenResourcesLessonId(null);
 
-    const token = getAuthToken()
+    const token = getAuthToken();
 
-    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
-
-      .toLowerCase()
+    const role = (
+      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    ).toLowerCase();
 
     let nextAccess: AccessState = !token
       ? "guest"
       : role.includes("student")
         ? "checking"
-        : "not-student"
+        : "not-student";
 
-    setAccess(nextAccess)
+    setAccess(nextAccess);
 
     if (token && role.includes("student")) {
       try {
@@ -698,32 +710,32 @@ export default function CourseDetailsPage({
           page: 1,
 
           pageSize: 100,
-        })
+        });
 
-        if (!active()) return
+        if (!active()) return;
 
         const enrollment = list(enrollmentResponse).find((item) => {
-          const nestedCourse = record(item.course)
+          const nestedCourse = record(item.course);
 
           return (
             String(
               item.courseId ?? nestedCourse.id ?? nestedCourse.courseId ?? "",
             ) === String(courseId)
-          )
-        })
+          );
+        });
 
-        const serverState = enrollmentState(enrollment)
-        const serverId = enrollment?.id ?? enrollment?.enrollmentId
-        const storedId = readPendingEnrollments().get(courseId)
+        const serverState = enrollmentState(enrollment);
+        const serverId = enrollment?.id ?? enrollment?.enrollmentId;
+        const storedId = readPendingEnrollments().get(courseId);
         if (enrollment) {
-          nextAccess = serverState
+          nextAccess = serverState;
           if (serverState === "pending") {
             rememberPendingEnrollment(
               courseId,
-              serverId == null ? storedId ?? "" : String(serverId),
-            )
+              serverId == null ? (storedId ?? "") : String(serverId),
+            );
           } else {
-            forgetPendingEnrollment(courseId)
+            forgetPendingEnrollment(courseId);
           }
           setEnrollmentId(
             serverId == null
@@ -731,18 +743,18 @@ export default function CourseDetailsPage({
                 ? storedId || null
                 : null
               : String(serverId),
-          )
+          );
         } else if (storedId !== undefined) {
-          nextAccess = "pending"
-          setEnrollmentId(storedId || null)
+          nextAccess = "pending";
+          setEnrollmentId(storedId || null);
         } else {
-          setEnrollmentId(null)
+          setEnrollmentId(null);
         }
       } catch {
         // Fail closed: do not request a video-bearing response when enrollment cannot be verified.
-        const storedId = readPendingEnrollments().get(courseId)
-        nextAccess = storedId === undefined ? "verification-failed" : "pending"
-        setEnrollmentId(storedId || null)
+        const storedId = readPendingEnrollments().get(courseId);
+        nextAccess = storedId === undefined ? "verification-failed" : "pending";
+        setEnrollmentId(storedId || null);
       }
     }
 
@@ -750,43 +762,43 @@ export default function CourseDetailsPage({
       const response =
         nextAccess === "approved"
           ? await studentsApi.courseDetail(courseId)
-          : await coursesApi.publicDetail(courseId)
+          : await coursesApi.publicDetail(courseId);
 
-      if (!active()) return
+      if (!active()) return;
 
-      let loadedCourse = courseRecord(response)
+      let loadedCourse = courseRecord(response);
 
       if (nextAccess === "approved") {
         try {
-          const supplementalCourse = await coursesApi.detail(courseId)
-          if (!active()) return
+          const supplementalCourse = await coursesApi.detail(courseId);
+          if (!active()) return;
           loadedCourse = mergeCourseLessonResources(
             response,
             supplementalCourse,
-          )
+          );
         } catch {
           // Keep the enrolled-student course response if public details are unavailable.
         }
       }
 
-      setCourse(loadedCourse)
+      setCourse(loadedCourse);
 
-      setAccess(nextAccess)
+      setAccess(nextAccess);
 
       if (nextAccess === "approved") {
         try {
-          const progressResponse = await studentsApi.courseProgress(courseId)
+          const progressResponse = await studentsApi.courseProgress(courseId);
 
-          if (!active()) return
+          if (!active()) return;
 
-          const rows = progressRows(progressResponse)
+          const rows = progressRows(progressResponse);
 
-          setProgressVerified(true)
+          setProgressVerified(true);
 
           setLessonProgress(
             new Map(
               rows.flatMap((row) => {
-                const nestedLesson = record(row.lesson ?? row.lessonInfo)
+                const nestedLesson = record(row.lesson ?? row.lessonInfo);
 
                 const id = String(
                   row.lessonId ??
@@ -794,18 +806,18 @@ export default function CourseDetailsPage({
                     nestedLesson.lessonId ??
                     row.id ??
                     "",
-                )
+                );
 
-                return id ? [[id, row] as const] : []
+                return id ? [[id, row] as const] : [];
               }),
             ),
-          )
+          );
         } catch {
-          if (!active()) return
+          if (!active()) return;
 
           setProgressError(
             "تعذر تحميل تقدم الدروس. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
-          )
+          );
         }
 
         const quizLessons = list(
@@ -814,13 +826,13 @@ export default function CourseDetailsPage({
           list(module.lessons ?? module.courseLessons).filter((lesson) =>
             isTrue(lesson.hasQuiz),
           ),
-        )
+        );
 
         if (quizLessons.length) {
           try {
-            const profile = record(unwrap(await studentsApi.me()))
+            const profile = record(unwrap(await studentsApi.me()));
 
-            if (!active()) return
+            if (!active()) return;
 
             const results = await Promise.allSettled(
               quizLessons.map(async (lesson) => ({
@@ -828,191 +840,223 @@ export default function CourseDetailsPage({
 
                 passed: await studentPassedLessonQuiz(lesson, profile),
               })),
-            )
+            );
 
-            if (!active()) return
+            if (!active()) return;
 
-            const passes: Record<string, boolean> = {}
+            const passes: Record<string, boolean> = {};
 
-            let quizCheckFailed = false
+            let quizCheckFailed = false;
 
             results.forEach((result, index) => {
-              const fallbackId = lessonId(quizLessons[index])
+              const fallbackId = lessonId(quizLessons[index]);
 
               if (result.status === "fulfilled" && result.value.id) {
-                passes[result.value.id] = result.value.passed
+                passes[result.value.id] = result.value.passed;
               } else {
-                if (fallbackId) passes[fallbackId] = false
+                if (fallbackId) passes[fallbackId] = false;
 
-                quizCheckFailed = true
+                quizCheckFailed = true;
               }
-            })
+            });
 
-            setQuizPassByLesson(passes)
+            setQuizPassByLesson(passes);
 
             if (quizCheckFailed) {
               setProgressError(
                 "تعذر التحقق من اجتياز بعض الاختبارات. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
-              )
+              );
             }
           } catch {
-            if (!active()) return
+            if (!active()) return;
 
             setQuizPassByLesson(
               Object.fromEntries(
                 quizLessons.flatMap((lesson) => {
-                  const id = lessonId(lesson)
+                  const id = lessonId(lesson);
 
-                  return id ? [[id, false]] : []
+                  return id ? [[id, false]] : [];
                 }),
               ),
-            )
+            );
 
             setProgressError(
               "تعذر التحقق من الاختبارات. ستظل الوحدات التالية مقفولة حتى نتمكن من التحقق.",
-            )
+            );
           }
         }
       }
     } catch (cause) {
-      if (!active()) return
+      if (!active()) return;
 
       setError(
         cause instanceof Error ? cause.message : "تعذر تحميل تفاصيل الدورة.",
-      )
+      );
 
-      setAccess(nextAccess)
+      setAccess(nextAccess);
     } finally {
-      if (active()) setLoading(false)
+      if (active()) setLoading(false);
     }
   }
 
   useEffect(() => {
-    let active = true
+    let active = true;
 
-    void loadPage(() => active)
+    void loadPage(() => active);
 
     return () => {
-      active = false
-    }
-  }, [courseId])
+      active = false;
+    };
+  }, [courseId]);
 
   async function requestEnrollment() {
     if (!getAuthToken()) {
-      navigate("login")
+      navigate("login");
 
-      return
+      return;
     }
 
-    const role = (window.sessionStorage.getItem("eduhub.auth.role") ?? "")
-
-      .toLowerCase()
+    const role = (
+      window.sessionStorage.getItem("eduhub.auth.role") ?? ""
+    ).toLowerCase();
 
     if (!role.includes("student")) {
-      notifyError(new Error("طلب الالتحاق متاح لحساب الطالب فقط."))
+      notifyError(new Error("طلب الالتحاق متاح لحساب الطالب فقط."));
 
-      return
+      return;
     }
 
-    setRequesting(true)
+    setRequesting(true);
 
     try {
-      const response = await coursesApi.enroll(courseId)
-      const enrollment = record(unwrap(response))
-      const id = enrollment.id ?? enrollment.enrollmentId
-      setEnrollmentId(id == null ? null : String(id))
-      rememberPendingEnrollment(courseId, id == null ? "" : String(id))
+      const response = await coursesApi.enroll(courseId);
+      const enrollment = record(unwrap(response));
+      const id = enrollment.id ?? enrollment.enrollmentId;
+      setEnrollmentId(id == null ? null : String(id));
+      rememberPendingEnrollment(courseId, id == null ? "" : String(id));
 
-      setAccess("pending")
+      setAccess("pending");
 
-      if (id == null) await loadPage()
+      if (id == null) await loadPage();
 
-      notifySuccess("تم إرسال طلب الالتحاق، وسيظهر محتوى الفيديو بعد الموافقة.")
+      notifySuccess(
+        "تم إرسال طلب الالتحاق، وسيظهر محتوى الفيديو بعد الموافقة.",
+      );
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
-        await loadPage()
+        await loadPage();
       } else {
-        notifyError(cause, "تعذر إرسال طلب الالتحاق.")
+        notifyError(cause, "تعذر إرسال طلب الالتحاق.");
       }
     } finally {
-      setRequesting(false)
+      setRequesting(false);
     }
   }
 
   async function cancelEnrollment() {
-    if (requesting) return
+    if (requesting) return;
 
-    setRequesting(true)
+    setRequesting(true);
     try {
-      let targetId = enrollmentId
+      let targetId = enrollmentId;
       if (!targetId) {
-        const response = await studentsApi.enrollments({ page: 1, pageSize: 100 })
+        const response = await studentsApi.enrollments({
+          page: 1,
+          pageSize: 100,
+        });
         const enrollment = list(response).find((item) => {
-          const nestedCourse = record(item.course)
-          return String(
-            item.courseId ?? nestedCourse.id ?? nestedCourse.courseId ?? "",
-          ) === String(courseId)
-        })
-        targetId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "")
+          const nestedCourse = record(item.course);
+          return (
+            String(
+              item.courseId ?? nestedCourse.id ?? nestedCourse.courseId ?? "",
+            ) === String(courseId)
+          );
+        });
+        targetId = String(enrollment?.id ?? enrollment?.enrollmentId ?? "");
       }
-      if (!targetId) throw new Error("تعذر العثور على طلب الالتحاق.")
-      await studentsApi.cancelEnrollment(targetId)
-      forgetPendingEnrollment(courseId)
-      setAccess("not-enrolled")
-      setEnrollmentId(null)
-      setContactOpen(false)
-      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.")
+      if (!targetId) throw new Error("تعذر العثور على طلب الالتحاق.");
+      await studentsApi.cancelEnrollment(targetId);
+      forgetPendingEnrollment(courseId);
+      setAccess("not-enrolled");
+      setEnrollmentId(null);
+      setContactOpen(false);
+      notifySuccess("تم إلغاء طلب الالتحاق بنجاح.");
     } catch (cause) {
-      notifyError(cause, "تعذر إلغاء طلب الالتحاق.")
+      notifyError(cause, "تعذر إلغاء طلب الالتحاق.");
     } finally {
-      setRequesting(false)
+      setRequesting(false);
     }
   }
 
   async function completeLesson(id: string, lastPosition = 0) {
-    if (!id || savingLessonId) return
+    if (!id || savingLessonId) return;
 
-    setSavingLessonId(id)
+    setSavingLessonId(id);
 
     try {
       await studentsApi.updateLessonProgress(id, {
         isCompleted: true,
 
         lastPosition: Math.max(0, Math.floor(lastPosition)),
-      })
+      });
 
       setLessonProgress((current) => {
-        const next = new Map(current)
+        const next = new Map(current);
 
-        next.set(id, { ...next.get(id), lessonId: id, isCompleted: true })
+        next.set(id, { ...next.get(id), lessonId: id, isCompleted: true });
 
-        return next
-      })
+        return next;
+      });
 
-      setExpandedLessonId(null)
+      setExpandedLessonId(null);
 
-      notifySuccess("تم تسجيل إكمال الدرس.")
+      notifySuccess("تم تسجيل إكمال الدرس.");
     } catch (cause) {
-      notifyError(cause, "تعذر تسجيل إكمال الدرس.")
+      notifyError(cause, "تعذر تسجيل إكمال الدرس.");
     } finally {
-      setSavingLessonId("")
+      setSavingLessonId("");
     }
   }
 
-  const modules = list(course?.modules ?? course?.courseModules)
+  const modules = list(course?.modules ?? course?.courseModules);
 
   const lessonCount = modules.reduce(
     (count, module) =>
       count + list(module.lessons ?? module.courseLessons).length,
 
     0,
-  )
+  );
 
-  const canWatch = access === "approved"
+  const canWatch = access === "approved";
 
-  const courseTeacher = record(course?.teacher ?? course?.instructor)
+  const courseTeacher = record(course?.teacher ?? course?.instructor);
+  const courseTeacherIdValue = [
+    teacherId,
+    course?.teacherId,
+    course?.teacher_id,
+    course?.instructorId,
+    course?.instructor_id,
+    courseTeacher.id,
+    courseTeacher.teacherId,
+    courseTeacher.teacher_id,
+    courseTeacher.userId,
+    courseTeacher.user_id,
+  ].find(
+    (value) =>
+      (typeof value === "string" || typeof value === "number") &&
+      String(value).trim(),
+  );
+  const courseTeacherId =
+    courseTeacherIdValue === undefined
+      ? ""
+      : String(courseTeacherIdValue).trim();
   const teacherPhone = String(
-    course?.teacherPhoneNumber ??
+    course?.mobileNumber ??
+      courseTeacher.mobileNumber ??
+      course?.mobile ??
+      courseTeacher.mobile ??
+      teacherProfilePhone ??
+      course?.teacherPhoneNumber ??
       course?.teacherPhone ??
       course?.instructorPhoneNumber ??
       course?.whatsappPhoneNumber ??
@@ -1025,11 +1069,9 @@ export default function CourseDetailsPage({
       courseTeacher.whatsAppNumber ??
       courseTeacher.phoneNumber ??
       courseTeacher.phone ??
-      courseTeacher.mobileNumber ??
-      teacherProfilePhone ??
       "",
-  ).trim()
-  const whatsappNumber = teacherPhone.replace(/\D/g, "")
+  ).trim();
+  const whatsappNumber = teacherPhone.replace(/\D/g, "");
   const whatsappPhone = whatsappNumber.startsWith("00")
     ? whatsappNumber.slice(2)
     : whatsappNumber.startsWith("0")
@@ -1038,19 +1080,21 @@ export default function CourseDetailsPage({
         ? whatsappNumber
         : whatsappNumber
           ? `20${whatsappNumber}`
-          : ""
-  const courseTitle = String(course?.title ?? "الدورة")
+          : "";
+  const courseTitle = String(course?.title ?? "الدورة");
 
   useEffect(() => {
-    if (!contactOpen || teacherPhone || !teacherId) return
+    if (!contactOpen || teacherPhone || !courseTeacherId) return;
 
-    let active = true
+    let active = true;
     teachersApi
-      .byId(teacherId)
+      .byId(courseTeacherId)
       .then((response) => {
-        if (!active) return
-        const profile = record(unwrap(response))
+        if (!active) return;
+        const profile = record(unwrap(response));
         const phone =
+          profile.mobileNumber ??
+          profile.mobile ??
           profile.teacherPhoneNumber ??
           profile.teacherPhone ??
           profile.whatsappPhoneNumber ??
@@ -1059,51 +1103,51 @@ export default function CourseDetailsPage({
           profile.whatsAppNumber ??
           profile.phoneNumber ??
           profile.phone ??
-          profile.mobileNumber
-        if (phone != null) setTeacherProfilePhone(String(phone).trim())
+          profile.mobileNumber;
+        if (phone != null) setTeacherProfilePhone(String(phone).trim());
       })
-      .catch(() => undefined)
+      .catch(() => undefined);
 
     return () => {
-      active = false
-    }
-  }, [contactOpen, teacherId, teacherPhone])
+      active = false;
+    };
+  }, [contactOpen, courseTeacherId, teacherPhone]);
 
   function moduleIsComplete(module: RecordValue): boolean {
-    if (!progressVerified) return false
+    if (!progressVerified) return false;
 
-    const lessons = list(module.lessons ?? module.courseLessons)
+    const lessons = list(module.lessons ?? module.courseLessons);
 
     return lessons.every((lesson) => {
-      return lessonIsComplete(lesson)
-    })
+      return lessonIsComplete(lesson);
+    });
   }
 
   function lessonIsComplete(lesson: RecordValue): boolean {
     if (!progressVerified || !lessonCompleted(lesson, lessonProgress))
-      return false
+      return false;
 
-    const id = lessonId(lesson)
+    const id = lessonId(lesson);
 
     return (
       !isTrue(lesson.hasQuiz) || (id !== "" && quizPassByLesson[id] === true)
-    )
+    );
   }
 
   const coverSource = String(
     course?.coverImageUrl ?? course?.thumbnailUrl ?? course?.imageUrl ?? "",
-  )
+  );
 
-  const cover = coverSource ? resolveApiAssetUrl(coverSource) : ""
+  const cover = coverSource ? resolveApiImageUrl(coverSource, 1600) : "";
 
-  const subject = String(course?.subjectName ?? course?.subject ?? "")
+  const subject = String(course?.subjectName ?? course?.subject ?? "");
 
   const teacher = String(
     course?.teacherName ??
       record(course?.teacher).fullName ??
       record(course?.teacher).name ??
       "",
-  )
+  );
 
   return (
     <main className="min-h-screen bg-canvas pb-16">
@@ -1139,6 +1183,10 @@ export default function CourseDetailsPage({
                   src={cover}
                   alt=""
                   className="absolute inset-0 -z-20 size-full object-cover opacity-70"
+                  fetchPriority="high"
+                  decoding="async"
+                  width={1600}
+                  height={900}
                 />
               )}
               <div className="absolute inset-0 -z-10 bg-gradient-to-l from-emerald-950/55 via-emerald-950/25 to-emerald-950/5" />
@@ -1217,14 +1265,14 @@ export default function CourseDetailsPage({
                     {modules.map((module, moduleIndex) => {
                       const lessons = list(
                         module.lessons ?? module.courseLessons,
-                      )
+                      );
 
                       const locked =
                         canWatch &&
                         moduleIndex > 0 &&
-                        !modules.slice(0, moduleIndex).every(moduleIsComplete)
+                        !modules.slice(0, moduleIndex).every(moduleIsComplete);
 
-                      const completed = canWatch && moduleIsComplete(module)
+                      const completed = canWatch && moduleIsComplete(module);
 
                       return (
                         <details
@@ -1290,12 +1338,12 @@ export default function CourseDetailsPage({
                             <div className="divide-y divide-stroke border-t border-stroke bg-white px-4 sm:px-5">
                               {lessons.length ? (
                                 lessons.map((lesson, lessonIndex) => {
-                                  const video = videoFromLesson(lesson)
+                                  const video = videoFromLesson(lesson);
 
                                   const lessonResources =
-                                    lessonResourcesFrom(lesson)
+                                    lessonResourcesFrom(lesson);
 
-                                  const id = lessonId(lesson)
+                                  const id = lessonId(lesson);
 
                                   const lessonLocked =
                                     canWatch &&
@@ -1305,24 +1353,24 @@ export default function CourseDetailsPage({
 
                                           .slice(0, lessonIndex)
 
-                                          .every(lessonIsComplete)))
+                                          .every(lessonIsComplete)));
 
                                   const completedLesson = lessonCompleted(
                                     lesson,
 
                                     lessonProgress,
-                                  )
+                                  );
 
                                   const completedIncludingQuiz =
-                                    lessonIsComplete(lesson)
+                                    lessonIsComplete(lesson);
 
-                                  const hasQuiz = isTrue(lesson.hasQuiz)
+                                  const hasQuiz = isTrue(lesson.hasQuiz);
 
                                   const passedQuiz =
-                                    !hasQuiz || quizPassByLesson[id] === true
+                                    !hasQuiz || quizPassByLesson[id] === true;
 
                                   const isExpanded =
-                                    expandedLessonId === id && !lessonLocked
+                                    expandedLessonId === id && !lessonLocked;
 
                                   return (
                                     <article
@@ -1357,9 +1405,11 @@ export default function CourseDetailsPage({
                                                 onClick={() => {
                                                   setExpandedLessonId(
                                                     isExpanded ? null : id,
-                                                  )
-                                                  setOpenVideoLessonId(null)
-                                                  setOpenResourcesLessonId(null)
+                                                  );
+                                                  setOpenVideoLessonId(null);
+                                                  setOpenResourcesLessonId(
+                                                    null,
+                                                  );
                                                 }}
                                                 className="inline-flex items-center gap-2 text-start font-bold text-ink disabled:cursor-not-allowed disabled:opacity-65"
                                               >
@@ -1447,7 +1497,7 @@ export default function CourseDetailsPage({
                                       {isExpanded && (
                                         <div className="mt-3 border-t border-stroke pt-4">
                                           <div className="grid gap-2 sm:grid-cols-2">
-                                            {video && (
+                                            {canWatch && video && (
                                               <button
                                                 type="button"
                                                 aria-expanded={
@@ -1455,16 +1505,16 @@ export default function CourseDetailsPage({
                                                 }
                                                 onClick={() => {
                                                   const isOpening =
-                                                    openVideoLessonId !== id
+                                                    openVideoLessonId !== id;
                                                   setOpenVideoLessonId(
                                                     openVideoLessonId === id
                                                       ? null
                                                       : id,
-                                                  )
+                                                  );
                                                   if (isOpening)
                                                     scrollToLessonContent(
                                                       `course-video-${id}`,
-                                                    )
+                                                    );
                                                 }}
                                                 className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-start transition ${
                                                   openVideoLessonId === id
@@ -1493,57 +1543,61 @@ export default function CourseDetailsPage({
                                                 />
                                               </button>
                                             )}
-                                            {lessonResources.length > 0 && (
-                                              <button
-                                                type="button"
-                                                aria-expanded={
-                                                  openResourcesLessonId === id
-                                                }
-                                                onClick={() => {
-                                                  const isOpening =
-                                                    openResourcesLessonId !== id
-                                                  setOpenResourcesLessonId(
+                                            {canWatch &&
+                                              lessonResources.length > 0 && (
+                                                <button
+                                                  type="button"
+                                                  aria-expanded={
                                                     openResourcesLessonId === id
-                                                      ? null
-                                                      : id,
-                                                  )
-                                                  if (isOpening)
-                                                    scrollToLessonContent(
-                                                      `course-resources-${id}`,
-                                                    )
-                                                }}
-                                                className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-start transition ${
-                                                  openResourcesLessonId === id
-                                                    ? "border-nuwa-base bg-nuwa-soft/60 text-nuwa-deep"
-                                                    : "border-stroke bg-white text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
-                                                }`}
-                                              >
-                                                <span className="flex min-w-0 items-center gap-3">
-                                                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-nuwa-soft text-nuwa-base">
-                                                    <FileText size={17} />
-                                                  </span>
-                                                  <span className="truncate text-sm font-bold">
-                                                    ملفات ومواد الدرس
-                                                  </span>
-                                                </span>
-                                                <span className="flex shrink-0 items-center gap-2">
-                                                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold">
-                                                    {lessonResources.length}
-                                                  </span>
-                                                  <ChevronDown
-                                                    size={17}
-                                                    className={`transition-transform ${
+                                                  }
+                                                  onClick={() => {
+                                                    const isOpening =
+                                                      openResourcesLessonId !==
+                                                      id;
+                                                    setOpenResourcesLessonId(
                                                       openResourcesLessonId ===
-                                                      id
-                                                        ? "rotate-180"
-                                                        : ""
-                                                    }`}
-                                                  />
-                                                </span>
-                                              </button>
-                                            )}
+                                                        id
+                                                        ? null
+                                                        : id,
+                                                    );
+                                                    if (isOpening)
+                                                      scrollToLessonContent(
+                                                        `course-resources-${id}`,
+                                                      );
+                                                  }}
+                                                  className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-start transition ${
+                                                    openResourcesLessonId === id
+                                                      ? "border-nuwa-base bg-nuwa-soft/60 text-nuwa-deep"
+                                                      : "border-stroke bg-white text-ink hover:border-nuwa-base/40 hover:bg-nuwa-ice"
+                                                  }`}
+                                                >
+                                                  <span className="flex min-w-0 items-center gap-3">
+                                                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-nuwa-soft text-nuwa-base">
+                                                      <FileText size={17} />
+                                                    </span>
+                                                    <span className="truncate text-sm font-bold">
+                                                      ملفات ومواد الدرس
+                                                    </span>
+                                                  </span>
+                                                  <span className="flex shrink-0 items-center gap-2">
+                                                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold">
+                                                      {lessonResources.length}
+                                                    </span>
+                                                    <ChevronDown
+                                                      size={17}
+                                                      className={`transition-transform ${
+                                                        openResourcesLessonId ===
+                                                        id
+                                                          ? "rotate-180"
+                                                          : ""
+                                                      }`}
+                                                    />
+                                                  </span>
+                                                </button>
+                                              )}
                                           </div>
-                                          {openVideoLessonId === id &&
+                                          {canWatch &&
+                                            openVideoLessonId === id &&
                                             video && (
                                               <div
                                                 id={`course-video-${id}`}
@@ -1564,7 +1618,8 @@ export default function CourseDetailsPage({
                                                 />
                                               </div>
                                             )}
-                                          {openResourcesLessonId === id &&
+                                          {canWatch &&
+                                            openResourcesLessonId === id &&
                                             lessonResources.length > 0 && (
                                               <section
                                                 id={`course-resources-${id}`}
@@ -1594,19 +1649,19 @@ export default function CourseDetailsPage({
                                                       const url =
                                                         lessonResourceUrl(
                                                           resource,
-                                                        )
+                                                        );
 
                                                       const name = String(
                                                         resource.name ??
                                                           `مادة الدرس ${resourceIndex + 1}`,
-                                                      )
+                                                      );
 
                                                       const mime = String(
                                                         resource.contentType ??
                                                           resource.mimeType ??
                                                           resource.type ??
                                                           "",
-                                                      ).toLowerCase()
+                                                      ).toLowerCase();
 
                                                       if (!url) {
                                                         return (
@@ -1629,12 +1684,12 @@ export default function CourseDetailsPage({
                                                               متاح
                                                             </span>
                                                           </div>
-                                                        )
+                                                        );
                                                       }
 
                                                       const isYoutube = Boolean(
                                                         youtubeVideoId(url),
-                                                      )
+                                                      );
 
                                                       const isVideo =
                                                         isYoutube ||
@@ -1646,7 +1701,7 @@ export default function CourseDetailsPage({
                                                         ) ||
                                                         name.startsWith(
                                                           "فيديو إضافي",
-                                                        )
+                                                        );
 
                                                       if (isVideo) {
                                                         return (
@@ -1667,11 +1722,11 @@ export default function CourseDetailsPage({
                                                               title={name}
                                                             />
                                                           </div>
-                                                        )
+                                                        );
                                                       }
 
                                                       const href =
-                                                        resolveApiAssetUrl(url)
+                                                        resolveApiAssetUrl(url);
 
                                                       return (
                                                         <a
@@ -1695,7 +1750,7 @@ export default function CourseDetailsPage({
                                                             فتح المادة
                                                           </span>
                                                         </a>
-                                                      )
+                                                      );
                                                     },
                                                   )}
                                                 </div>
@@ -1729,7 +1784,7 @@ export default function CourseDetailsPage({
                                         </div>
                                       )}
                                     </article>
-                                  )
+                                  );
                                 })
                               ) : (
                                 <p className="py-5 text-sm text-ink-muted">
@@ -1739,7 +1794,7 @@ export default function CourseDetailsPage({
                             </div>
                           )}
                         </details>
-                      )
+                      );
                     })}
                   </div>
                 ) : (
@@ -1825,7 +1880,7 @@ export default function CourseDetailsPage({
         <div
           className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-emerald-950/55 p-3 backdrop-blur-sm sm:p-5"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setContactOpen(false)
+            if (event.target === event.currentTarget) setContactOpen(false);
           }}
         >
           <section
@@ -1849,7 +1904,10 @@ export default function CourseDetailsPage({
               <p className="mt-5 text-xs font-semibold text-white/75">
                 طلب الالتحاق بالدورة
               </p>
-              <h2 id="course-contact-title" className="mt-1 text-xl font-bold leading-8 sm:text-2xl">
+              <h2
+                id="course-contact-title"
+                className="mt-1 text-xl font-bold leading-8 sm:text-2xl"
+              >
                 {courseTitle}
               </h2>
               <p className="mt-3 text-sm leading-7 text-white/75">
@@ -1872,7 +1930,8 @@ export default function CourseDetailsPage({
                   </a>
                 ) : (
                   <p className="mt-2 text-sm leading-6 text-ink-muted">
-                    رقم التواصل غير متاح حاليًا. يمكنك إرسال طلب الالتحاق وسيتواصل معك المدرس.
+                    رقم التواصل غير متاح حاليًا. يمكنك إرسال طلب الالتحاق
+                    وسيتواصل معك المدرس.
                   </p>
                 )}
               </div>
@@ -1891,13 +1950,11 @@ export default function CourseDetailsPage({
                       : "bg-nuwa-base hover:bg-nuwa-deep"
                   }`}
                 >
-                  {requesting ? (
-                    "جارٍ المعالجة..."
-                  ) : access === "pending" ? (
-                    "إلغاء الطلب"
-                  ) : (
-                    "طلب الالتحاق بالدورة"
-                  )}
+                  {requesting
+                    ? "جارٍ المعالجة..."
+                    : access === "pending"
+                      ? "إلغاء الطلب"
+                      : "طلب الالتحاق بالدورة"}
                 </button>
                 {whatsappPhone ? (
                   <a
@@ -1926,5 +1983,5 @@ export default function CourseDetailsPage({
         </div>
       )}
     </main>
-  )
+  );
 }

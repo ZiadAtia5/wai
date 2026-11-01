@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react";
 
 import {
   BookOpen,
@@ -8,86 +8,90 @@ import {
   Search,
   UsersRound,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { resolveApiAssetUrl } from "../../api/client"
-import PersonAvatar from "../PersonAvatar"
-import { Skeleton, SkeletonAvatar, SkeletonText } from "../Skeleton"
-import { useConfirmation } from "../ConfirmationProvider"
+import { resolveApiImageUrl } from "../../api/client";
+import PersonAvatar from "../PersonAvatar";
+import { Skeleton, SkeletonAvatar, SkeletonText } from "../Skeleton";
+import { useConfirmation } from "../ConfirmationProvider";
 
-type RequestStatus = "pending" | "approved" | "rejected"
+type RequestStatus = "pending" | "approved" | "rejected";
 
-type FilterStatus = "all" | RequestStatus
+type FilterStatus = "all" | RequestStatus;
 
 interface EnrollmentRequest {
-  id: string
+  id: string;
 
-  studentName: string
+  studentName: string;
 
-  email: string
+  email: string;
 
-  phone: string
+  phone: string;
 
-  requestedAt: string | null
+  requestedAt: string | null;
 
-  status: RequestStatus
+  status: RequestStatus;
 
-  note: string
+  note: string;
 
-  avatarUrl: string
+  avatarUrl: string;
 }
 
 interface CourseRequests {
-  id: string
+  id: string;
 
-  title: string
+  title: string;
 
-  category: string
+  category: string;
 
-  thumbnail: string
+  thumbnail: string;
 
-  requests: EnrollmentRequest[]
+  requests: EnrollmentRequest[];
 }
 
 interface TeacherEnrollmentRequestsProps {
-  data: unknown
+  data: unknown;
 
-  loading: boolean
+  loading: boolean;
 
-  error: string | null
+  error: string | null;
 
-  onRetry: () => void
+  onRetry: () => void;
 
   onDecision: (
     requestId: string,
     approve: boolean,
     rejectionAlreadyConfirmed?: boolean,
-  ) => Promise<boolean>
+  ) => Promise<boolean>;
 }
 
 interface EnrollmentFilter {
-  id: FilterStatus
+  id: FilterStatus;
 
-  label: string
+  label: string;
 }
 
 function CourseThumbnail({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => setFailed(false), [src])
+  useEffect(() => setFailed(false), [src]);
 
   return src && !failed ? (
     <img
-      src={resolveApiAssetUrl(src)}
+      src={resolveApiImageUrl(src, 640)}
       alt=""
       className="size-full object-cover"
+      loading="lazy"
+      decoding="async"
+      width={640}
+      height={360}
       onError={() => setFailed(true)}
     />
   ) : (
     <div className="grid size-full place-items-center text-neutral-400">
       <BookOpen size={24} aria-hidden="true" />
     </div>
-  )
+  );
 }
 
 const filters: EnrollmentFilter[] = [
@@ -98,53 +102,57 @@ const filters: EnrollmentFilter[] = [
   { id: "approved", label: "تمت الموافقة" },
 
   { id: "rejected", label: "مرفوضة" },
-]
+];
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : {}
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function asList(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value
+  if (Array.isArray(value)) return value;
 
-  const record = asRecord(value)
+  const record = asRecord(value);
 
-  if (Array.isArray(record.items)) return record.items
+  if (Array.isArray(record.items)) return record.items;
 
-  if (Array.isArray(record.requests)) return record.requests
+  if (Array.isArray(record.requests)) return record.requests;
 
-  if (record.data !== undefined) return asList(record.data)
+  if (record.data !== undefined) return asList(record.data);
 
-  return []
+  return [];
 }
 
 function text(...values: unknown[]): string {
   const value = values.find(
     (item) => typeof item === "string" || typeof item === "number",
-  )
+  );
 
-  return value === undefined || value === null ? "" : String(value).trim()
+  return value === undefined || value === null ? "" : String(value).trim();
 }
 
 function statusOf(value: unknown, isApproved?: unknown): RequestStatus {
-  const status = String(value ?? "pending").trim().toLowerCase()
+  const status = String(value ?? "pending")
+    .trim()
+    .toLowerCase();
 
   // The API serializes EnrollmentStatus as an integer enum:
   // Pending=0, Approved=1, Rejected=2, Completed=3.
-  if (["approved", "accepted", "active", "enrolled", "1", "3"].includes(status)) {
-    return "approved"
+  if (
+    ["approved", "accepted", "active", "enrolled", "1", "3"].includes(status)
+  ) {
+    return "approved";
   }
 
   if (["rejected", "declined", "cancelled", "canceled", "2"].includes(status)) {
-    return "rejected"
+    return "rejected";
   }
 
-  if (isApproved === true) return "approved"
-  if (isApproved === false) return "pending"
+  if (isApproved === true) return "approved";
+  if (isApproved === false) return "pending";
 
-  return "pending"
+  return "pending";
 }
 
 function requestFrom(
@@ -154,9 +162,9 @@ function requestFrom(
 
   courseId = "request",
 ): EnrollmentRequest {
-  const request = asRecord(value)
+  const request = asRecord(value);
 
-  const student = asRecord(request.student)
+  const student = asRecord(request.student);
 
   const studentName = text(
     request.studentName,
@@ -170,7 +178,7 @@ function requestFrom(
     [student.firstName, student.lastName].filter(Boolean).join(" "),
 
     request.name,
-  )
+  );
 
   return {
     id:
@@ -210,28 +218,28 @@ function requestFrom(
 
       student.profileImageUrl,
     ),
-  }
+  };
 }
 
 function normalizeCourses(value: unknown): CourseRequests[] {
-  const root = asRecord(value)
+  const root = asRecord(value);
 
-  const source = asList(root.requests ?? value)
+  const source = asList(root.requests ?? value);
 
-  const grouped: CourseRequests[] = []
+  const grouped: CourseRequests[] = [];
 
-  const byCourse = new Map<string, CourseRequests>()
+  const byCourse = new Map<string, CourseRequests>();
 
   source.forEach((item, index) => {
-    const record = asRecord(item)
+    const record = asRecord(item);
 
-    const nestedCourse = asRecord(record.course)
+    const nestedCourse = asRecord(record.course);
 
-    const nestedRequests = record.requests ?? record.enrollmentRequests
+    const nestedRequests = record.requests ?? record.enrollmentRequests;
 
     if (Array.isArray(nestedRequests)) {
       const courseId =
-        text(record.courseId, nestedCourse.id, record.id) || `course-${index}`
+        text(record.courseId, nestedCourse.id, record.id) || `course-${index}`;
 
       grouped.push({
         id: courseId,
@@ -270,14 +278,14 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         requests: nestedRequests.map((request, requestIndex) =>
           requestFrom(request, requestIndex, courseId),
         ),
-      })
+      });
 
-      return
+      return;
     }
 
-    const courseId = text(record.courseId, nestedCourse.id) || "unassigned"
+    const courseId = text(record.courseId, nestedCourse.id) || "unassigned";
 
-    let course = byCourse.get(courseId)
+    let course = byCourse.get(courseId);
 
     if (!course) {
       course = {
@@ -308,26 +316,26 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         ),
 
         requests: [],
-      }
+      };
 
-      byCourse.set(courseId, course)
+      byCourse.set(courseId, course);
 
-      grouped.push(course)
+      grouped.push(course);
     }
 
-    course.requests.push(requestFrom(record, index))
-  })
+    course.requests.push(requestFrom(record, index));
+  });
 
   asList(root.courses).forEach((item, index) => {
-    const record = asRecord(item)
+    const record = asRecord(item);
 
-    const nestedCourse = asRecord(record.course)
+    const nestedCourse = asRecord(record.course);
 
     const courseId =
-      text(record.courseId, nestedCourse.id, record.id) || `course-${index}`
+      text(record.courseId, nestedCourse.id, record.id) || `course-${index}`;
 
     let course =
-      byCourse.get(courseId) ?? grouped.find((item) => item.id === courseId)
+      byCourse.get(courseId) ?? grouped.find((item) => item.id === courseId);
 
     if (!course) {
       course = {
@@ -365,13 +373,13 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         ),
 
         requests: [],
-      }
+      };
 
-      byCourse.set(courseId, course)
+      byCourse.set(courseId, course);
 
-      grouped.push(course)
+      grouped.push(course);
 
-      return
+      return;
     }
 
     course.title =
@@ -383,7 +391,7 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         nestedCourse.title,
 
         nestedCourse.name,
-      ) || course.title
+      ) || course.title;
 
     course.category =
       text(
@@ -394,7 +402,7 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         nestedCourse.category,
 
         nestedCourse.subjectName,
-      ) || course.category
+      ) || course.category;
 
     course.thumbnail =
       text(
@@ -405,41 +413,41 @@ function normalizeCourses(value: unknown): CourseRequests[] {
         nestedCourse.thumbnail,
 
         nestedCourse.coverImageUrl,
-      ) || course.thumbnail
-  })
+      ) || course.thumbnail;
+  });
 
-  return grouped
+  return grouped;
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "التاريخ غير متاح"
+  if (!value) return "التاريخ غير متاح";
 
-  const date = new Date(value)
+  const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "التاريخ غير متاح"
+  if (Number.isNaN(date.getTime())) return "التاريخ غير متاح";
 
   return new Intl.DateTimeFormat("ar-EG", {
     dateStyle: "medium",
 
     timeStyle: "short",
-  }).format(date)
+  }).format(date);
 }
 
 function statusLabel(status: RequestStatus): string {
-  if (status === "approved") return "تمت الموافقة"
+  if (status === "approved") return "تمت الموافقة";
 
-  if (status === "rejected") return "مرفوض"
+  if (status === "rejected") return "مرفوض";
 
-  return "قيد المراجعة"
+  return "قيد المراجعة";
 }
 
 function statusClasses(status: RequestStatus): string {
   if (status === "approved")
-    return "bg-emerald-50 text-emerald-700 ring-emerald-600/15"
+    return "bg-emerald-50 text-emerald-700 ring-emerald-600/15";
 
-  if (status === "rejected") return "bg-rose-50 text-rose-700 ring-rose-600/15"
+  if (status === "rejected") return "bg-rose-50 text-rose-700 ring-rose-600/15";
 
-  return "bg-amber-50 text-amber-700 ring-amber-600/15"
+  return "bg-amber-50 text-amber-700 ring-amber-600/15";
 }
 
 export default function TeacherEnrollmentRequests({
@@ -453,29 +461,30 @@ export default function TeacherEnrollmentRequests({
 
   onDecision,
 }: TeacherEnrollmentRequestsProps) {
-  const confirm = useConfirmation()
-  const [query, setQuery] = useState("")
+  const confirm = useConfirmation();
+  const [query, setQuery] = useState("");
 
-  const [filter, setFilter] = useState<FilterStatus>("all")
+  const [filter, setFilter] = useState<FilterStatus>("all");
 
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [statusOverrides, setStatusOverrides] =
-    useState<Record<string, RequestStatus>>({})
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, RequestStatus>
+  >({});
 
-  const [busyRequests, setBusyRequests] = useState<string[]>([])
+  const [busyRequests, setBusyRequests] = useState<string[]>([]);
 
-  const courses = useMemo(() => normalizeCourses(data), [data])
+  const courses = useMemo(() => normalizeCourses(data), [data]);
 
   useEffect(() => {
     if (courses.length) {
       setExpandedCourses((current) =>
         current.size ? current : new Set([courses[0].id]),
-      )
+      );
     }
-  }, [courses])
+  }, [courses]);
 
   const requests = useMemo(
     () =>
@@ -488,7 +497,7 @@ export default function TeacherEnrollmentRequests({
       ),
 
     [courses, statusOverrides],
-  )
+  );
 
   const counts = useMemo(
     () => ({
@@ -505,9 +514,9 @@ export default function TeacherEnrollmentRequests({
     }),
 
     [requests],
-  )
+  );
 
-  const search = query.trim().toLocaleLowerCase("ar-EG")
+  const search = query.trim().toLocaleLowerCase("ar-EG");
 
   const visibleCourses = courses
 
@@ -529,7 +538,7 @@ export default function TeacherEnrollmentRequests({
             !search ||
             course.title.toLocaleLowerCase("ar-EG").includes(search)
           )
-            return true
+            return true;
 
           return [
             course.title,
@@ -545,7 +554,7 @@ export default function TeacherEnrollmentRequests({
 
             .toLocaleLowerCase("ar-EG")
 
-            .includes(search)
+            .includes(search);
         }),
     }))
 
@@ -555,7 +564,7 @@ export default function TeacherEnrollmentRequests({
         !search ||
         course.title.toLocaleLowerCase("ar-EG").includes(search) ||
         course.requests.length > 0,
-    )
+    );
 
   async function decide(request: EnrollmentRequest, approve: boolean) {
     if (request.status === "approved" && !approve) {
@@ -565,53 +574,55 @@ export default function TeacherEnrollmentRequests({
           "سيتم إلغاء موافقة الطالب على هذه الدورة، وقد يفقد إمكانية الوصول إلى محتواها.",
         variant: "warning",
         confirmText: "رفض الطالب",
-      })
+      });
 
-      if (!confirmed) return
+      if (!confirmed) return;
 
-      setBusyRequests((current) => [...current, request.id])
+      setBusyRequests((current) => [...current, request.id]);
       try {
-        const succeeded = await onDecision(request.id, false, true)
+        const succeeded = await onDecision(request.id, false, true);
         if (succeeded) {
           setStatusOverrides((current) => ({
             ...current,
             [request.id]: "rejected",
-          }))
+          }));
         }
       } finally {
-        setBusyRequests((current) =>
-          current.filter((id) => id !== request.id),
-        )
+        setBusyRequests((current) => current.filter((id) => id !== request.id));
       }
-      return
+      return;
     }
 
-    const nextStatus: RequestStatus = approve ? "approved" : "rejected"
+    const nextStatus: RequestStatus = approve ? "approved" : "rejected";
 
-    const previousStatus = request.status
+    const previousStatus = request.status;
 
-    setStatusOverrides((current) => ({ ...current, [request.id]: nextStatus }))
+    setStatusOverrides((current) => ({ ...current, [request.id]: nextStatus }));
 
-    setBusyRequests((current) => [...current, request.id])
+    setBusyRequests((current) => [...current, request.id]);
 
     try {
-      const succeeded = await onDecision(request.id, approve)
+      const succeeded = await onDecision(request.id, approve);
 
       if (!succeeded) {
         setStatusOverrides((current) => ({
           ...current,
 
           [request.id]: previousStatus,
-        }))
+        }));
       }
     } finally {
-      setBusyRequests((current) => current.filter((id) => id !== request.id))
+      setBusyRequests((current) => current.filter((id) => id !== request.id));
     }
   }
 
   if (loading) {
     return (
-      <section className="space-y-5" aria-busy="true" aria-label="جاري تحميل الطلبات">
+      <section
+        className="space-y-5"
+        aria-busy="true"
+        aria-label="جاري تحميل الطلبات"
+      >
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 flex-1">
@@ -667,7 +678,7 @@ export default function TeacherEnrollmentRequests({
           ))}
         </div>
       </section>
-    )
+    );
   }
 
   if (error) {
@@ -685,7 +696,7 @@ export default function TeacherEnrollmentRequests({
           إعادة المحاولة
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -767,9 +778,9 @@ export default function TeacherEnrollmentRequests({
           {visibleCourses.map((course) => {
             const pendingCount = course.requests.filter(
               (request) => request.status === "pending",
-            ).length
+            ).length;
 
-            const isOpen = expandedCourses.has(course.id)
+            const isOpen = expandedCourses.has(course.id);
 
             return (
               <article
@@ -782,12 +793,12 @@ export default function TeacherEnrollmentRequests({
                   aria-controls={`course-requests-${course.id}`}
                   onClick={() =>
                     setExpandedCourses((current) => {
-                      const next = new Set(current)
+                      const next = new Set(current);
 
-                      if (next.has(course.id)) next.delete(course.id)
-                      else next.add(course.id)
+                      if (next.has(course.id)) next.delete(course.id);
+                      else next.add(course.id);
 
-                      return next
+                      return next;
                     })
                   }
                   className="flex w-full items-center gap-3 p-4 text-right transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-emerald-600 sm:gap-4 sm:p-5"
@@ -978,10 +989,10 @@ export default function TeacherEnrollmentRequests({
                   </div>
                 </div>
               </article>
-            )
+            );
           })}
         </div>
       )}
     </section>
-  )
+  );
 }

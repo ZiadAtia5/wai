@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
-import { getAcademicYears, type AcademicYearResponse } from "../../api/catalog"
+import { getAcademicYears, type AcademicYearResponse } from "../../api/catalog";
 
 import {
   BookOpen,
@@ -16,17 +22,21 @@ import {
   Play,
   Plus,
   Trash2,
-} from "lucide-react"
+} from "lucide-react";
 
-import { ApiError, resolveApiAssetUrl } from "../../api/client"
+import {
+  ApiError,
+  resolveApiAssetUrl,
+  resolveApiImageUrl,
+} from "../../api/client";
 
-import CourseCard from "../CourseCard"
+import CourseCard from "../CourseCard";
 
-import CoursePagination from "../CoursePagination"
+import CoursePagination from "../CoursePagination";
 
-import TeacherStudentProgress from "./TeacherStudentProgress"
+import TeacherStudentProgress from "./TeacherStudentProgress";
 
-import TeacherStudents from "./TeacherStudents"
+import TeacherStudents from "./TeacherStudents";
 
 import {
   adminApi,
@@ -36,52 +46,52 @@ import {
   subjectsApi,
   teachersApi,
   type ApiObject,
-} from "../../api/endpoints"
+} from "../../api/endpoints";
 
-import TeacherCourseContent from "./TeacherCourseContent"
+import TeacherCourseContent from "./TeacherCourseContent";
 
-import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer"
+import LessonVideoPlayer, { youtubeVideoId } from "./LessonVideoPlayer";
 
-import { useConfirmation } from "../ConfirmationProvider"
+import { useConfirmation } from "../ConfirmationProvider";
 
-import { AnimatedBar, AnimatedNumber } from "./DashboardMotion"
+import { AnimatedBar, AnimatedNumber } from "./DashboardMotion";
 
-import ProfileImageEditor from "./ProfileImageEditor"
+import ProfileImageEditor from "./ProfileImageEditor";
 
-import FileUploadField from "./FileUploadField"
+import FileUploadField from "./FileUploadField";
 
-import ImageCropDialog from "../ImageCropDialog"
+import ImageCropDialog from "../ImageCropDialog";
 
-import PersonAvatar from "../PersonAvatar"
+import PersonAvatar from "../PersonAvatar";
 
-import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton"
+import { Skeleton, SkeletonButton, SkeletonText } from "../Skeleton";
 
 import {
   CatalogGridSkeleton,
   EnrollmentGridSkeleton,
   ProfileSkeleton,
   TeacherCoursesSkeleton,
-} from "../loading/SkeletonLayouts"
+} from "../loading/SkeletonLayouts";
 
-type RecordValue = Record<string, unknown>
+type RecordValue = Record<string, unknown>;
 
 function isRecordValue(value: unknown): value is RecordValue {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function courseIsPublished(course: RecordValue): boolean {
-  const nestedCourse = asRecord(course.course)
+  const nestedCourse = asRecord(course.course);
 
-  if (Object.keys(nestedCourse).length) return courseIsPublished(nestedCourse)
+  if (Object.keys(nestedCourse).length) return courseIsPublished(nestedCourse);
 
   for (const key of ["isPublished", "is_published", "published"]) {
-    const value = course[key]
+    const value = course[key];
 
     if (value === true || value === 1 || value === "1" || value === "true")
-      return true
+      return true;
 
     if (value === false || value === 0 || value === "0" || value === "false")
-      return false
+      return false;
   }
 
   const status = String(
@@ -93,94 +103,95 @@ function courseIsPublished(course: RecordValue): boolean {
       course.state ??
       "",
   )
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
   // CourseStatus is an integer enum in the API: Draft=0, Published=1,
 
   // and other states are not public.
 
-  if (status === "1") return true
+  if (status === "1") return true;
 
-  if (status === "0" || status === "2") return false
+  if (status === "0" || status === "2") return false;
 
-  if (/draft|unpublish|not.?publish/.test(status)) return false
+  if (/draft|unpublish|not.?publish/.test(status)) return false;
 
-  if (/publish|public|live/.test(status)) return true
+  if (/publish|public|live/.test(status)) return true;
 
   if (course.publishedAt != null && String(course.publishedAt).trim())
-    return true
+    return true;
 
-  return false
+  return false;
 }
 
 interface RoleFormsProps {
-  role: string
+  role: string;
 
-  section: string
+  section: string;
 
-  data: unknown
+  data: unknown;
 
-  loading?: boolean
+  loading?: boolean;
 
-  onSaved: () => void
+  onSaved: () => void;
 
-  onFeedback: (message: string) => void
+  onFeedback: (message: string) => void;
 
-  focusCourseId?: string | null
+  focusCourseId?: string | null;
 
-  onFocusCourseHandled?: () => void
+  onFocusCourseHandled?: () => void;
 }
 
 function asRecord(value: unknown): RecordValue {
-  return typeof value === "object" && value !== null ? value as RecordValue : {}
+  return typeof value === "object" && value !== null
+    ? (value as RecordValue)
+    : {};
 }
 
 function unwrapApiResponse(value: unknown): unknown {
-  let current = value
+  let current = value;
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const response = asRecord(current)
+    const response = asRecord(current);
 
-    const keys = Object.keys(response)
+    const keys = Object.keys(response);
 
     const isEnvelope =
       "data" in response &&
       (keys.length <= 3 ||
         ["success", "message", "status", "errors", "meta"].some(
           (key) => key in response,
-        ))
+        ));
 
-    if (!isEnvelope) break
+    if (!isEnvelope) break;
 
-    current = response.data
+    current = response.data;
   }
 
-  return current
+  return current;
 }
 
 function profileRecord(value: unknown): RecordValue {
-  let current = unwrapApiResponse(value)
+  let current = unwrapApiResponse(value);
 
   for (let depth = 0; depth < 5; depth += 1) {
-    const profile = asRecord(current)
+    const profile = asRecord(current);
 
-    const nested = profile.profile ?? profile.student ?? profile.user
+    const nested = profile.profile ?? profile.student ?? profile.user;
 
-    if (nested === undefined || nested === current) break
+    if (nested === undefined || nested === current) break;
 
-    current = unwrapApiResponse(nested)
+    current = unwrapApiResponse(nested);
   }
 
-  return asRecord(current)
+  return asRecord(current);
 }
 
 function profileImageSource(record: RecordValue): string {
-  const avatar = record.avatar
+  const avatar = record.avatar;
 
-  const avatarRecord = asRecord(avatar)
+  const avatarRecord = asRecord(avatar);
 
   const candidate =
     record.avatarUrl ??
@@ -196,20 +207,20 @@ function profileImageSource(record: RecordValue): string {
     record.pictureUrl ??
     (typeof avatar === "string" ? avatar : undefined) ??
     avatarRecord.url ??
-    avatarRecord.src
+    avatarRecord.src;
 
-  return typeof candidate === "string" ? candidate : ""
+  return typeof candidate === "string" ? candidate : "";
 }
 
 function listFrom(value: unknown): RecordValue[] {
-  value = unwrapApiResponse(value)
+  value = unwrapApiResponse(value);
 
   if (Array.isArray(value))
     return value.filter(
       (item): item is RecordValue => typeof item === "object" && item !== null,
-    )
+    );
 
-  const record = asRecord(value)
+  const record = asRecord(value);
 
   for (const key of [
     "items",
@@ -246,27 +257,27 @@ function listFrom(value: unknown): RecordValue[] {
       return (record[key] as unknown[]).filter(
         (item): item is RecordValue =>
           typeof item === "object" && item !== null,
-      )
+      );
   }
 
-  return []
+  return [];
 }
 
 function progressLessons(progress: RecordValue | null): RecordValue[] {
-  if (!progress) return []
+  if (!progress) return [];
 
   const nestedProgress = asRecord(
     progress.courseProgress ?? progress.progress ?? progress.course,
-  )
+  );
 
   const directLessons = listFrom(
     progress.lessons ??
       progress.lessonProgress ??
       nestedProgress.lessons ??
       nestedProgress.lessonProgress,
-  )
+  );
 
-  const moduleRecords = listFrom(progress.modules ?? nestedProgress.modules)
+  const moduleRecords = listFrom(progress.modules ?? nestedProgress.modules);
 
   const rows: RecordValue[] = directLessons.length
     ? directLessons
@@ -278,18 +289,18 @@ function progressLessons(progress: RecordValue | null): RecordValue[] {
             moduleTitle: module.title ?? module.name,
           }),
         ),
-      )
+      );
 
   return rows.map((row) => {
-    const lesson = asRecord(row.lesson ?? row.lessonInfo)
+    const lesson = asRecord(row.lesson ?? row.lessonInfo);
 
-    const lessonProgress = asRecord(row.progress ?? row.lessonProgress)
+    const lessonProgress = asRecord(row.progress ?? row.lessonProgress);
 
     const completed =
       row.isCompleted ??
       row.completed ??
       lessonProgress.isCompleted ??
-      lessonProgress.completed
+      lessonProgress.completed;
 
     return {
       ...lesson,
@@ -312,32 +323,32 @@ function progressLessons(progress: RecordValue | null): RecordValue[] {
         lessonProgress.lastPosition ??
         lessonProgress.position ??
         0,
-    }
-  })
+    };
+  });
 }
 
 function findCourseContent(value: unknown, depth = 0): RecordValue {
-  const unwrapped = unwrapApiResponse(value)
+  const unwrapped = unwrapApiResponse(value);
 
-  if (depth > 5) return {}
+  if (depth > 5) return {};
 
   if (Array.isArray(unwrapped)) {
     for (const item of unwrapped) {
-      const nested = findCourseContent(item, depth + 1)
+      const nested = findCourseContent(item, depth + 1);
 
-      if (Object.keys(nested).length) return nested
+      if (Object.keys(nested).length) return nested;
     }
 
-    return {}
+    return {};
   }
 
-  const candidate = asRecord(unwrapped)
+  const candidate = asRecord(unwrapped);
 
   if (
     listFrom(candidate.modules).length > 0 ||
     listFrom(candidate.courseModules).length > 0
   )
-    return candidate
+    return candidate;
 
   for (const key of [
     "course",
@@ -356,16 +367,16 @@ function findCourseContent(value: unknown, depth = 0): RecordValue {
 
     "data",
   ]) {
-    const nested = findCourseContent(candidate[key], depth + 1)
+    const nested = findCourseContent(candidate[key], depth + 1);
 
-    if (Object.keys(nested).length) return nested
+    if (Object.keys(nested).length) return nested;
   }
 
-  return {}
+  return {};
 }
 
 function getLessonVideo(lesson: RecordValue): RecordValue | undefined {
-  const content = asRecord(lesson.content)
+  const content = asRecord(lesson.content);
 
   const candidates = [
     lesson.video,
@@ -381,20 +392,20 @@ function getLessonVideo(lesson: RecordValue): RecordValue | undefined {
     content.video,
 
     lesson,
-  ]
+  ];
 
   for (const candidate of candidates) {
-    const unwrapped = unwrapApiResponse(candidate)
+    const unwrapped = unwrapApiResponse(candidate);
 
     if (typeof unwrapped === "string" && unwrapped.trim())
-      return { videoUrl: unwrapped.trim() }
+      return { videoUrl: unwrapped.trim() };
 
-    const video = asRecord(unwrapped)
+    const video = asRecord(unwrapped);
 
-    const videoUrl = video.videoUrl ?? video.url ?? video.streamUrl
+    const videoUrl = video.videoUrl ?? video.url ?? video.streamUrl;
 
     const providerVideoId =
-      video.providerVideoId ?? video.youTubeVideoId ?? video.youtubeId
+      video.providerVideoId ?? video.youTubeVideoId ?? video.youtubeId;
 
     if (
       (typeof videoUrl === "string" && videoUrl.trim()) ||
@@ -406,15 +417,15 @@ function getLessonVideo(lesson: RecordValue): RecordValue | undefined {
         videoUrl,
 
         providerVideoId,
-      }
+      };
     }
   }
 
-  return undefined
+  return undefined;
 }
 
 function getLessonResources(lesson: RecordValue): RecordValue[] {
-  const content = asRecord(lesson.content)
+  const content = asRecord(lesson.content);
 
   const candidates = [
     lesson.resources,
@@ -436,21 +447,21 @@ function getLessonResources(lesson: RecordValue): RecordValue[] {
     content.materials,
 
     content.files,
-  ]
+  ];
 
   for (const candidate of candidates) {
-    const resources = listFrom(candidate)
+    const resources = listFrom(candidate);
 
-    if (resources.length) return resources
+    if (resources.length) return resources;
   }
 
-  return []
+  return [];
 }
 
 function getLessonResourceUrl(resource: RecordValue): string {
   const file = asRecord(
     resource.file ?? resource.attachment ?? resource.resourceFile,
-  )
+  );
 
   const candidates = [
     resource.externalUrl,
@@ -488,14 +499,14 @@ function getLessonResourceUrl(resource: RecordValue): string {
     file.url,
 
     file.path,
-  ]
+  ];
 
   const url = candidates.find(
     (candidate): candidate is string =>
       typeof candidate === "string" && candidate.trim().length > 0,
-  )
+  );
 
-  return url?.trim() ?? ""
+  return url?.trim() ?? "";
 }
 
 function scrollToLessonContent(targetId: string) {
@@ -504,9 +515,9 @@ function scrollToLessonContent(targetId: string) {
       document.getElementById(targetId)?.scrollIntoView({
         behavior: "smooth",
         block: "center",
-      })
-    })
-  })
+      });
+    });
+  });
 }
 
 function mergeCourseContentWithProgress(
@@ -518,7 +529,7 @@ function mergeCourseContentWithProgress(
 
   supplementalCourseValue?: unknown,
 ): RecordValue {
-  const progress = asRecord(unwrapApiResponse(progressValue))
+  const progress = asRecord(unwrapApiResponse(progressValue));
 
   const courseCandidates = [
     findCourseContent(courseValue),
@@ -530,25 +541,26 @@ function mergeCourseContentWithProgress(
     findCourseContent(progress),
 
     findCourseContent(progress.course),
-  ].filter((candidate) => Object.keys(candidate).length > 0)
+  ].filter((candidate) => Object.keys(candidate).length > 0);
 
-  const course = courseCandidates[0] ?? asRecord(unwrapApiResponse(courseValue))
+  const course =
+    courseCandidates[0] ?? asRecord(unwrapApiResponse(courseValue));
 
-  const alternateLessons = new Map<string, RecordValue>()
+  const alternateLessons = new Map<string, RecordValue>();
 
   for (const alternate of courseCandidates.slice(1)) {
     for (const module of listFrom(
       alternate.modules ?? alternate.courseModules,
     )) {
       for (const lesson of listFrom(module.lessons ?? module.courseLessons)) {
-        const id = String(lesson.id ?? lesson.lessonId ?? "")
+        const id = String(lesson.id ?? lesson.lessonId ?? "");
 
-        if (id) alternateLessons.set(id, lesson)
+        if (id) alternateLessons.set(id, lesson);
       }
     }
   }
 
-  const progressRows = progressLessons(progress)
+  const progressRows = progressLessons(progress);
 
   const progressById = new Map(
     progressRows.map((lesson) => [
@@ -556,7 +568,7 @@ function mergeCourseContentWithProgress(
 
       lesson,
     ]),
-  )
+  );
 
   const modules = listFrom(course.modules ?? course.courseModules).map(
     (module) => ({
@@ -564,16 +576,16 @@ function mergeCourseContentWithProgress(
 
       lessons: listFrom(module.lessons ?? module.courseLessons).map(
         (lesson) => {
-          const id = String(lesson.id ?? lesson.lessonId ?? "")
+          const id = String(lesson.id ?? lesson.lessonId ?? "");
 
-          const supplementalLesson = alternateLessons.get(id) ?? {}
+          const supplementalLesson = alternateLessons.get(id) ?? {};
 
-          const combinedLesson = { ...supplementalLesson, ...lesson }
+          const combinedLesson = { ...supplementalLesson, ...lesson };
 
-          const savedProgress = progressById.get(id) ?? {}
+          const savedProgress = progressById.get(id) ?? {};
 
           const lessonVideo =
-            getLessonVideo(lesson) ?? getLessonVideo(supplementalLesson)
+            getLessonVideo(lesson) ?? getLessonVideo(supplementalLesson);
 
           return {
             ...combinedLesson,
@@ -596,13 +608,13 @@ function mergeCourseContentWithProgress(
             isCompleted: Boolean(savedProgress.isCompleted),
 
             lastPosition: Number(savedProgress.lastPosition ?? 0),
-          }
+          };
         },
       ),
     }),
-  )
+  );
 
-  const lessons = modules.flatMap((module) => listFrom(module.lessons))
+  const lessons = modules.flatMap((module) => listFrom(module.lessons));
 
   const availableLessons = lessons.length
     ? lessons
@@ -610,9 +622,9 @@ function mergeCourseContentWithProgress(
         ...lesson,
 
         video: getLessonVideo(lesson),
-      }))
+      }));
 
-  return { ...course, ...progress, modules, lessons: availableLessons }
+  return { ...course, ...progress, modules, lessons: availableLessons };
 }
 
 async function loadStudentCourseProgress(
@@ -627,16 +639,16 @@ async function loadStudentCourseProgress(
       studentsApi.courseDetail(courseId),
 
       coursesApi.detail(courseId),
-    ])
+    ]);
 
-  if (progressResult.status === "rejected") throw progressResult.reason
+  if (progressResult.status === "rejected") throw progressResult.reason;
 
   const detailSource =
     courseResult.status === "fulfilled" &&
     Object.keys(findCourseContent(courseResult.value)).length > 0
       ? courseResult.value
       : (enrollmentCourse ??
-        (courseResult.status === "fulfilled" ? courseResult.value : null))
+        (courseResult.status === "fulfilled" ? courseResult.value : null));
 
   const merged = mergeCourseContentWithProgress(
     progressResult.value,
@@ -648,7 +660,7 @@ async function loadStudentCourseProgress(
     supplementalCourseResult.status === "fulfilled"
       ? supplementalCourseResult.value
       : undefined,
-  )
+  );
 
   if (
     progressLessons(merged).length > 0 &&
@@ -664,16 +676,16 @@ async function loadStudentCourseProgress(
         courseResult.reason instanceof Error
           ? courseResult.reason.message
           : "الخادم أعاد تقدم الطالب دون تفاصيل وحدات الدورة ودروسها.",
-    }
+    };
   }
 
-  return merged
+  return merged;
 }
 
 function progressPercentage(progress: RecordValue | null): number {
-  if (!progress) return 0
+  if (!progress) return 0;
 
-  const nested = asRecord(progress.courseProgress ?? progress.progress)
+  const nested = asRecord(progress.courseProgress ?? progress.progress);
 
   const value = Number(
     progress.progressPercentage ??
@@ -682,13 +694,13 @@ function progressPercentage(progress: RecordValue | null): number {
       nested.progressPercentage ??
       nested.progressPercent ??
       0,
-  )
+  );
 
-  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }
 
 function enrollmentStatus(status: unknown, isApproved?: unknown) {
-  const value = String(status ?? "").toLowerCase()
+  const value = String(status ?? "").toLowerCase();
 
   if (value === "2" || /reject|declin|cancel/.test(value)) {
     return {
@@ -697,7 +709,7 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
       tone: "bg-danger-light text-danger",
 
       canLearn: false,
-    }
+    };
   }
 
   if (
@@ -711,7 +723,7 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
       tone: "bg-amber-100 text-amber-800",
 
       canLearn: false,
-    }
+    };
   }
 
   if (value === "3" || /complete|finish/.test(value)) {
@@ -721,7 +733,7 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
       tone: "bg-success-light text-success",
 
       canLearn: true,
-    }
+    };
   }
 
   if (
@@ -735,7 +747,7 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
       tone: "bg-success-light text-success",
 
       canLearn: true,
-    }
+    };
   }
 
   return {
@@ -744,7 +756,7 @@ function enrollmentStatus(status: unknown, isApproved?: unknown) {
     tone: "bg-nuwa-soft text-nuwa-base",
 
     canLearn: true,
-  }
+  };
 }
 
 function isRejectedEnrollment(enrollment: RecordValue): boolean {
@@ -755,17 +767,17 @@ function isRejectedEnrollment(enrollment: RecordValue): boolean {
     /reject|declin|cancel/i.test(
       String(enrollment.status ?? enrollment.enrollmentStatus ?? ""),
     )
-  )
+  );
 }
 
 function apiIdentifier(value: unknown): number | string | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
 
-  if (typeof value !== "string" || !value.trim()) return null
+  if (typeof value !== "string" || !value.trim()) return null;
 
-  const numericValue = Number(value)
+  const numericValue = Number(value);
 
-  return Number.isFinite(numericValue) ? numericValue : value
+  return Number.isFinite(numericValue) ? numericValue : value;
 }
 
 function allowsMultipleAnswers(question: RecordValue): boolean {
@@ -775,11 +787,11 @@ function allowsMultipleAnswers(question: RecordValue): boolean {
     question.multipleAnswers === true ||
     question.isMultiSelect === true
   )
-    return true
+    return true;
 
   return /multiple[\s_-]*(answers?|choice)|multi[\s_-]*select|checkbox/i.test(
     String(question.type ?? ""),
-  )
+  );
 }
 
 function hasSubmittedAttempt(quiz: RecordValue): boolean {
@@ -788,23 +800,23 @@ function hasSubmittedAttempt(quiz: RecordValue): boolean {
     quiz.hasSubmittedAttempt === true ||
     Number(quiz.attemptsRemaining) === 0
   )
-    return true
+    return true;
 
   for (const key of ["myAttempts", "currentUserAttempts"]) {
     if (Array.isArray(quiz[key]) && quiz[key].some(isSubmittedAttempt))
-      return true
+      return true;
   }
 
   const attempt = asRecord(
     quiz.myAttempt ?? quiz.currentUserAttempt ?? quiz.currentAttempt,
-  )
+  );
 
-  return isSubmittedAttempt(attempt)
+  return isSubmittedAttempt(attempt);
 }
 
 function isSubmittedAttempt(attempt: RecordValue): boolean {
   if (!Object.keys(attempt).length || attempt.isSubmitted === false)
-    return false
+    return false;
 
   if (
     attempt.isSubmitted === true ||
@@ -812,15 +824,15 @@ function isSubmittedAttempt(attempt: RecordValue): boolean {
     attempt.completedAt != null ||
     attempt.gradedAt != null
   )
-    return true
+    return true;
 
-  const status = String(attempt.status ?? attempt.state ?? "").toLowerCase()
+  const status = String(attempt.status ?? attempt.state ?? "").toLowerCase();
 
-  if (/draft|in.?progress|pending/.test(status)) return false
+  if (/draft|in.?progress|pending/.test(status)) return false;
 
-  if (/submit|complete|finish|graded/.test(status)) return true
+  if (/submit|complete|finish|graded/.test(status)) return true;
 
-  return attempt.id !== undefined || attempt.attemptId !== undefined
+  return attempt.id !== undefined || attempt.attemptId !== undefined;
 }
 
 function attemptBelongsToStudent(
@@ -830,9 +842,9 @@ function attemptBelongsToStudent(
 ): boolean {
   const student = asRecord(
     attempt.student ?? attempt.studentProfile ?? attempt.user,
-  )
+  );
 
-  const profileUser = asRecord(profile.user)
+  const profileUser = asRecord(profile.user);
 
   const attemptIds = [
     attempt.studentId,
@@ -848,7 +860,7 @@ function attemptBelongsToStudent(
 
     .filter((id) => id != null)
 
-    .map(String)
+    .map(String);
 
   const profileIds = [
     profile.studentId,
@@ -866,50 +878,48 @@ function attemptBelongsToStudent(
 
     .filter((id) => id != null)
 
-    .map(String)
+    .map(String);
 
-  if (attemptIds.some((id) => profileIds.includes(id))) return true
+  if (attemptIds.some((id) => profileIds.includes(id))) return true;
 
   const attemptEmail = String(
     attempt.studentEmail ?? attempt.email ?? student.email ?? "",
   )
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
   const profileEmail = String(profile.email ?? profileUser.email ?? "")
-
     .trim()
 
-    .toLowerCase()
+    .toLowerCase();
 
-  return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail)
+  return Boolean(attemptEmail && profileEmail && attemptEmail === profileEmail);
 }
 
 function attemptRecords(value: unknown): RecordValue[] {
-  const unwrapped = unwrapApiResponse(value)
+  const unwrapped = unwrapApiResponse(value);
 
-  if (Array.isArray(unwrapped)) return unwrapped.filter(isRecordValue)
+  if (Array.isArray(unwrapped)) return unwrapped.filter(isRecordValue);
 
-  const response = asRecord(unwrapped)
+  const response = asRecord(unwrapped);
 
   for (const key of ["attempts", "items", "records", "submissions"]) {
     if (Array.isArray(response[key]))
-      return (response[key] as unknown[]).filter(isRecordValue)
+      return (response[key] as unknown[]).filter(isRecordValue);
   }
 
-  const nestedAttempt = asRecord(response.attempt)
+  const nestedAttempt = asRecord(response.attempt);
 
-  if (Object.keys(nestedAttempt).length) return [nestedAttempt]
+  if (Object.keys(nestedAttempt).length) return [nestedAttempt];
 
-  return isSubmittedAttempt(response) ? [response] : []
+  return isSubmittedAttempt(response) ? [response] : [];
 }
 
 const fieldClass =
-  "h-10 w-full rounded-lg border border-stroke bg-white px-3 text-sm text-ink"
+  "h-10 w-full rounded-lg border border-stroke bg-white px-3 text-sm text-ink";
 
-const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted"
+const labelClass = "grid gap-1 text-xs font-semibold text-ink-muted";
 
 function AcademicYearsChecklist({
   years,
@@ -918,23 +928,23 @@ function AcademicYearsChecklist({
 
   selectedValues = [],
 }: {
-  years: AcademicYearResponse[]
+  years: AcademicYearResponse[];
 
-  disabled: boolean
+  disabled: boolean;
 
-  selectedValues?: unknown
+  selectedValues?: unknown;
 }) {
   const selected = Array.isArray(selectedValues)
     ? selectedValues.map((value) => {
         if (typeof value === "object" && value !== null) {
-          const year = asRecord(value)
+          const year = asRecord(value);
 
-          return String(year.value ?? year.id ?? "")
+          return String(year.value ?? year.id ?? "");
         }
 
-        return String(value)
+        return String(value);
       })
-    : []
+    : [];
 
   return (
     <fieldset
@@ -974,7 +984,7 @@ function AcademicYearsChecklist({
         </div>
       )}
     </fieldset>
-  )
+  );
 }
 
 export default function RoleForms({
@@ -994,77 +1004,83 @@ export default function RoleForms({
 
   onFocusCourseHandled,
 }: RoleFormsProps) {
-  const confirm = useConfirmation()
+  const confirm = useConfirmation();
 
-  const [years, setYears] = useState<AcademicYearResponse[]>([])
+  const [years, setYears] = useState<AcademicYearResponse[]>([]);
 
-  const [yearsLoading, setYearsLoading] = useState(false)
+  const [yearsLoading, setYearsLoading] = useState(false);
 
-  const profileFormRef = useRef<HTMLFormElement>(null)
+  const profileFormRef = useRef<HTMLFormElement>(null);
 
-  const teacherEditorRef = useRef<HTMLFormElement>(null)
+  const teacherEditorRef = useRef<HTMLFormElement>(null);
 
-  const courseEditorRef = useRef<HTMLFormElement>(null)
+  const courseEditorRef = useRef<HTMLFormElement>(null);
 
-  const adminNameEditorRef = useRef<HTMLFormElement>(null)
+  const adminNameEditorRef = useRef<HTMLFormElement>(null);
 
-  const profileEditorRef = useRef<HTMLDivElement>(null)
+  const profileEditorRef = useRef<HTMLDivElement>(null);
 
-  const [editingProfile, setEditingProfile] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false);
 
-  const [editingAdminName, setEditingAdminName] = useState(false)
+  const [editingAdminName, setEditingAdminName] = useState(false);
 
   const [adminNameOverride, setAdminNameOverride] = useState<string | null>(
     null,
-  )
+  );
 
-  const [profileImageOverride, setProfileImageOverride] =
-    useState<string | null>(null)
+  const [profileImageOverride, setProfileImageOverride] = useState<
+    string | null
+  >(null);
 
-  const [subjects, setSubjects] = useState<RecordValue[]>([])
+  const [subjects, setSubjects] = useState<RecordValue[]>([]);
 
-  const [selectedSubjectId, setSelectedSubjectId] = useState("")
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
 
-  const [addingSubject, setAddingSubject] = useState(false)
+  const [addingSubject, setAddingSubject] = useState(false);
 
-  const [newSubjectName, setNewSubjectName] = useState("")
+  const [newSubjectName, setNewSubjectName] = useState("");
 
-  const [newSubjectYear, setNewSubjectYear] = useState("")
+  const [newSubjectYear, setNewSubjectYear] = useState("");
 
-  const [isCourseFree, setIsCourseFree] = useState(false)
+  const [isCourseFree, setIsCourseFree] = useState(false);
 
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false);
 
   const [coverCrop, setCoverCrop] = useState<{
-    courseId: string
+    courseId: string;
 
-    file: File
-  } | null>(null)
+    file: File;
+  } | null>(null);
 
-  const [uploadingCoverCourseId, setUploadingCoverCourseId] =
-    useState<string | null>(null)
+  const [uploadingCoverCourseId, setUploadingCoverCourseId] = useState<
+    string | null
+  >(null);
 
   const [deletedCourseIds, setDeletedCourseIds] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [publishedOverrides, setPublishedOverrides] =
-    useState<Record<string, boolean>>({})
+  const [publishedOverrides, setPublishedOverrides] = useState<
+    Record<string, boolean>
+  >({});
 
-  const [teacherCourseFilter, setTeacherCourseFilter] =
-    useState<"all" | "published" | "draft">("all")
+  const [teacherCourseFilter, setTeacherCourseFilter] = useState<
+    "all" | "published" | "draft"
+  >("all");
 
-  const [teacherCoursePage, setTeacherCoursePage] = useState(1)
+  const [teacherCoursePage, setTeacherCoursePage] = useState(1);
 
-  const [editingCourse, setEditingCourse] = useState<RecordValue | null>(null)
+  const [editingCourse, setEditingCourse] = useState<RecordValue | null>(null);
 
-  const [isCreatingCourse, setIsCreatingCourse] = useState(false)
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
 
-  const [editingTeacher, setEditingTeacher] = useState<RecordValue | null>(null)
+  const [editingTeacher, setEditingTeacher] = useState<RecordValue | null>(
+    null,
+  );
 
-  const [addingTeacher, setAddingTeacher] = useState(false)
+  const [addingTeacher, setAddingTeacher] = useState(false);
 
-  const [showTeacherPassword, setShowTeacherPassword] = useState(false)
+  const [showTeacherPassword, setShowTeacherPassword] = useState(false);
 
   useEffect(() => {
     const target = editingTeacher
@@ -1075,58 +1091,59 @@ export default function RoleForms({
           ? adminNameEditorRef.current
           : editingProfile
             ? profileEditorRef.current
-            : null
+            : null;
 
-    if (!target) return
+    if (!target) return;
 
     const frame = window.requestAnimationFrame(() => {
-      target.scrollIntoView({ behavior: "smooth", block: "start" })
-    })
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
 
-    return () => window.cancelAnimationFrame(frame)
-  }, [editingTeacher, editingCourse, editingAdminName, editingProfile])
+    return () => window.cancelAnimationFrame(frame);
+  }, [editingTeacher, editingCourse, editingAdminName, editingProfile]);
 
-  const [contentCourseId, setContentCourseId] = useState<string | null>(null)
+  const [contentCourseId, setContentCourseId] = useState<string | null>(null);
 
-  const [progressCourse, setProgressCourse] = useState<string | null>(null)
+  const [progressCourse, setProgressCourse] = useState<string | null>(null);
 
-  const [progress, setProgress] = useState<RecordValue | null>(null)
+  const [progress, setProgress] = useState<RecordValue | null>(null);
 
-  const [progressLoading, setProgressLoading] = useState(false)
+  const [progressLoading, setProgressLoading] = useState(false);
 
-  const [progressError, setProgressError] = useState<string | null>(null)
+  const [progressError, setProgressError] = useState<string | null>(null);
 
-  const [openStudentVideoLessonId, setOpenStudentVideoLessonId] =
-    useState<string | null>(null)
+  const [openStudentVideoLessonId, setOpenStudentVideoLessonId] = useState<
+    string | null
+  >(null);
 
   const [openStudentResourcesLessonId, setOpenStudentResourcesLessonId] =
-    useState<string | null>(null)
+    useState<string | null>(null);
 
-  const [activeQuizLesson, setActiveQuizLesson] = useState<string | null>(null)
+  const [activeQuizLesson, setActiveQuizLesson] = useState<string | null>(null);
 
-  const [quiz, setQuiz] = useState<RecordValue | null>(null)
+  const [quiz, setQuiz] = useState<RecordValue | null>(null);
 
-  const [quizLoading, setQuizLoading] = useState(false)
+  const [quizLoading, setQuizLoading] = useState(false);
 
-  const [quizError, setQuizError] = useState<string | null>(null)
+  const [quizError, setQuizError] = useState<string | null>(null);
 
   const [quizValidationError, setQuizValidationError] = useState<string | null>(
     null,
-  )
+  );
 
-  const [quizSubmitted, setQuizSubmitted] = useState(false)
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
 
   const [attemptedQuizIds, setAttemptedQuizIds] = useState<Set<string>>(
     () => new Set(),
-  )
+  );
 
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, string[]>>({})
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string[]>>({});
 
-  const quizSubmitLock = useRef(false)
+  const quizSubmitLock = useRef(false);
 
-  const normalizedData = unwrapApiResponse(data)
+  const normalizedData = unwrapApiResponse(data);
 
-  const wrapper = asRecord(normalizedData)
+  const wrapper = asRecord(normalizedData);
 
   const record = profileRecord(
     wrapper.profile ??
@@ -1134,59 +1151,58 @@ export default function RoleForms({
       wrapper.user ??
       listFrom(normalizedData)[0] ??
       normalizedData,
-  )
+  );
 
-  const isAdmin = role.includes("admin")
+  const isAdmin = role.includes("admin");
 
-  const isTeacher = role.includes("teacher")
+  const isTeacher = role.includes("teacher");
 
   useEffect(() => {
-    if (section !== "profile") setEditingProfile(false)
-  }, [section])
+    if (section !== "profile") setEditingProfile(false);
+  }, [section]);
 
   const teacherCourses = listFrom(data).filter((course) => {
-    const id = String(course.id ?? course.courseId ?? "")
+    const id = String(course.id ?? course.courseId ?? "");
 
-    return id && !deletedCourseIds.has(id)
-  })
+    return id && !deletedCourseIds.has(id);
+  });
 
   const getTeacherCoursePublished = (course: RecordValue) => {
-    const id = String(course.id ?? course.courseId ?? "")
+    const id = String(course.id ?? course.courseId ?? "");
 
-    return publishedOverrides[id] ?? courseIsPublished(course)
-  }
+    return publishedOverrides[id] ?? courseIsPublished(course);
+  };
 
   const visibleTeacherCourses = teacherCourses.filter(
     (course) =>
       teacherCourseFilter === "all" ||
       (getTeacherCoursePublished(course) ? "published" : "draft") ===
         teacherCourseFilter,
-  )
-  const teacherCourseTotalPages = Math.ceil(visibleTeacherCourses.length / 3)
+  );
+  const teacherCourseTotalPages = Math.ceil(visibleTeacherCourses.length / 3);
   const pagedTeacherCourses = visibleTeacherCourses.slice(
     (teacherCoursePage - 1) * 3,
     teacherCoursePage * 3,
-  )
+  );
 
   useEffect(() => {
     if (teacherCoursePage > teacherCourseTotalPages) {
-      setTeacherCoursePage(Math.max(1, teacherCourseTotalPages))
+      setTeacherCoursePage(Math.max(1, teacherCourseTotalPages));
     }
-  }, [teacherCoursePage, teacherCourseTotalPages])
+  }, [teacherCoursePage, teacherCourseTotalPages]);
 
   useEffect(() => {
-    if (isAdmin && section === "profile") return
+    if (isAdmin && section === "profile") return;
 
-    if (!isAdmin && !isTeacher && section !== "profile") return
+    if (!isAdmin && !isTeacher && section !== "profile") return;
 
-    let active = true
+    let active = true;
 
-    setYearsLoading(true)
+    setYearsLoading(true);
 
     getAcademicYears()
-
       .then((result) => {
-        if (active) setYears(result)
+        if (active) setYears(result);
       })
 
       .catch((cause: unknown) => {
@@ -1195,13 +1211,13 @@ export default function RoleForms({
             cause instanceof Error
               ? cause.message
               : "تعذر تحميل الصفوف الدراسية.",
-          )
+          );
         }
       })
 
       .finally(() => {
-        if (active) setYearsLoading(false)
-      })
+        if (active) setYearsLoading(false);
+      });
 
     if (isTeacher && section === "courses") {
       subjectsApi
@@ -1209,16 +1225,16 @@ export default function RoleForms({
         .list()
 
         .then((result) => {
-          if (active) setSubjects(listFrom(result))
+          if (active) setSubjects(listFrom(result));
         })
 
-        .catch(() => undefined)
+        .catch(() => undefined);
     }
 
     return () => {
-      active = false
-    }
-  }, [isAdmin, isTeacher, onFeedback, section])
+      active = false;
+    };
+  }, [isAdmin, isTeacher, onFeedback, section]);
 
   const mutate = useCallback(
     async (
@@ -1226,47 +1242,47 @@ export default function RoleForms({
 
       success: string,
     ): Promise<boolean> => {
-      if (busy) return false
+      if (busy) return false;
 
-      setBusy(true)
+      setBusy(true);
 
-      onFeedback("")
+      onFeedback("");
 
       try {
-        await request()
+        await request();
 
-        onFeedback(success)
+        onFeedback(success);
 
-        onSaved()
+        onSaved();
 
-        return true
+        return true;
       } catch (cause) {
         onFeedback(
           cause instanceof Error ? cause.message : "تعذر حفظ التغييرات.",
-        )
+        );
 
-        return false
+        return false;
       } finally {
-        setBusy(false)
+        setBusy(false);
       }
     },
 
     [busy, onFeedback, onSaved],
-  )
+  );
 
   async function createTeacher(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const formElement = event.currentTarget
+    const formElement = event.currentTarget;
 
-    const form = new FormData(formElement)
+    const form = new FormData(formElement);
 
-    const academicYears = form.getAll("academicYears").map(Number)
+    const academicYears = form.getAll("academicYears").map(Number);
 
     if (academicYears.length === 0) {
-      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.");
 
-      return
+      return;
     }
 
     const body: ApiObject = {
@@ -1285,32 +1301,32 @@ export default function RoleForms({
       specialization: String(form.get("specialization") ?? "").trim(),
 
       academicYears,
-    }
+    };
 
     if (
       await mutate(() => adminApi.createTeacher(body), "تم إنشاء حساب المعلم.")
     ) {
-      formElement.reset()
+      formElement.reset();
 
-      setAddingTeacher(false)
+      setAddingTeacher(false);
 
-      setShowTeacherPassword(false)
+      setShowTeacherPassword(false);
     }
   }
 
   async function updateTeacher(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    if (editingTeacher?.id === undefined) return
+    if (editingTeacher?.id === undefined) return;
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
-    const academicYears = form.getAll("academicYears").map(Number)
+    const academicYears = form.getAll("academicYears").map(Number);
 
     if (academicYears.length === 0) {
-      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.")
+      onFeedback("اختر صفًا دراسيًا واحدًا على الأقل.");
 
-      return
+      return;
     }
 
     const body = {
@@ -1325,7 +1341,7 @@ export default function RoleForms({
       specialization: String(form.get("specialization") ?? "").trim(),
 
       academicYears,
-    }
+    };
 
     if (
       await mutate(
@@ -1334,24 +1350,24 @@ export default function RoleForms({
         "تم تحديث بيانات المعلم.",
       )
     ) {
-      setEditingTeacher(null)
+      setEditingTeacher(null);
     }
   }
 
   async function createCourse(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
     if (!selectedSubjectId || selectedSubjectId === "__add_new__") {
       onFeedback(
         "Ø§Ø®ØªØ± Ø§Ù„Ù…Ø§Ø¯Ø© Ø£Ùˆ Ø£Ø¶ÙÙ‡Ø§ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¯ÙˆØ±Ø©.",
-      )
+      );
 
-      return
+      return;
     }
 
-    const formElement = event.currentTarget
+    const formElement = event.currentTarget;
 
-    const form = new FormData(formElement)
+    const form = new FormData(formElement);
 
     const body = {
       title: String(form.get("title") ?? "").trim(),
@@ -1361,55 +1377,54 @@ export default function RoleForms({
       price: isCourseFree ? 0 : Number(form.get("price")),
 
       subjectId: Number(selectedSubjectId),
-    }
+    };
 
     const saved = await mutate(
       () => teachersApi.createCourse(body),
 
       "تم إنشاء الدورة.",
-    )
+    );
 
     if (saved) {
-      formElement.reset()
+      formElement.reset();
 
-      setSelectedSubjectId("")
+      setSelectedSubjectId("");
 
-      setIsCourseFree(false)
+      setIsCourseFree(false);
 
-      setIsCreatingCourse(false)
+      setIsCreatingCourse(false);
     }
   }
 
   async function createSubjectFromCourseForm() {
-    const name = newSubjectName.trim()
+    const name = newSubjectName.trim();
 
-    const academicYear = Number(newSubjectYear)
+    const academicYear = Number(newSubjectYear);
 
-    if (!name || !Number.isFinite(academicYear)) return
+    if (!name || !Number.isFinite(academicYear)) return;
 
     const existing = subjects.find(
       (subject) =>
         String(subject.name ?? subject.title ?? "")
-
           .trim()
 
           .toLocaleLowerCase() === name.toLocaleLowerCase() &&
         Number(subject.academicYear ?? subject.academicYearId) === academicYear,
-    )
+    );
 
     if (existing?.id !== undefined) {
-      setSelectedSubjectId(String(existing.id))
+      setSelectedSubjectId(String(existing.id));
 
-      setAddingSubject(false)
+      setAddingSubject(false);
 
       onFeedback(
         "Ø§Ù„Ù…Ø§Ø¯Ø© Ù…ÙˆØ¬ÙˆØ¯Ø© Ø¨Ø§Ù„ÙØ¹Ù„ØŒ ØªÙ… Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§.",
-      )
+      );
 
-      return
+      return;
     }
 
-    let createResponse: unknown
+    let createResponse: unknown;
 
     const created = await mutate(async () => {
       createResponse = await adminApi.createSubject({
@@ -1418,60 +1433,59 @@ export default function RoleForms({
         academicYear,
 
         isActive: true,
-      })
+      });
 
-      return createResponse
-    }, "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©.")
+      return createResponse;
+    }, "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©.");
 
-    if (!created) return
+    if (!created) return;
 
-    setNewSubjectName("")
+    setNewSubjectName("");
 
-    setAddingSubject(false)
+    setAddingSubject(false);
 
     try {
-      const refreshed = listFrom(await subjectsApi.list())
+      const refreshed = listFrom(await subjectsApi.list());
 
-      setSubjects(refreshed)
+      setSubjects(refreshed);
 
       const createdSubject = refreshed.find(
         (subject) =>
           String(subject.name ?? subject.title ?? "")
-
             .trim()
 
             .toLocaleLowerCase() === name.toLocaleLowerCase() &&
           Number(subject.academicYear ?? subject.academicYearId) ===
             academicYear,
-      )
+      );
 
-      const response = asRecord(unwrapApiResponse(createResponse))
+      const response = asRecord(unwrapApiResponse(createResponse));
 
       const id =
-        createdSubject?.id ?? response.id ?? asRecord(response.subject).id
+        createdSubject?.id ?? response.id ?? asRecord(response.subject).id;
 
-      if (id !== undefined) setSelectedSubjectId(String(id))
+      if (id !== undefined) setSelectedSubjectId(String(id));
       else
         onFeedback(
           "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø©ØŒ Ù„ÙƒÙ† Ø£Ø¹Ø¯ Ø§Ø®ØªÙŠØ§Ø±Ù‡Ø§ Ù…Ù† Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.",
-        )
+        );
     } catch (cause) {
       onFeedback(
         cause instanceof Error
           ? cause.message
           : "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…Ø§Ø¯Ø© ÙˆØªØ¹Ø°Ø± ØªØ­Ø¯ÙŠØ« Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©.",
-      )
+      );
     }
   }
 
   async function updateCourse(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const courseId = editingCourse?.id ?? editingCourse?.courseId
+    const courseId = editingCourse?.id ?? editingCourse?.courseId;
 
-    if (courseId === undefined) return
+    if (courseId === undefined) return;
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
     const body = {
       title: String(form.get("title") ?? "").trim(),
@@ -1481,15 +1495,15 @@ export default function RoleForms({
       price: Number(form.get("price")),
 
       subjectId: Number(form.get("subjectId")),
-    }
+    };
 
     const saved = await mutate(
       () => teachersApi.updateCourse(String(courseId), body),
 
       "تم تحديث الدورة.",
-    )
+    );
 
-    if (saved) setEditingCourse(null)
+    if (saved) setEditingCourse(null);
   }
 
   async function uploadCover(
@@ -1497,31 +1511,31 @@ export default function RoleForms({
 
     event: FormEvent<HTMLFormElement>,
   ) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const file = new FormData(event.currentTarget).get("file")
+    const file = new FormData(event.currentTarget).get("file");
 
-    event.currentTarget.reset()
+    event.currentTarget.reset();
 
-    if (!(file instanceof File) || !file.size) return
+    if (!(file instanceof File) || !file.size) return;
 
     if (!file.type.startsWith("image/")) {
-      onFeedback("اختر ملف صورة صالحًا.")
+      onFeedback("اختر ملف صورة صالحًا.");
 
-      return
+      return;
     }
 
-    setCoverCrop({ courseId, file })
+    setCoverCrop({ courseId, file });
   }
 
   async function updateProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
-    const academicYear = Number(form.get("academicYear"))
+    const academicYear = Number(form.get("academicYear"));
 
-    if (isAdmin) return
+    if (isAdmin) return;
 
     if (isTeacher) {
       const body = {
@@ -1534,15 +1548,15 @@ export default function RoleForms({
         bio: String(form.get("bio") ?? "").trim(),
 
         academicYears: form.getAll("academicYears").map(Number),
-      }
+      };
 
       const saved = await mutate(
         () => teachersApi.updateMe(body),
 
         "تم تحديث الملف الشخصي.",
-      )
+      );
 
-      if (saved) setEditingProfile(false)
+      if (saved) setEditingProfile(false);
     } else {
       const body = {
         firstName: String(form.get("firstName") ?? "").trim(),
@@ -1556,43 +1570,43 @@ export default function RoleForms({
         parentPhoneNumber: String(form.get("parentPhoneNumber") ?? "").trim(),
 
         academicYear,
-      }
+      };
 
       const saved = await mutate(
         () => studentsApi.updateMe(body),
 
         "تم تحديث الملف الشخصي.",
-      )
+      );
 
-      if (saved) setEditingProfile(false)
+      if (saved) setEditingProfile(false);
     }
   }
 
   async function updateAdminName(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(event.currentTarget);
 
-    const name = String(form.get("name") ?? "").trim()
+    const name = String(form.get("name") ?? "").trim();
 
     if (!name) {
-      onFeedback("اكتب الاسم قبل الحفظ.")
+      onFeedback("اكتب الاسم قبل الحفظ.");
 
-      return
+      return;
     }
 
     const saved = await mutate(
       () => adminApi.updateMe({ name }),
 
       "تم تحديث اسم الحساب.",
-    )
+    );
 
     if (saved) {
-      setAdminNameOverride(name)
+      setAdminNameOverride(name);
 
-      window.sessionStorage.setItem("eduhub.auth.name", name)
+      window.sessionStorage.setItem("eduhub.auth.name", name);
 
-      setEditingAdminName(false)
+      setEditingAdminName(false);
     }
   }
 
@@ -1603,68 +1617,70 @@ export default function RoleForms({
           window.requestAnimationFrame(() => {
             document
               .getElementById("student-course-progress")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" })
-          })
-        })
-        return
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        });
+        return;
       }
 
-      setProgressCourse(courseId)
+      setProgressCourse(courseId);
 
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           document
             .getElementById("student-course-progress")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        })
-      })
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
 
-      setProgress(null)
+      setProgress(null);
 
-      setProgressError(null)
+      setProgressError(null);
 
-      setProgressLoading(true)
+      setProgressLoading(true);
 
-      setActiveQuizLesson(null)
+      setActiveQuizLesson(null);
 
-      setOpenStudentVideoLessonId(null)
+      setOpenStudentVideoLessonId(null);
 
-      setOpenStudentResourcesLessonId(null)
+      setOpenStudentResourcesLessonId(null);
 
-      setQuiz(null)
+      setQuiz(null);
 
-      setQuizError(null)
+      setQuizError(null);
 
-      setQuizValidationError(null)
+      setQuizValidationError(null);
 
-      setQuizSubmitted(false)
+      setQuizSubmitted(false);
 
-      setQuizAnswers({})
+      setQuizAnswers({});
 
       try {
-        setProgress(await loadStudentCourseProgress(courseId, enrollmentCourse))
+        setProgress(
+          await loadStudentCourseProgress(courseId, enrollmentCourse),
+        );
       } catch (cause) {
         setProgressError(
           cause instanceof Error ? cause.message : "تعذر تحميل تقدم الدورة.",
-        )
+        );
       } finally {
-        setProgressLoading(false)
+        setProgressLoading(false);
       }
     },
 
     [progressCourse],
-  )
+  );
 
   async function toggleLesson(lesson: RecordValue) {
-    const lessonId = lesson.lessonId ?? asRecord(lesson.lesson).id ?? lesson.id
+    const lessonId = lesson.lessonId ?? asRecord(lesson.lesson).id ?? lesson.id;
 
-    if (lessonId === undefined) return
+    if (lessonId === undefined) return;
 
-    const lessonProgress = asRecord(lesson.progress ?? lesson.lessonProgress)
+    const lessonProgress = asRecord(lesson.progress ?? lesson.lessonProgress);
 
     const nextCompleted = !Boolean(
       lesson.isCompleted ?? lesson.completed ?? lessonProgress.isCompleted,
-    )
+    );
 
     const updated = await mutate(
       () =>
@@ -1677,17 +1693,17 @@ export default function RoleForms({
         }),
 
       nextCompleted ? "تم تسجيل إكمال الدرس." : "تم تحديث تقدم الدرس.",
-    )
+    );
 
     if (updated && progressCourse) {
       try {
-        setProgress(await loadStudentCourseProgress(progressCourse))
+        setProgress(await loadStudentCourseProgress(progressCourse));
       } catch (cause) {
         onFeedback(
           cause instanceof Error
             ? cause.message
             : "تم تحديث الدرس لكن تعذر تحديث ملخص التقدم.",
-        )
+        );
       }
     }
   }
@@ -1700,16 +1716,16 @@ export default function RoleForms({
     completed = false,
   ) {
     try {
-      const lastPosition = Math.max(0, Math.floor(seconds))
+      const lastPosition = Math.max(0, Math.floor(seconds));
 
       await studentsApi.updateLessonProgress(lessonId, {
         isCompleted: completed,
 
         lastPosition,
-      })
+      });
 
       setProgress((current) => {
-        if (!current) return current
+        if (!current) return current;
 
         const lessons = progressLessons(current).map((lesson) =>
           String(lesson.lessonId ?? lesson.id ?? "") === lessonId
@@ -1725,61 +1741,61 @@ export default function RoleForms({
                 lastPosition,
               }
             : lesson,
-        )
+        );
 
-        return { ...current, lessons }
-      })
+        return { ...current, lessons };
+      });
     } catch (cause) {
       onFeedback(
         cause instanceof Error ? cause.message : "تعذر حفظ تقدم مشاهدة الدرس.",
-      )
+      );
     }
   }
 
   async function openQuiz(lessonId: string) {
-    setActiveQuizLesson(lessonId)
+    setActiveQuizLesson(lessonId);
 
-    setQuiz(null)
+    setQuiz(null);
 
-    setQuizError(null)
+    setQuizError(null);
 
-    setQuizLoading(true)
+    setQuizLoading(true);
 
-    setQuizValidationError(null)
+    setQuizValidationError(null);
 
-    setQuizSubmitted(false)
+    setQuizSubmitted(false);
 
-    setQuizAnswers({})
+    setQuizAnswers({});
 
     try {
       const response = asRecord(
         unwrapApiResponse(await quizzesApi.forLesson(lessonId)),
-      )
+      );
 
       const loadedQuiz = asRecord(
         response.quiz ??
           asRecord(response.data).quiz ??
           response.data ??
           response,
-      )
+      );
 
-      setQuiz(loadedQuiz)
+      setQuiz(loadedQuiz);
 
-      const quizId = loadedQuiz.id ?? loadedQuiz.quizId
+      const quizId = loadedQuiz.id ?? loadedQuiz.quizId;
 
-      let hasPersistedStudentAttempt = false
+      let hasPersistedStudentAttempt = false;
 
       if (quizId !== undefined && quizId !== null) {
         const [attemptsResult, profileResult] = await Promise.allSettled([
           quizzesApi.attempts(String(quizId)),
 
           studentsApi.me(),
-        ])
+        ]);
 
         const studentProfile =
           profileResult.status === "fulfilled"
             ? profileRecord(profileResult.value)
-            : {}
+            : {};
 
         hasPersistedStudentAttempt =
           attemptsResult.status === "fulfilled" &&
@@ -1788,7 +1804,7 @@ export default function RoleForms({
             (attempt) =>
               isSubmittedAttempt(attempt) &&
               attemptBelongsToStudent(attempt, studentProfile),
-          )
+          );
       }
 
       setQuizSubmitted(
@@ -1796,38 +1812,38 @@ export default function RoleForms({
           attemptedQuizIds.has(String(loadedQuiz.id))) ||
           hasSubmittedAttempt(loadedQuiz) ||
           hasPersistedStudentAttempt,
-      )
+      );
     } catch (cause) {
       setQuizError(
         cause instanceof Error ? cause.message : "لا يتوفر اختبار لهذا الدرس.",
-      )
+      );
     } finally {
-      setQuizLoading(false)
+      setQuizLoading(false);
     }
   }
 
   useEffect(() => {
-    if (isAdmin || isTeacher || section !== "courses" || !focusCourseId) return
+    if (isAdmin || isTeacher || section !== "courses" || !focusCourseId) return;
 
     const selectedEnrollment = listFrom(data).find((enrollment) => {
-      const course = asRecord(enrollment.course)
+      const course = asRecord(enrollment.course);
 
-      const courseId = enrollment.courseId ?? course.id ?? course.courseId
+      const courseId = enrollment.courseId ?? course.id ?? course.courseId;
 
-      return courseId !== undefined && String(courseId) === focusCourseId
-    })
+      return courseId !== undefined && String(courseId) === focusCourseId;
+    });
 
-    if (!selectedEnrollment) return
+    if (!selectedEnrollment) return;
 
-    onFocusCourseHandled?.()
+    onFocusCourseHandled?.();
 
     const status = enrollmentStatus(
       selectedEnrollment.status,
 
       selectedEnrollment.isApproved,
-    )
+    );
 
-    if (status.canLearn) void openProgress(focusCourseId)
+    if (status.canLearn) void openProgress(focusCourseId);
   }, [
     data,
 
@@ -1842,7 +1858,7 @@ export default function RoleForms({
     onFocusCourseHandled,
 
     section,
-  ])
+  ]);
 
   function updateQuizAnswer(
     question: RecordValue,
@@ -1851,27 +1867,27 @@ export default function RoleForms({
 
     multipleAnswers: boolean,
   ) {
-    const questionId = String(question.id)
+    const questionId = String(question.id);
 
-    const selectedOptionId = String(optionId ?? "")
+    const selectedOptionId = String(optionId ?? "");
 
     setQuizAnswers((current) => {
-      const selected = current[questionId] ?? []
+      const selected = current[questionId] ?? [];
 
       const next = multipleAnswers
         ? selected.includes(selectedOptionId)
           ? selected.filter((value) => value !== selectedOptionId)
           : [...selected, selectedOptionId]
-        : [selectedOptionId]
+        : [selectedOptionId];
 
-      return { ...current, [questionId]: next }
-    })
+      return { ...current, [questionId]: next };
+    });
 
-    setQuizValidationError(null)
+    setQuizValidationError(null);
   }
 
   async function submitQuiz(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
     if (
       !quiz ||
@@ -1880,18 +1896,18 @@ export default function RoleForms({
       busy ||
       quizSubmitLock.current
     )
-      return
+      return;
 
-    const questions = listFrom(quiz.questions)
+    const questions = listFrom(quiz.questions);
 
     if (!questions.length) {
-      setQuizValidationError("لا توجد أسئلة متاحة في هذا الاختبار.")
+      setQuizValidationError("لا توجد أسئلة متاحة في هذا الاختبار.");
 
-      return
+      return;
     }
 
     const answers = questions.map((question) => {
-      const questionId = apiIdentifier(question.id)
+      const questionId = apiIdentifier(question.id);
 
       const selectedOptionIds = (quizAnswers[String(question.id)] ?? [])
 
@@ -1899,68 +1915,68 @@ export default function RoleForms({
 
         .filter(
           (value): value is number | string => value !== null && value !== "",
-        )
+        );
 
-      return { questionId, selectedOptionIds }
-    })
+      return { questionId, selectedOptionIds };
+    });
 
     if (answers.some((answer) => answer.questionId === null)) {
       setQuizValidationError(
         "تعذر التعرف على أحد أسئلة الاختبار. حدّث الصفحة وحاول مرة أخرى.",
-      )
+      );
 
-      return
+      return;
     }
 
     if (answers.some((answer) => answer.selectedOptionIds.length === 0)) {
-      setQuizValidationError("أجب عن كل الأسئلة قبل تسليم الاختبار.")
+      setQuizValidationError("أجب عن كل الأسئلة قبل تسليم الاختبار.");
 
-      return
+      return;
     }
 
-    setQuizValidationError(null)
+    setQuizValidationError(null);
 
-    quizSubmitLock.current = true
+    quizSubmitLock.current = true;
 
-    setBusy(true)
+    setBusy(true);
 
-    onFeedback("")
+    onFeedback("");
 
     try {
-      await quizzesApi.submitAttempt(String(quiz.id), { answers })
+      await quizzesApi.submitAttempt(String(quiz.id), { answers });
 
-      setQuizSubmitted(true)
+      setQuizSubmitted(true);
 
-      setAttemptedQuizIds((current) => new Set(current).add(String(quiz.id)))
+      setAttemptedQuizIds((current) => new Set(current).add(String(quiz.id)));
 
-      onFeedback("تم تسليم إجابات الاختبار بنجاح.")
+      onFeedback("تم تسليم إجابات الاختبار بنجاح.");
     } catch (cause) {
       if (
         cause instanceof ApiError &&
         (cause.status === 409 ||
           /already|attempt|محاول|سبق|مستخدم/i.test(cause.message))
       ) {
-        setQuizSubmitted(true)
+        setQuizSubmitted(true);
 
-        setAttemptedQuizIds((current) => new Set(current).add(String(quiz.id)))
+        setAttemptedQuizIds((current) => new Set(current).add(String(quiz.id)));
 
-        onFeedback("سبق تسليم هذا الاختبار، ولا يمكن إعادة المحاولة.")
+        onFeedback("سبق تسليم هذا الاختبار، ولا يمكن إعادة المحاولة.");
 
-        return
+        return;
       }
 
       onFeedback(
         cause instanceof Error ? cause.message : "تعذر تسليم الاختبار.",
-      )
+      );
     } finally {
-      quizSubmitLock.current = false
+      quizSubmitLock.current = false;
 
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   if (loading && section === "profile")
-    return <ProfileSkeleton admin={isAdmin} />
+    return <ProfileSkeleton admin={isAdmin} />;
 
   if (isAdmin && section === "teachers")
     return (
@@ -2080,9 +2096,11 @@ export default function RoleForms({
             {listFrom(data).map((teacher) => {
               const isEditingTeacher =
                 editingTeacher &&
-                String(editingTeacher.id) === String(teacher.id)
+                String(editingTeacher.id) === String(teacher.id);
 
-              const teacherDetails = isEditingTeacher ? editingTeacher : teacher
+              const teacherDetails = isEditingTeacher
+                ? editingTeacher
+                : teacher;
 
               return (
                 <article
@@ -2200,9 +2218,9 @@ export default function RoleForms({
                           editingTeacher &&
                           String(editingTeacher.id) === String(teacher.id)
                         ) {
-                          setEditingTeacher(null)
+                          setEditingTeacher(null);
 
-                          return
+                          return;
                         }
 
                         try {
@@ -2210,13 +2228,13 @@ export default function RoleForms({
                             asRecord(
                               await adminApi.teacher(String(teacher.id)),
                             ),
-                          )
+                          );
                         } catch (cause) {
                           onFeedback(
                             cause instanceof Error
                               ? cause.message
                               : "تعذر تحميل بيانات المعلم.",
-                          )
+                          );
                         }
                       }}
                       className="inline-flex max-w-[60%] shrink-0 items-center gap-2 rounded-xl border border-nuwa-base/20 bg-nuwa-ice px-3 py-2 text-xs font-semibold text-nuwa-deep transition hover:bg-nuwa-soft sm:max-w-none"
@@ -2289,17 +2307,17 @@ export default function RoleForms({
                     )}
                   </span>
                 </article>
-              )
+              );
             })}
           </div>
         )}
       </div>
-    )
+    );
 
-  if (isTeacher && section === "students") return <TeacherStudents />
+  if (isTeacher && section === "students") return <TeacherStudents />;
 
   if (isTeacher && section === "student-progress")
-    return <TeacherStudentProgress />
+    return <TeacherStudentProgress />;
 
   if (isTeacher && section === "courses")
     return (
@@ -2370,23 +2388,23 @@ export default function RoleForms({
                   className={fieldClass}
                   value={addingSubject ? "__add_new__" : selectedSubjectId}
                   onChange={(event) => {
-                    const value = event.currentTarget.value
+                    const value = event.currentTarget.value;
 
                     if (value === "__add_new__") {
-                      setAddingSubject(true)
+                      setAddingSubject(true);
 
-                      setSelectedSubjectId("")
+                      setSelectedSubjectId("");
 
                       setNewSubjectYear(
                         (current) => current || String(years[0]?.value ?? ""),
-                      )
+                      );
 
-                      return
+                      return;
                     }
 
-                    setAddingSubject(false)
+                    setAddingSubject(false);
 
-                    setSelectedSubjectId(value)
+                    setSelectedSubjectId(value);
                   }}
                 >
                   <option value="" disabled>
@@ -2451,9 +2469,9 @@ export default function RoleForms({
                     <button
                       type="button"
                       onClick={() => {
-                        setAddingSubject(false)
+                        setAddingSubject(false);
 
-                        setNewSubjectName("")
+                        setNewSubjectName("");
                       }}
                       className="rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-muted"
                     >
@@ -2521,34 +2539,36 @@ export default function RoleForms({
         </div>
 
         <div className="flex flex-wrap gap-2 rounded-2xl border border-stroke bg-white p-3">
-          {([
-            ["all", "كل الدورات", teacherCourses.length],
-
+          {(
             [
-              "published",
+              ["all", "كل الدورات", teacherCourses.length],
 
-              "منشورة",
+              [
+                "published",
 
-              teacherCourses.filter(getTeacherCoursePublished).length,
-            ],
+                "منشورة",
 
-            [
-              "draft",
+                teacherCourses.filter(getTeacherCoursePublished).length,
+              ],
 
-              "مسودات",
+              [
+                "draft",
 
-              teacherCourses.filter(
-                (course) => !getTeacherCoursePublished(course),
-              ).length,
-            ],
-          ] as const).map(([filter, label, count]) => (
+                "مسودات",
+
+                teacherCourses.filter(
+                  (course) => !getTeacherCoursePublished(course),
+                ).length,
+              ],
+            ] as const
+          ).map(([filter, label, count]) => (
             <button
               key={filter}
               type="button"
               aria-pressed={teacherCourseFilter === filter}
               onClick={() => {
-                setTeacherCourseFilter(filter)
-                setTeacherCoursePage(1)
+                setTeacherCourseFilter(filter);
+                setTeacherCoursePage(1);
               }}
               className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                 teacherCourseFilter === filter
@@ -2594,22 +2614,24 @@ export default function RoleForms({
             لا توجد دورات في هذا القسم حاليًا.
           </div>
         ) : (
-          <div className={`grid items-start gap-4 ${contentCourseId ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+          <div
+            className={`grid items-start gap-4 ${contentCourseId ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}
+          >
             {pagedTeacherCourses.map((course) => {
-              const id = String(course.id ?? course.courseId ?? "")
+              const id = String(course.id ?? course.courseId ?? "");
 
-              const isPublished = getTeacherCoursePublished(course)
+              const isPublished = getTeacherCoursePublished(course);
 
               const isEditing =
                 String(editingCourse?.id ?? editingCourse?.courseId ?? "") ===
-                id
+                id;
 
-              const isShowingContent = contentCourseId === id
+              const isShowingContent = contentCourseId === id;
 
               const coverUrl =
                 typeof course.coverImageUrl === "string"
-                  ? resolveApiAssetUrl(course.coverImageUrl)
-                  : ""
+                  ? resolveApiImageUrl(course.coverImageUrl, 640)
+                  : "";
 
               return (
                 <div
@@ -2643,13 +2665,13 @@ export default function RoleForms({
                               ? "تم حفظ الدورة كمسودة وإخفاؤها عن العامة."
                               : "تم نشر الدورة وأصبحت متاحة للعامة.",
                           ).then((saved) => {
-                            if (!saved) return
+                            if (!saved) return;
 
                             setPublishedOverrides((current) => ({
                               ...current,
 
                               [id]: !isPublished,
-                            }))
+                            }));
                           })
                         }
                         className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -2705,36 +2727,36 @@ export default function RoleForms({
                               onConfirm: async () => {
                                 const saved = await mutate(async () => {
                                   if (isPublished) {
-                                    await teachersApi.unpublishCourse(id)
+                                    await teachersApi.unpublishCourse(id);
 
                                     setPublishedOverrides((current) => ({
                                       ...current,
 
                                       [id]: false,
-                                    }))
+                                    }));
                                   }
 
-                                  await teachersApi.deleteCourse(id)
-                                }, "تم حذف الدورة نهائياً.")
+                                  await teachersApi.deleteCourse(id);
+                                }, "تم حذف الدورة نهائياً.");
 
-                                if (!saved) throw new Error("تعذر حذف الدورة.")
+                                if (!saved) throw new Error("تعذر حذف الدورة.");
                               },
-                            })
+                            });
 
-                            if (!confirmed) return
+                            if (!confirmed) return;
 
                             setDeletedCourseIds((current) => {
-                              const next = new Set(current)
+                              const next = new Set(current);
 
-                              next.add(id)
+                              next.add(id);
 
-                              return next
-                            })
+                              return next;
+                            });
 
-                            if (isEditing) setEditingCourse(null)
+                            if (isEditing) setEditingCourse(null);
 
-                            if (isShowingContent) setContentCourseId(null)
-                          })()
+                            if (isShowingContent) setContentCourseId(null);
+                          })();
                         }}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-danger transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -2792,9 +2814,9 @@ export default function RoleForms({
                             title="تعديل مقاس غلاف الدورة"
                             onCancel={() => setCoverCrop(null)}
                             onApply={(croppedFile) => {
-                              setCoverCrop(null)
+                              setCoverCrop(null);
 
-                              setUploadingCoverCourseId(id)
+                              setUploadingCoverCourseId(id);
 
                               void mutate(
                                 () =>
@@ -2805,7 +2827,7 @@ export default function RoleForms({
                                   ),
 
                                 "تم تحديث غلاف الدورة.",
-                              ).finally(() => setUploadingCoverCourseId(null))
+                              ).finally(() => setUploadingCoverCourseId(null));
                             }}
                           />
                         )}
@@ -2829,12 +2851,12 @@ export default function RoleForms({
                                     () => teachersApi.deleteCourseCover(id),
 
                                     "تم حذف غلاف الدورة.",
-                                  )
+                                  );
 
                                   if (!saved)
-                                    throw new Error("تعذر حذف غلاف الدورة.")
+                                    throw new Error("تعذر حذف غلاف الدورة.");
                                 },
-                              })
+                              });
                             }}
                             className="mt-2 text-xs font-semibold text-danger hover:underline disabled:opacity-50"
                           >
@@ -2941,7 +2963,7 @@ export default function RoleForms({
                     )}
                   </CourseCard>
                 </div>
-              )
+              );
             })}
           </div>
         )}
@@ -2954,26 +2976,26 @@ export default function RoleForms({
           />
         )}
       </div>
-    )
+    );
 
   if (!isAdmin && !isTeacher && section === "courses") {
     const studentEnrollments = listFrom(data).filter(
       (enrollment) => !isRejectedEnrollment(enrollment),
-    )
+    );
 
-    const lessons = progressLessons(progress)
+    const lessons = progressLessons(progress);
 
-    const safeProgressPercent = progressPercentage(progress)
+    const safeProgressPercent = progressPercentage(progress);
 
     const completedLessonCount = Number(
       progress?.completedLessons ??
         progress?.completedLessonCount ??
         lessons.filter((lesson) => lesson.isCompleted).length,
-    )
+    );
 
     const totalLessonCount = Number(
       progress?.totalLessons ?? progress?.totalLessonCount ?? lessons.length,
-    )
+    );
 
     return (
       <div className="mb-5 space-y-4">
@@ -2989,38 +3011,38 @@ export default function RoleForms({
           studentEnrollments.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {studentEnrollments.map((enrollment, index) => {
-                const course = asRecord(enrollment.course)
+                const course = asRecord(enrollment.course);
 
-                const teacher = asRecord(enrollment.teacher ?? course.teacher)
+                const teacher = asRecord(enrollment.teacher ?? course.teacher);
 
                 const courseId =
-                  enrollment.courseId ?? course.id ?? course.courseId
+                  enrollment.courseId ?? course.id ?? course.courseId;
 
                 const title =
                   enrollment.courseTitle ??
                   enrollment.courseName ??
                   course.title ??
                   course.name ??
-                  `دورة ${index + 1}`
+                  `دورة ${index + 1}`;
 
                 const teacherName =
                   enrollment.teacherName ??
                   course.teacherName ??
                   teacher.fullName ??
-                  teacher.name
+                  teacher.name;
 
                 const subject =
                   enrollment.subjectName ??
                   course.subjectName ??
-                  asRecord(course.subject).name
+                  asRecord(course.subject).name;
 
                 const status = enrollmentStatus(
                   enrollment.status ?? enrollment.enrollmentStatus,
 
                   enrollment.isApproved,
-                )
+                );
 
-                const enrollmentProgress = asRecord(enrollment.progress)
+                const enrollmentProgress = asRecord(enrollment.progress);
 
                 const rawProgress = Number(
                   enrollment.progressPercentage ??
@@ -3028,13 +3050,13 @@ export default function RoleForms({
                     enrollmentProgress.progressPercentage ??
                     enrollmentProgress.percentage ??
                     0,
-                )
+                );
 
                 const percent = Number.isFinite(rawProgress)
                   ? Math.max(0, Math.min(100, rawProgress))
-                  : 0
+                  : 0;
 
-                const canLearn = courseId !== undefined && status.canLearn
+                const canLearn = courseId !== undefined && status.canLearn;
 
                 return (
                   <CourseCard
@@ -3104,7 +3126,7 @@ export default function RoleForms({
                       </p>
                     )}
                   </CourseCard>
-                )
+                );
               })}
             </div>
           )
@@ -3133,21 +3155,21 @@ export default function RoleForms({
               <button
                 type="button"
                 onClick={() => {
-                  setProgressCourse(null)
+                  setProgressCourse(null);
 
-                  setProgress(null)
+                  setProgress(null);
 
-                  setProgressError(null)
+                  setProgressError(null);
 
-                  setActiveQuizLesson(null)
+                  setActiveQuizLesson(null);
 
-                  setQuiz(null)
+                  setQuiz(null);
 
-                  setQuizError(null)
+                  setQuizError(null);
 
-                  setQuizValidationError(null)
+                  setQuizValidationError(null);
 
-                  setQuizSubmitted(false)
+                  setQuizSubmitted(false);
                 }}
                 className="rounded-lg border border-stroke px-3 py-2 text-xs font-semibold text-ink-muted transition hover:bg-canvas hover:text-ink"
               >
@@ -3216,9 +3238,9 @@ export default function RoleForms({
                     {lessons.map((lesson) => {
                       const lessonId = String(
                         lesson.lessonId ?? lesson.id ?? "",
-                      )
+                      );
 
-                      const lessonResources = getLessonResources(lesson)
+                      const lessonResources = getLessonResources(lesson);
 
                       return (
                         <li key={lessonId} className="py-4">
@@ -3266,16 +3288,16 @@ export default function RoleForms({
                                 }
                                 onClick={() => {
                                   const isOpening =
-                                    openStudentVideoLessonId !== lessonId
+                                    openStudentVideoLessonId !== lessonId;
                                   setOpenStudentVideoLessonId(
                                     openStudentVideoLessonId === lessonId
                                       ? null
                                       : lessonId,
-                                  )
+                                  );
                                   if (isOpening)
                                     scrollToLessonContent(
                                       `student-video-${lessonId}`,
-                                    )
+                                    );
                                 }}
                                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                                   openStudentVideoLessonId === lessonId
@@ -3303,16 +3325,16 @@ export default function RoleForms({
                                 }
                                 onClick={() => {
                                   const isOpening =
-                                    openStudentResourcesLessonId !== lessonId
+                                    openStudentResourcesLessonId !== lessonId;
                                   setOpenStudentResourcesLessonId(
                                     openStudentResourcesLessonId === lessonId
                                       ? null
                                       : lessonId,
-                                  )
+                                  );
                                   if (isOpening)
                                     scrollToLessonContent(
                                       `student-resources-${lessonId}`,
-                                    )
+                                    );
                                 }}
                                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                                   openStudentResourcesLessonId === lessonId
@@ -3385,19 +3407,20 @@ export default function RoleForms({
                                 <div className="grid gap-2 sm:grid-cols-2">
                                   {lessonResources.map(
                                     (resource, resourceIndex) => {
-                                      const url = getLessonResourceUrl(resource)
+                                      const url =
+                                        getLessonResourceUrl(resource);
 
                                       const name = String(
                                         resource.name ??
                                           `مادة الدرس ${resourceIndex + 1}`,
-                                      )
+                                      );
 
                                       const mime = String(
                                         resource.contentType ??
                                           resource.mimeType ??
                                           resource.type ??
                                           "",
-                                      ).toLowerCase()
+                                      ).toLowerCase();
 
                                       if (!url)
                                         return (
@@ -3409,7 +3432,7 @@ export default function RoleForms({
                                           >
                                             {name} · رابط الملف غير متاح
                                           </div>
-                                        )
+                                        );
 
                                       const isVideo =
                                         youtubeVideoId(url) !== null ||
@@ -3417,7 +3440,7 @@ export default function RoleForms({
                                         /\.(mp4|webm|mov|m4v|ogv)(?:$|\?)/i.test(
                                           url,
                                         ) ||
-                                        name.startsWith("فيديو إضافي")
+                                        name.startsWith("فيديو إضافي");
 
                                       if (isVideo)
                                         return (
@@ -3435,7 +3458,7 @@ export default function RoleForms({
                                               title={name}
                                             />
                                           </div>
-                                        )
+                                        );
 
                                       return (
                                         <a
@@ -3459,7 +3482,7 @@ export default function RoleForms({
                                             className="shrink-0 text-nuwa-base"
                                           />
                                         </a>
-                                      )
+                                      );
                                     },
                                   )}
                                 </div>
@@ -3471,7 +3494,7 @@ export default function RoleForms({
                             </p>
                           )}
                         </li>
-                      )
+                      );
                     })}
                   </ul>
                 ) : (
@@ -3491,11 +3514,11 @@ export default function RoleForms({
             <button
               type="button"
               onClick={() => {
-                setActiveQuizLesson(null)
+                setActiveQuizLesson(null);
 
-                setQuiz(null)
+                setQuiz(null);
 
-                setQuizError(null)
+                setQuizError(null);
               }}
               className="mt-2 text-xs font-semibold text-nuwa-base hover:underline"
             >
@@ -3628,12 +3651,12 @@ export default function RoleForms({
                     </div>
                   )}
                   {listFrom(quiz.questions).map((question, index) => {
-                    const multipleAnswers = allowsMultipleAnswers(question)
+                    const multipleAnswers = allowsMultipleAnswers(question);
 
-                    const options = listFrom(question.options)
+                    const options = listFrom(question.options);
 
                     const questionAnswers =
-                      quizAnswers[String(question.id)] ?? []
+                      quizAnswers[String(question.id)] ?? [];
 
                     return (
                       <fieldset
@@ -3703,7 +3726,7 @@ export default function RoleForms({
                           </p>
                         )}
                       </fieldset>
-                    )
+                    );
                   })}
                   {quizValidationError && (
                     <p
@@ -3735,7 +3758,7 @@ export default function RoleForms({
           </section>
         )}
       </div>
-    )
+    );
   }
 
   if (isAdmin && section === "profile") {
@@ -3746,13 +3769,13 @@ export default function RoleForms({
           record.fullName ??
           window.sessionStorage.getItem("eduhub.auth.name") ??
           "مدير النظام",
-      )
+      );
 
     const adminImage =
       profileImageOverride ??
       (profileImageSource(record) ||
         window.sessionStorage.getItem("eduhub.auth.image") ||
-        "")
+        "");
 
     return (
       <section className="mb-5 overflow-hidden rounded-3xl border border-emerald-900/10 bg-white shadow-[0_18px_55px_-35px_rgba(12,68,43,0.35)]">
@@ -3863,7 +3886,7 @@ export default function RoleForms({
           </div>
         )}
       </section>
-    )
+    );
   }
 
   if (
@@ -3872,14 +3895,14 @@ export default function RoleForms({
   ) {
     const teacherYears = Array.isArray(record.academicYears)
       ? record.academicYears.map(String)
-      : []
+      : [];
 
-    const academicYearRecord = asRecord(record.academicYear)
+    const academicYearRecord = asRecord(record.academicYear);
 
     const studentAcademicYear =
       typeof record.academicYear === "object" && record.academicYear !== null
         ? (academicYearRecord.value ?? academicYearRecord.id ?? "")
-        : (record.academicYear ?? "")
+        : (record.academicYear ?? "");
 
     const profileName = String(
       record.fullName ??
@@ -3895,9 +3918,9 @@ export default function RoleForms({
 
           .join(" ") ??
         "حسابي",
-    )
+    );
 
-    const profileImage = profileImageOverride ?? profileImageSource(record)
+    const profileImage = profileImageOverride ?? profileImageSource(record);
 
     return (
       <div className="mb-5 grid gap-4">
@@ -4165,9 +4188,9 @@ export default function RoleForms({
                 <button
                   type="button"
                   onClick={() => {
-                    profileFormRef.current?.reset()
+                    profileFormRef.current?.reset();
 
-                    setEditingProfile(false)
+                    setEditingProfile(false);
                   }}
                   disabled={busy}
                   className="min-h-11 rounded-full border border-emerald-900 px-5 text-sm font-semibold text-ink transition hover:bg-neutral-50 disabled:opacity-50"
@@ -4194,8 +4217,8 @@ export default function RoleForms({
           </section>
         )}
       </div>
-    )
+    );
   }
 
-  return null
+  return null;
 }
